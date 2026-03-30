@@ -1,3 +1,8 @@
+---
+type: "agent_requested"
+description: "Bun + Svelte 5 + SvelteKit 2 + UnoCSS + shadcn-svelte coding guidelines"
+---
+
 # Coding Guidelines — Bun · Svelte 5 · SvelteKit 2 · UnoCSS · shadcn-svelte
 
 This is a **Runes-only** reference for projects using **Bun (≥ 1.2)**, **Svelte 5**, **SvelteKit 2**, **UnoCSS presetWind4**, and **shadcn-svelte (≥ 1.2)**. It intentionally avoids legacy Svelte patterns and focuses on copy‑pasteable, production-ready setups.

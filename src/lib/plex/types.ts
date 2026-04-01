@@ -10,7 +10,9 @@ export interface PlexIdentity {
 export interface PlexFriend {
   id: number;
   uuid?: string | undefined;
-  username: string;
+  username?: string | undefined;
+  title?: string | undefined;
+  friendlyName?: string | undefined;
   email: string;
   thumb?: string | undefined;
   status: string;

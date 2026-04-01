@@ -77,6 +77,21 @@ describe("fetchFriends", () => {
     warnSpy.mockRestore();
   });
 
+  it("accepts friends with title/friendlyName but no username", async () => {
+    const friendsWithoutUsername = [
+      {
+        id: 2001,
+        title: "DisplayName",
+        friendlyName: "FriendlyUser",
+        email: "nouser@test.com",
+        status: "accepted",
+      },
+    ];
+    const mockAccount = createMockAccount(vi.fn().mockResolvedValue(friendsWithoutUsername));
+    const result = await fetchFriends(mockAccount);
+    expect(result).toEqual(friendsWithoutUsername);
+  });
+
   it("returns empty array for empty array response", async () => {
     const mockAccount = createMockAccount(vi.fn().mockResolvedValue([]));
     const result = await fetchFriends(mockAccount);

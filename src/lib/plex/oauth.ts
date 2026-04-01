@@ -39,12 +39,13 @@ export async function completeOAuth(id: string, timeoutSeconds?: number): Promis
     throw new PlexAuthError("OAuth session not found or expired");
   }
 
+  // Remove immediately so concurrent calls cannot reuse the same session
+  pending.delete(id);
+
   const account = await MyPlexAccount.webLoginCheck(
     entry.webLogin as Parameters<typeof MyPlexAccount.webLoginCheck>[0],
     { timeoutSeconds: timeoutSeconds ?? 120 },
   );
-
-  pending.delete(id);
 
   if (typeof account.authenticationToken !== "string" || !account.authenticationToken) {
     throw new PlexAuthError("OAuth completed but authenticationToken is missing");

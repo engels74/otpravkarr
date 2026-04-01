@@ -5,7 +5,9 @@ import type { PlexFriend } from "./types";
 const PlexFriendSchema = z.object({
   id: z.number(),
   uuid: z.string().optional(),
-  username: z.string(),
+  username: z.string().optional(),
+  title: z.string().optional(),
+  friendlyName: z.string().optional(),
   email: z.string(),
   thumb: z.string().optional(),
   status: z.string(),

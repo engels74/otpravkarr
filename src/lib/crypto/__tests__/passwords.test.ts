@@ -9,6 +9,7 @@ const hashes = new Map<string, string>();
 let hashCounter = 0;
 
 vi.stubGlobal("Bun", {
+  ...globalThis.Bun,
   password: {
     hash: vi.fn(async (password: string, opts?: { algorithm?: string }) => {
       const id = ++hashCounter;

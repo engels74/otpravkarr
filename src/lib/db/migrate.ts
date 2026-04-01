@@ -1,11 +1,20 @@
 import type { Database } from "bun:sqlite";
-import { readdirSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 
-// After svelte-adapter-bun bundles the server, import.meta.dirname resolves to
-// build/server/. The build script copies src/lib/db/migrations/ there so .sql
-// files are available at runtime. See package.json "build" script.
-const MIGRATIONS_DIR = resolve(import.meta.dirname ?? ".", "migrations");
+// After svelte-adapter-bun builds the server, code is bundled into
+// build/server/chunks/ while the build script copies migrations to
+// build/server/migrations. We check both the sibling path (works in dev
+// where this file lives next to migrations/) and the parent path (works
+// in production where import.meta.dirname is build/server/chunks/).
+function resolveMigrationsDir(): string {
+  const base = import.meta.dirname ?? ".";
+  const sibling = resolve(base, "migrations");
+  if (existsSync(sibling)) return sibling;
+  return resolve(base, "..", "migrations");
+}
+
+const MIGRATIONS_DIR = resolveMigrationsDir();
 
 const CREATE_MIGRATIONS_TABLE = `
   CREATE TABLE IF NOT EXISTS _migrations (
@@ -58,22 +67,32 @@ export async function runMigrations(
   db.exec(CREATE_MIGRATIONS_TABLE);
 
   const files = parseMigrationFiles(migrationsDir);
-  const applied = getAppliedVersions(db);
+  if (files.length === 0) return 0;
 
-  const pending = files.filter((f) => !applied.has(f.version));
-  if (pending.length === 0) return 0;
-
-  const insertMigration = db.prepare("INSERT INTO _migrations (version, name) VALUES (?, ?)");
-
-  for (const migration of pending) {
-    const filePath = join(migrationsDir, migration.filename);
-    const sql = await Bun.file(filePath).text();
-
-    db.transaction(() => {
-      db.exec(sql);
-      insertMigration.run(migration.version, migration.name);
-    })();
+  // Pre-read all migration SQL files before entering the transaction
+  const fileSqlMap = new Map<string, string>();
+  for (const f of files) {
+    const filePath = join(migrationsDir, f.filename);
+    fileSqlMap.set(f.filename, await Bun.file(filePath).text());
   }
 
-  return pending.length;
+  // Wrap the entire check-and-apply in a single transaction so that
+  // getAppliedVersions + pending filter + apply is atomic.
+  const applied = db.transaction(() => {
+    const appliedVersions = getAppliedVersions(db);
+    const pending = files.filter((f) => !appliedVersions.has(f.version));
+    if (pending.length === 0) return 0;
+
+    const insertMigration = db.prepare("INSERT INTO _migrations (version, name) VALUES (?, ?)");
+
+    for (const migration of pending) {
+      const sql = fileSqlMap.get(migration.filename)!;
+      db.exec(sql);
+      insertMigration.run(migration.version, migration.name);
+    }
+
+    return pending.length;
+  })();
+
+  return applied;
 }

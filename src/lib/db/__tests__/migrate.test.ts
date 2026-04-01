@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // ---------------------------------------------------------------------------
 
 vi.stubGlobal("Bun", {
+  ...globalThis.Bun,
   file: (path: string) => ({
     text: async () => readFileSync(path, "utf-8"),
   }),
@@ -457,7 +458,7 @@ describe("runMigrations", () => {
     expect(applied).toBe(1);
   });
 
-  it("rolls back on SQL error within a migration", async () => {
+  it("rolls back all migrations on SQL error (atomic batch)", async () => {
     const dir = createTempMigrationsDir();
     writeMigration(dir, "001_good.sql", "CREATE TABLE good (id INTEGER PRIMARY KEY);");
     writeMigration(
@@ -469,9 +470,9 @@ describe("runMigrations", () => {
 
     await runMigrations(db as any, dir).catch(() => {});
 
-    // Good migration was applied
-    expect(tables._migrations!.rows).toHaveLength(1);
-    // Bad table was rolled back
+    // Entire batch rolls back — no partial application
+    expect(tables._migrations!.rows).toHaveLength(0);
+    expect(tables.good).toBeUndefined();
     expect(tables.bad).toBeUndefined();
   });
 });

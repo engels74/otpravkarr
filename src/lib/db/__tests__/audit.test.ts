@@ -78,6 +78,14 @@ class MockStatement {
   }
 }
 
+/** Normalize an ISO-ish timestamp to SQLite datetime() format: `YYYY-MM-DD HH:MM:SS` */
+function sqliteDatetime(ts: string): string {
+  return ts
+    .replace("T", " ")
+    .replace(/Z$/, "")
+    .replace(/\.\d{3}$/, "");
+}
+
 function applyFilters(sql: string, params: unknown[]): AuditRow[] {
   let filtered = [...auditRows];
   let paramIdx = 0;
@@ -93,12 +101,12 @@ function applyFilters(sql: string, params: unknown[]): AuditRow[] {
       filtered = filtered.filter((r) => r.actor === val);
     }
     if (sql.includes("timestamp >= datetime(?)")) {
-      const val = params[paramIdx++] as string;
-      filtered = filtered.filter((r) => r.timestamp >= val);
+      const normalized = sqliteDatetime(params[paramIdx++] as string);
+      filtered = filtered.filter((r) => sqliteDatetime(r.timestamp) >= normalized);
     }
     if (sql.includes("timestamp <= datetime(?)")) {
-      const val = params[paramIdx++] as string;
-      filtered = filtered.filter((r) => r.timestamp <= val);
+      const normalized = sqliteDatetime(params[paramIdx++] as string);
+      filtered = filtered.filter((r) => sqliteDatetime(r.timestamp) <= normalized);
     }
   }
 

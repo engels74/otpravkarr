@@ -33,7 +33,7 @@ export function getSession(id: string): Session | null {
 
   if (!row) return null;
 
-  if (new Date(`${row.expires_at}Z`) < new Date()) {
+  if (new Date(`${row.expires_at.replace(" ", "T")}Z`) < new Date()) {
     return null;
   }
 

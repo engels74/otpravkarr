@@ -138,7 +138,7 @@ describe("sessions repository", () => {
 
       const row = sessionRows.find((r) => r.id === id);
       expect(row).toBeDefined();
-      const expiresMs = new Date(`${row?.expires_at ?? ""}Z`).getTime();
+      const expiresMs = new Date(`${(row?.expires_at ?? "").replace(" ", "T")}Z`).getTime();
 
       expect(expiresMs).toBeGreaterThanOrEqual(before + 7200 * 1000 - 1000);
       expect(expiresMs).toBeLessThanOrEqual(after + 7200 * 1000 + 1000);

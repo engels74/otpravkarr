@@ -26,7 +26,7 @@ export async function encrypt(plaintext: string, purpose: string): Promise<strin
   result.set(iv, 0);
   result.set(ciphertext, IV_LENGTH);
 
-  return btoa(String.fromCharCode(...result));
+  return Buffer.from(result).toString("base64");
 }
 
 /**

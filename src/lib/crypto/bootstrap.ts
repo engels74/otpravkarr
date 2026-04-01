@@ -15,21 +15,28 @@ const DEFAULT_TTL_MINUTES = 15;
 
 /**
  * Generate a bootstrap token in `xxxx-xxxx-xxxx` format.
- * Uses `crypto.getRandomValues` for cryptographic randomness.
+ * Uses `crypto.getRandomValues` with rejection sampling to avoid modulo bias.
  */
 export function generateBootstrapToken(): string {
+  const charsetLen = TOKEN_CHARSET.length; // 36
+  const limit = 256 - (256 % charsetLen); // 252
+
   const segments: string[] = [];
 
   for (let s = 0; s < SEGMENT_COUNT; s++) {
-    const bytes = new Uint8Array(SEGMENT_LENGTH);
-    crypto.getRandomValues(bytes);
-
-    let segment = "";
-    for (let i = 0; i < SEGMENT_LENGTH; i++) {
-      const byte = bytes[i] ?? 0;
-      segment += TOKEN_CHARSET[byte % TOKEN_CHARSET.length];
+    const chars: string[] = [];
+    while (chars.length < SEGMENT_LENGTH) {
+      const bytes = new Uint8Array(SEGMENT_LENGTH - chars.length);
+      crypto.getRandomValues(bytes);
+      for (const byte of bytes) {
+        if (chars.length >= SEGMENT_LENGTH) break;
+        if (byte < limit) {
+          const char = TOKEN_CHARSET[byte % charsetLen];
+          if (char !== undefined) chars.push(char);
+        }
+      }
     }
-    segments.push(segment);
+    segments.push(chars.join(""));
   }
 
   return segments.join("-");
@@ -59,6 +66,11 @@ export function consumeBootstrapToken(candidate: string): boolean {
     activeToken = null;
     return false;
   }
+
+  // Expected format: xxxx-xxxx-xxxx (14 chars). Reject oversized input early
+  // to prevent O(n) work in timingSafeEqual from untrusted user input.
+  const expectedLen = SEGMENT_COUNT * SEGMENT_LENGTH + (SEGMENT_COUNT - 1); // 14
+  if (candidate.length > expectedLen) return false;
 
   const match = timingSafeEqual(candidate, activeToken.value);
   if (match) {

@@ -370,11 +370,11 @@ All sensitive data handling depends on this module. It must be built and tested 
 
 ### 3.3 — OAuth flow helpers (`src/lib/plex/oauth.ts`)
 
-- [x] Implement `initiateOAuth(forwardUrl: string): Promise<{ uri: string; webLogin: WebLogin }>`
+- [x] Implement `initiateOAuth(forwardUrl: string): Promise<{ id: string; uri: string }>`
   - [x] Call `MyPlexAccount.getWebLogin(forwardUrl)`
-  - [x] Return `{ uri: webLogin.uri, webLogin }`
-- [x] Implement `completeOAuth(webLogin: WebLogin, timeoutSeconds?: number): Promise<PlexIdentity>`
-  - [x] Call `MyPlexAccount.webLoginCheck(webLogin, { timeoutSeconds: timeoutSeconds ?? 120 })`
+  - [x] Store `webLogin` in server-side pending map keyed by UUID, return `{ id, uri: webLogin.uri }`
+- [x] Implement `completeOAuth(id: string, timeoutSeconds?: number): Promise<PlexIdentity>`
+  - [x] Retrieve and consume pending `webLogin` by `id`, call `MyPlexAccount.webLoginCheck(webLogin, { timeoutSeconds: timeoutSeconds ?? 120 })`
   - [x] Extract `id`, `uuid`, `username`, `email`, `thumb`, `authenticationToken` from returned `MyPlexAccount`
   - [x] Return as `PlexIdentity`
 - [x] Store pending `WebLogin` objects in a server-side in-memory map keyed by a random session token (they must survive across the redirect)

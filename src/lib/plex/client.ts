@@ -76,10 +76,20 @@ export async function getAccount(token: string): Promise<MyPlexAccount> {
 export async function getServerResources(
   account: MyPlexAccount,
 ): Promise<Array<{ name: string; machineId: string; connect: () => Promise<PlexServer> }>> {
-  const resources = await account.resources();
-  return resources.map((resource) => ({
-    name: resource.name,
-    machineId: resource.clientIdentifier,
-    connect: () => resource.connect(),
-  }));
+  try {
+    const resources = await account.resources();
+    return resources.map((resource) => ({
+      name: resource.name,
+      machineId: resource.clientIdentifier,
+      connect: () => resource.connect(),
+    }));
+  } catch (error: unknown) {
+    if (error instanceof PlexAuthError || error instanceof PlexConnectionError) {
+      throw error;
+    }
+    if (error instanceof Unauthorized) {
+      throw new PlexAuthError("Invalid or expired Plex token");
+    }
+    throw new PlexConnectionError(error instanceof Error ? error.message : String(error));
+  }
 }

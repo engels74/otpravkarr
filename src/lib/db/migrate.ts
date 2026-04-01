@@ -45,7 +45,12 @@ function parseMigrationFiles(dir: string): MigrationFile[] {
   for (const filename of entries) {
     if (!filename.endsWith(".sql")) continue;
     const match = filename.match(/^(\d+)_(.+)\.sql$/);
-    if (!match) continue;
+    if (!match) {
+      console.warn(
+        `Migration file "${filename}" does not match expected pattern NNN_name.sql and will be skipped`,
+      );
+      continue;
+    }
     const version = Number(match[1]);
     const name = match[2] ?? "";
     migrations.push({ version, name, filename });

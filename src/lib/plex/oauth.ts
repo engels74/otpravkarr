@@ -1,5 +1,6 @@
 import { MyPlexAccount } from "@ctrl/plex";
 import type { PlexIdentity } from "./types";
+import { PlexAuthError } from "./types";
 
 const EXPIRY_MS = 10 * 60 * 1000; // 10 minutes
 
@@ -15,17 +16,27 @@ function isExpired(entry: PendingLogin): boolean {
 }
 
 export async function initiateOAuth(forwardUrl: string): Promise<{ id: string; uri: string }> {
+  // Opportunistic cleanup of expired sessions to bound memory growth
+  for (const [key, entry] of pending) {
+    if (isExpired(entry)) pending.delete(key);
+  }
+
   const webLogin = await MyPlexAccount.getWebLogin(forwardUrl);
+
+  if (!webLogin.uri) {
+    throw new PlexAuthError("getWebLogin() returned an invalid response: missing uri");
+  }
+
   const id = crypto.randomUUID();
   pending.set(id, { webLogin, createdAt: Date.now() });
-  return { id, uri: (webLogin as { uri: string }).uri };
+  return { id, uri: webLogin.uri };
 }
 
 export async function completeOAuth(id: string, timeoutSeconds?: number): Promise<PlexIdentity> {
   const entry = pending.get(id);
   if (!entry || isExpired(entry)) {
     pending.delete(id);
-    throw new Error("OAuth session not found or expired");
+    throw new PlexAuthError("OAuth session not found or expired");
   }
 
   const account = await MyPlexAccount.webLoginCheck(
@@ -35,13 +46,20 @@ export async function completeOAuth(id: string, timeoutSeconds?: number): Promis
 
   pending.delete(id);
 
+  if (typeof account.authenticationToken !== "string" || !account.authenticationToken) {
+    throw new PlexAuthError("OAuth completed but authenticationToken is missing");
+  }
+  if (typeof account.id !== "number" || account.id <= 0) {
+    throw new PlexAuthError("OAuth completed but account id is missing or invalid");
+  }
+
   return {
-    id: account.id ?? 0,
+    id: account.id,
     uuid: account.uuid ?? "",
     username: account.username ?? "",
     email: account.email ?? "",
     thumb: account.thumb ?? "",
-    authenticationToken: account.authenticationToken ?? "",
+    authenticationToken: account.authenticationToken,
   };
 }
 

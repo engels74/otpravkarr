@@ -1,7 +1,7 @@
 /**
  * Database types — mirrors the SQLite schema from 001_initial.sql.
  *
- * All date fields are ISO 8601 strings (SQLite datetime('now') format).
+ * All date fields are SQLite datetime strings in 'YYYY-MM-DD HH:MM:SS' format (from datetime('now')).
  * Boolean fields are stored as INTEGER (0/1) in SQLite.
  */
 

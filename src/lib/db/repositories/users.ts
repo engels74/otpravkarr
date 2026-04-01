@@ -141,6 +141,7 @@ export function createUserMapping(
 
 /**
  * Update a user mapping with partial fields. Automatically sets `updated_at`.
+ * If updating `dispatcharr_xc_password_enc`, the caller must pre-encrypt the value.
  */
 export function updateUserMapping(
   id: number,

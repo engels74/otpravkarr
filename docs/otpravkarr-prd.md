@@ -515,4 +515,3 @@ The plex.tv friends endpoint used via `MyPlexAccount.query()` is not formally do
 ### Naming
 
 "otpravkarr" is a working title. Final name TBD. The *arr-style naming signals the self-hosting ecosystem correctly but the app's bridging function might warrant something more descriptive.
-

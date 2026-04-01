@@ -1188,4 +1188,3 @@ The phases above are ordered by dependency. The recommended implementation seque
 | List profiles | `/api/channels/profiles/` | GET | ApiKey |
 | List channels | `/api/channels/channels/` | GET | ApiKey |
 | Channel streams | `/api/channels/channels/{id}/streams/` | GET | ApiKey |
-

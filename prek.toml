@@ -1,0 +1,26 @@
+# prek.toml — pre-commit hooks configuration
+# Docs: https://prek.j178.dev/configuration/
+
+# Builtin hooks — fast, offline, Rust-native
+[[repos]]
+repo = "builtin"
+hooks = [
+  { id = "trailing-whitespace" },
+  { id = "end-of-file-fixer" },
+  { id = "check-merge-conflict" },
+  { id = "check-added-large-files" },
+  { id = "detect-private-key" },
+  { id = "check-json" },
+  { id = "check-toml" },
+  { id = "check-yaml" },
+  { id = "no-commit-to-branch", args = ["--branch", "main"] },
+]
+
+# Local hooks — project-specific quality gates
+[[repos]]
+repo = "local"
+hooks = [
+  { id = "biome-check", name = "biome check", entry = "bunx biome check --write --files-ignore-unknown=true --no-errors-on-unmatched", language = "system", types = ["text"], files = "\\.(js|ts|jsx|tsx|json|jsonc|css|svelte)$" },
+  { id = "svelte-check", name = "svelte check", entry = "bunx svelte-check --threshold warning", language = "system", always_run = true, pass_filenames = false },
+  { id = "type-check", name = "tsc type check", entry = "bunx tsc --noEmit", language = "system", always_run = true, pass_filenames = false },
+]

@@ -106,7 +106,7 @@ UnoCSS Vite integration is via `@unocss/vite` and, in default `global` mode, req
 
 #### UnoCSS stylesheet import (Safari-safe for Svelte 5 runes)
 
-A known issue reports **Safari “Cannot access uninitialized variable”** when importing `uno.css` directly in a root `+layout.svelte` `<script>` in a Svelte 5 (runes) SvelteKit app.  
+A known issue reports **Safari “Cannot access uninitialized variable”** when importing `uno.css` directly in a root `+layout.svelte` `<script>` in a Svelte 5 (runes) SvelteKit app.
 A workaround reported in SvelteKit issues is importing `uno.css` from `hooks.client.ts`.
 
 ```ts
@@ -119,7 +119,7 @@ export {};
 ```
 
 > [!WARNING]
-> Importing `uno.css` in client hooks may load slightly later than SSR HTML, so watch for first-paint flicker (reported by the UnoCSS issue author).  
+> Importing `uno.css` in client hooks may load slightly later than SSR HTML, so watch for first-paint flicker (reported by the UnoCSS issue author).
 > If you must load earlier, validate on Safari and consider experiment-based alternatives (e.g. scoped integration), but keep this doc’s default as above.
 
 #### `uno.config.ts` (presetWind4 + shadcn + animations + rem-to-px)
@@ -193,7 +193,7 @@ export default defineConfig({
 });
 ```
 
-Wind4 integrates reset and uses OKLCH/theming layers; you **do not need** a separate reset package when using `presetWind4`.  
+Wind4 integrates reset and uses OKLCH/theming layers; you **do not need** a separate reset package when using `presetWind4`.
 `unocss-preset-shadcn` v1+ defaults to Wind4 (Wind3 requires a legacy import path).
 
 #### `app.html` minimal shell
@@ -303,7 +303,7 @@ src/
 
 #### When you use it
 
-Use **Vite UnoCSS plugin** during SvelteKit dev (HMR + Vite pipeline).  
+Use **Vite UnoCSS plugin** during SvelteKit dev (HMR + Vite pipeline).
 Use **bun-plugin-unocss** when you are **not** using Vite: standalone `Bun.build()` pipelines, or `Bun.serve()` static HTML routes with HTML imports.
 
 #### Install
@@ -759,7 +759,7 @@ export const tooltip = fromAction(tooltipAction);
 
 #### Component-level attachment forwarding (advanced)
 
-Svelte discussions note that using `{@attach ...}` on a component creates a prop keyed by a Symbol; spreading props onto an element forwards it, but handling it manually inside the component is tricky.  
+Svelte discussions note that using `{@attach ...}` on a component creates a prop keyed by a Symbol; spreading props onto an element forwards it, but handling it manually inside the component is tricky.
 **Guideline:** Prefer forwarding attachments by spreading `...rest` props onto the element receiving the attachment.
 
 ---
@@ -937,7 +937,7 @@ export const load: PageLoad = async ({ fetch }) => {
 
 ### Form actions + progressive enhancement
 
-SvelteKit supports server actions in `+page.server.ts` and progressive enhancement via `use:enhance`.  
+SvelteKit supports server actions in `+page.server.ts` and progressive enhancement via `use:enhance`.
 Customising `use:enhance` enables pending states and optimistic UI.
 
 ```ts
@@ -1385,7 +1385,7 @@ Superforms requires `enctype="multipart/form-data"` for uploads and recommends `
 
 ### WebSockets with `svelte-adapter-bun` + Bun
 
-`svelte-adapter-bun` documents WebSocket support via a `websocket` export in `hooks.server.ts`, and upgrading requests through `event.platform.server.upgrade(...)`.  
+`svelte-adapter-bun` documents WebSocket support via a `websocket` export in `hooks.server.ts`, and upgrading requests through `event.platform.server.upgrade(...)`.
 Bun’s docs confirm `Bun.serve()` supports server-side websockets.
 
 ```ts
@@ -1428,7 +1428,7 @@ Svelte is unopinionated; it supports unit/component/e2e tests with frameworks li
 
 #### Unit + component tests: Vitest + Testing Library
 
-Svelte CLI add-on: `sv add vitest` installs packages and adds scripts/config for client/server-aware testing.  
+Svelte CLI add-on: `sv add vitest` installs packages and adds scripts/config for client/server-aware testing.
 Svelte Testing Library setup recommends adding a Vitest config with the Svelte and `svelteTesting` Vite plugins and optionally a Vitest setup file.
 
 ```bash
@@ -1585,7 +1585,7 @@ Adapter runtime configuration includes `HOST`, `PORT`, `ORIGIN` and `PROTOCOL_HE
 
 #### Formatting and linting with Biome
 
-Biome supports Svelte out of the box since v2.3.0, including formatting the HTML/CSS/JS parts of Svelte files.  
+Biome supports Svelte out of the box since v2.3.0, including formatting the HTML/CSS/JS parts of Svelte files.
 Biome is intentionally opinionated with limited options.
 
 ```jsonc
@@ -1692,4 +1692,3 @@ Svelte 5 replaces slots with snippets; slots are deprecated.
 - Start dev with Bun runtime: `bun --bun run dev`
 - Adapter runtime server: `bun ./build/index.js`
 - Prefer Bun APIs: `bun:sqlite`, `Bun.file`, `Bun.password`, WebSockets in `Bun.serve()`
-

@@ -1,0 +1,31 @@
+<script lang="ts" module>
+export { type AlertVariant, alertVariants } from "./alert-variants.js";
+
+import type { AlertVariant } from "./alert-variants.js";
+</script>
+
+<script lang="ts">
+	import type { HTMLAttributes } from "svelte/elements";
+	import { cn, type WithElementRef } from "$lib/utils.js";
+	import { alertVariants } from "./alert-variants.js";
+
+	let {
+		ref = $bindable(null),
+		class: className,
+		variant = "default",
+		children,
+		...restProps
+	}: WithElementRef<HTMLAttributes<HTMLDivElement>> & {
+		variant?: AlertVariant;
+	} = $props();
+</script>
+
+<div
+	bind:this={ref}
+	data-slot="alert"
+	role="alert"
+	class={cn(alertVariants({ variant }), className)}
+	{...restProps}
+>
+	{@render children?.()}
+</div>

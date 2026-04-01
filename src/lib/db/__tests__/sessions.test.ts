@@ -43,7 +43,10 @@ class MockStatement {
     const sql = this.sql.trim();
 
     if (sql.startsWith("INSERT INTO sessions")) {
-      const now = new Date().toISOString();
+      const now = new Date()
+        .toISOString()
+        .replace("T", " ")
+        .replace(/\.\d{3}Z$/, "");
       sessionRows.push({
         id: params[0] as string,
         user_ref: params[1] as string,
@@ -61,7 +64,10 @@ class MockStatement {
     }
 
     if (sql.includes("DELETE FROM sessions WHERE expires_at")) {
-      const now = new Date().toISOString();
+      const now = new Date()
+        .toISOString()
+        .replace("T", " ")
+        .replace(/\.\d{3}Z$/, "");
       const before = sessionRows.length;
       sessionRows = sessionRows.filter((r) => r.expires_at >= now);
       return { changes: before - sessionRows.length };
@@ -132,7 +138,7 @@ describe("sessions repository", () => {
 
       const row = sessionRows.find((r) => r.id === id);
       expect(row).toBeDefined();
-      const expiresMs = new Date(row?.expires_at ?? "").getTime();
+      const expiresMs = new Date(`${row?.expires_at ?? ""}Z`).getTime();
 
       expect(expiresMs).toBeGreaterThanOrEqual(before + 7200 * 1000 - 1000);
       expect(expiresMs).toBeLessThanOrEqual(after + 7200 * 1000 + 1000);
@@ -165,8 +171,8 @@ describe("sessions repository", () => {
         id: "expired-id",
         user_ref: "ref",
         session_type: "user",
-        expires_at: "2000-01-01T00:00:00.000Z",
-        created_at: "2000-01-01T00:00:00.000Z",
+        expires_at: "2000-01-01 00:00:00",
+        created_at: "2000-01-01 00:00:00",
       });
 
       expect(getSession("expired-id")).toBeNull();
@@ -193,15 +199,15 @@ describe("sessions repository", () => {
         id: "exp-1",
         user_ref: "ref",
         session_type: "user",
-        expires_at: "2000-01-01T00:00:00.000Z",
-        created_at: "2000-01-01T00:00:00.000Z",
+        expires_at: "2000-01-01 00:00:00",
+        created_at: "2000-01-01 00:00:00",
       });
       sessionRows.push({
         id: "exp-2",
         user_ref: "ref",
         session_type: "admin",
-        expires_at: "2000-01-01T00:00:00.000Z",
-        created_at: "2000-01-01T00:00:00.000Z",
+        expires_at: "2000-01-01 00:00:00",
+        created_at: "2000-01-01 00:00:00",
       });
 
       // Insert one valid session

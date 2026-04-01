@@ -163,8 +163,8 @@ export function updateUserMapping(
     "last_accessed_at",
   ] as const;
 
-  const entries = Object.entries(updates).filter(([key]) =>
-    (allowed as readonly string[]).includes(key),
+  const entries = Object.entries(updates).filter(
+    ([key, value]) => (allowed as readonly string[]).includes(key) && value !== undefined,
   );
 
   if (entries.length === 0) return;

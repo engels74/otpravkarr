@@ -9,7 +9,10 @@ import type { Session } from "../types";
 export function createSession(userRef: string, type: "admin" | "user", ttlSeconds: number): string {
   const db = getDb();
   const id = crypto.randomUUID();
-  const expiresAt = new Date(Date.now() + ttlSeconds * 1000).toISOString();
+  const expiresAt = new Date(Date.now() + ttlSeconds * 1000)
+    .toISOString()
+    .replace("T", " ")
+    .replace(/\.\d{3}Z$/, "");
 
   db.prepare(
     "INSERT INTO sessions (id, user_ref, session_type, expires_at) VALUES (?, ?, ?, ?)",
@@ -30,7 +33,7 @@ export function getSession(id: string): Session | null {
 
   if (!row) return null;
 
-  if (new Date(row.expires_at) < new Date()) {
+  if (new Date(`${row.expires_at}Z`) < new Date()) {
     return null;
   }
 

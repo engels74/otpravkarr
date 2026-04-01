@@ -104,8 +104,8 @@ describe("initializeDatabase", () => {
     vi.clearAllMocks();
   });
 
-  it("calls runMigrations with the database instance", () => {
-    initializeDatabase();
+  it("calls runMigrations with the database instance", async () => {
+    await initializeDatabase();
     expect(runMigrations).toHaveBeenCalledTimes(1);
     expect(runMigrations).toHaveBeenCalledWith(expect.anything());
   });

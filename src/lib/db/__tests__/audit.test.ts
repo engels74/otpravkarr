@@ -92,11 +92,11 @@ function applyFilters(sql: string, params: unknown[]): AuditRow[] {
       const val = params[paramIdx++] as string;
       filtered = filtered.filter((r) => r.actor === val);
     }
-    if (sql.includes("timestamp >= ?")) {
+    if (sql.includes("timestamp >= datetime(?)")) {
       const val = params[paramIdx++] as string;
       filtered = filtered.filter((r) => r.timestamp >= val);
     }
-    if (sql.includes("timestamp <= ?")) {
+    if (sql.includes("timestamp <= datetime(?)")) {
       const val = params[paramIdx++] as string;
       filtered = filtered.filter((r) => r.timestamp <= val);
     }

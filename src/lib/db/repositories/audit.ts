@@ -49,12 +49,12 @@ export function queryAuditLog(filters: {
   }
 
   if (filters.after != null) {
-    conditions.push("timestamp >= ?");
+    conditions.push("timestamp >= datetime(?)");
     params.push(filters.after);
   }
 
   if (filters.before != null) {
-    conditions.push("timestamp <= ?");
+    conditions.push("timestamp <= datetime(?)");
     params.push(filters.before);
   }
 

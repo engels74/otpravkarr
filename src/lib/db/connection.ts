@@ -33,9 +33,9 @@ export function createDatabase(path: string): Database {
  * Initialize the database: run all pending migrations.
  * Called from hooks.server.ts on server startup.
  */
-export function initializeDatabase(): void {
+export async function initializeDatabase(): Promise<void> {
   const db = getDb();
-  runMigrations(db);
+  await runMigrations(db);
 }
 
 /**

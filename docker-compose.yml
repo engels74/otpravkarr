@@ -1,0 +1,14 @@
+services:
+  otpravkarr:
+    build: .
+    ports:
+      - "${PORT:-3000}:3000"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - OTPRAVKARR_SECRET=${OTPRAVKARR_SECRET:?OTPRAVKARR_SECRET is required}
+      - DATABASE_PATH=/app/data/otpravkarr.sqlite
+      - HOST=0.0.0.0
+      - PORT=3000
+      - ORIGIN=${ORIGIN:-http://localhost:3000}
+    restart: unless-stopped

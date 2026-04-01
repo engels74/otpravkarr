@@ -1,0 +1,68 @@
+import { MyPlexAccount } from "@ctrl/plex";
+import type { PlexIdentity } from "./types";
+
+const EXPIRY_MS = 10 * 60 * 1000; // 10 minutes
+
+interface PendingLogin {
+  webLogin: unknown;
+  createdAt: number;
+}
+
+const pending = new Map<string, PendingLogin>();
+
+function isExpired(entry: PendingLogin): boolean {
+  return Date.now() - entry.createdAt > EXPIRY_MS;
+}
+
+export async function initiateOAuth(forwardUrl: string): Promise<{ id: string; uri: string }> {
+  const webLogin = await MyPlexAccount.getWebLogin(forwardUrl);
+  const id = crypto.randomUUID();
+  pending.set(id, { webLogin, createdAt: Date.now() });
+  return { id, uri: (webLogin as { uri: string }).uri };
+}
+
+export async function completeOAuth(id: string, timeoutSeconds?: number): Promise<PlexIdentity> {
+  const entry = pending.get(id);
+  if (!entry || isExpired(entry)) {
+    pending.delete(id);
+    throw new Error("OAuth session not found or expired");
+  }
+
+  const account = await MyPlexAccount.webLoginCheck(
+    entry.webLogin as Parameters<typeof MyPlexAccount.webLoginCheck>[0],
+    { timeoutSeconds: timeoutSeconds ?? 120 },
+  );
+
+  pending.delete(id);
+
+  return {
+    id: account.id ?? 0,
+    uuid: account.uuid ?? "",
+    username: account.username ?? "",
+    email: account.email ?? "",
+    thumb: account.thumb ?? "",
+    authenticationToken: account.authenticationToken ?? "",
+  };
+}
+
+export function getPendingOAuth(id: string): boolean {
+  const entry = pending.get(id);
+  if (!entry) return false;
+  if (isExpired(entry)) {
+    pending.delete(id);
+    return false;
+  }
+  return true;
+}
+
+export function removePendingOAuth(id: string): void {
+  pending.delete(id);
+}
+
+export function cleanExpiredOAuth(): void {
+  pending.forEach((entry, id) => {
+    if (isExpired(entry)) {
+      pending.delete(id);
+    }
+  });
+}

@@ -346,51 +346,51 @@ All sensitive data handling depends on this module. It must be built and tested 
 
 ### 3.1 — Type definitions (`src/lib/plex/types.ts`)
 
-- [ ] Define `PlexIdentity` — `{ id: number; uuid: string; username: string; email: string; thumb: string; authenticationToken: string }`
-- [ ] Define `PlexFriend` — `{ id: number; uuid?: string; username: string; email: string; thumb?: string; status: string }` (response shape from plex.tv friends endpoint, validated defensively)
-- [ ] Define `PlexConnectionStatus` — `'healthy' | 'unauthorized' | 'unreachable' | 'server_changed'`
-- [ ] Define `PlexServerInfo` — `{ friendlyName: string; machineIdentifier: string; version: string }`
+- [x] Define `PlexIdentity` — `{ id: number; uuid: string; username: string; email: string; thumb: string; authenticationToken: string }`
+- [x] Define `PlexFriend` — `{ id: number; uuid?: string; username: string; email: string; thumb?: string; status: string }` (response shape from plex.tv friends endpoint, validated defensively)
+- [x] Define `PlexConnectionStatus` — `'healthy' | 'unauthorized' | 'unreachable' | 'server_changed'`
+- [x] Define `PlexServerInfo` — `{ friendlyName: string; machineIdentifier: string; version: string }`
 
 ### 3.2 — Plex client wrapper (`src/lib/plex/client.ts`)
 
-- [ ] Import `PlexServer`, `MyPlexAccount`, `Unauthorized` from `@ctrl/plex`
-- [ ] Implement `validateServerToken(url: string, token: string): Promise<PlexServerInfo>`
-  - [ ] `new PlexServer(url, token).connect()`
-  - [ ] Assert `friendlyName` and `machineIdentifier` are populated
-  - [ ] Catch `Unauthorized` → throw typed `PlexAuthError`
-  - [ ] Catch network errors → throw typed `PlexConnectionError`
-- [ ] Implement `checkServerHealth(url: string, token: string, expectedMachineId: string): Promise<PlexConnectionStatus>`
-  - [ ] Connect, compare `machineIdentifier` with `expectedMachineId`
-  - [ ] Return `'healthy'`, `'unauthorized'`, `'unreachable'`, or `'server_changed'`
-- [ ] Implement `getAccount(token: string): Promise<MyPlexAccount>`
-  - [ ] `new MyPlexAccount({ token }).connect()`
-- [ ] Implement `getServerResources(account: MyPlexAccount): Promise<Array<{ name: string; machineId: string; connect: () => Promise<PlexServer> }>>`
-  - [ ] `account.resources()` → map to simplified objects
-- [ ] Write unit tests (mocking `@ctrl/plex` classes)
+- [x] Import `PlexServer`, `MyPlexAccount`, `Unauthorized` from `@ctrl/plex`
+- [x] Implement `validateServerToken(url: string, token: string): Promise<PlexServerInfo>`
+  - [x] `new PlexServer(url, token).connect()`
+  - [x] Assert `friendlyName` and `machineIdentifier` are populated
+  - [x] Catch `Unauthorized` → throw typed `PlexAuthError`
+  - [x] Catch network errors → throw typed `PlexConnectionError`
+- [x] Implement `checkServerHealth(url: string, token: string, expectedMachineId: string): Promise<PlexConnectionStatus>`
+  - [x] Connect, compare `machineIdentifier` with `expectedMachineId`
+  - [x] Return `'healthy'`, `'unauthorized'`, `'unreachable'`, or `'server_changed'`
+- [x] Implement `getAccount(token: string): Promise<MyPlexAccount>`
+  - [x] `new MyPlexAccount({ token }).connect()`
+- [x] Implement `getServerResources(account: MyPlexAccount): Promise<Array<{ name: string; machineId: string; connect: () => Promise<PlexServer> }>>`
+  - [x] `account.resources()` → map to simplified objects
+- [x] Write unit tests (mocking `@ctrl/plex` classes)
 
 ### 3.3 — OAuth flow helpers (`src/lib/plex/oauth.ts`)
 
-- [ ] Implement `initiateOAuth(forwardUrl: string): Promise<{ uri: string; webLogin: WebLogin }>`
-  - [ ] Call `MyPlexAccount.getWebLogin(forwardUrl)`
-  - [ ] Return `{ uri: webLogin.uri, webLogin }`
-- [ ] Implement `completeOAuth(webLogin: WebLogin, timeoutSeconds?: number): Promise<PlexIdentity>`
-  - [ ] Call `MyPlexAccount.webLoginCheck(webLogin, { timeoutSeconds: timeoutSeconds ?? 120 })`
-  - [ ] Extract `id`, `uuid`, `username`, `email`, `thumb`, `authenticationToken` from returned `MyPlexAccount`
-  - [ ] Return as `PlexIdentity`
-- [ ] Store pending `WebLogin` objects in a server-side in-memory map keyed by a random session token (they must survive across the redirect)
-- [ ] Write unit tests
+- [x] Implement `initiateOAuth(forwardUrl: string): Promise<{ uri: string; webLogin: WebLogin }>`
+  - [x] Call `MyPlexAccount.getWebLogin(forwardUrl)`
+  - [x] Return `{ uri: webLogin.uri, webLogin }`
+- [x] Implement `completeOAuth(webLogin: WebLogin, timeoutSeconds?: number): Promise<PlexIdentity>`
+  - [x] Call `MyPlexAccount.webLoginCheck(webLogin, { timeoutSeconds: timeoutSeconds ?? 120 })`
+  - [x] Extract `id`, `uuid`, `username`, `email`, `thumb`, `authenticationToken` from returned `MyPlexAccount`
+  - [x] Return as `PlexIdentity`
+- [x] Store pending `WebLogin` objects in a server-side in-memory map keyed by a random session token (they must survive across the redirect)
+- [x] Write unit tests
 
 ### 3.4 — Friend enumeration (`src/lib/plex/friends.ts`)
 
-- [ ] Implement `fetchFriends(account: MyPlexAccount): Promise<PlexFriend[]>`
-  - [ ] Use `account.query({ url: 'https://plex.tv/api/v2/friends', method: 'get' })`
-  - [ ] Parse response defensively — define Zod schema for `PlexFriend[]`
-  - [ ] Log warnings for unexpected response shapes
-  - [ ] Return validated array
-- [ ] Implement `isCurrentFriend(plexAccountId: number, friends: PlexFriend[]): boolean`
-  - [ ] Simple `friends.some(f => f.id === plexAccountId)`
-- [ ] Cache friend list in module-level variable with TTL (refreshed by sync job)
-- [ ] Write unit tests with mock responses
+- [x] Implement `fetchFriends(account: MyPlexAccount): Promise<PlexFriend[]>`
+  - [x] Use `account.query({ url: 'https://plex.tv/api/v2/friends', method: 'get' })`
+  - [x] Parse response defensively — define Zod schema for `PlexFriend[]`
+  - [x] Log warnings for unexpected response shapes
+  - [x] Return validated array
+- [x] Implement `isCurrentFriend(plexAccountId: number, friends: PlexFriend[]): boolean`
+  - [x] Simple `friends.some(f => f.id === plexAccountId)`
+- [x] Cache friend list in module-level variable with TTL (refreshed by sync job)
+- [x] Write unit tests with mock responses
 
 ---
 

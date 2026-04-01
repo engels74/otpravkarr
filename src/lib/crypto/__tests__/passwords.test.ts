@@ -1,5 +1,38 @@
-import { describe, expect, it } from "vitest";
-import { generateXcPassword, hashAdminPassword, verifyAdminPassword } from "../passwords";
+// @vitest-environment node
+import { describe, expect, it, vi } from "vitest";
+
+// ---------------------------------------------------------------------------
+// Mock Bun.password for Vitest (Node environment)
+// ---------------------------------------------------------------------------
+
+const hashes = new Map<string, string>();
+let hashCounter = 0;
+
+vi.stubGlobal("Bun", {
+  ...globalThis.Bun,
+  password: {
+    hash: vi.fn(async (password: string, opts?: { algorithm?: string }) => {
+      const id = ++hashCounter;
+      const algo = opts?.algorithm ?? "argon2id";
+      const hash = `$${algo}$salt${id}$${Buffer.from(password).toString("base64")}`;
+      hashes.set(hash, password);
+      return hash;
+    }),
+    verify: vi.fn(async (password: string, hash: string) => {
+      // Extract the original password from our synthetic hash
+      const parts = hash.split("$");
+      const encoded = parts[parts.length - 1]!;
+      const original = Buffer.from(encoded, "base64").toString("utf-8");
+      return password === original;
+    }),
+  },
+});
+
+const { generateXcPassword, hashAdminPassword, verifyAdminPassword } = await import("../passwords");
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
 
 describe("hashAdminPassword / verifyAdminPassword", () => {
   it("round-trips: hash then verify succeeds", async () => {

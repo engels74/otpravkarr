@@ -12,74 +12,74 @@
 
 ### 0.1 — Create the SvelteKit project
 
-- [ ] Scaffold the project with `bunx sv create otpravkarr` (select Svelte 5, TypeScript strict)
-- [ ] `cd otpravkarr && bun install`
-- [ ] Verify dev server runs with `bun --bun run dev`
+- [x] Scaffold the project with `bunx sv create otpravkarr` (select Svelte 5, TypeScript strict)
+- [x] `cd otpravkarr && bun install`
+- [x] Verify dev server runs with `bun --bun run dev`
 
 ### 0.2 — Install and configure `svelte-adapter-bun`
 
-- [ ] `bun add -d svelte-adapter-bun`
-- [ ] Create `svelte.config.ts` with adapter-bun:
+- [x] `bun add -d svelte-adapter-bun`
+- [x] Create `svelte.config.ts` with adapter-bun:
   ```
   adapter({ out: 'build', serveAssets: true, precompress: true, envPrefix: '' })
   ```
-- [ ] Set `vitePreprocess()` as the preprocessor
-- [ ] Add `package.json` scripts: `dev`, `dev:bun`, `build`, `start` (`bun ./build/index.js`), `check`, `format`, `test`, `test:e2e`
+- [x] Set `vitePreprocess()` as the preprocessor
+- [x] Add `package.json` scripts: `dev`, `dev:bun`, `build`, `start` (`bun ./build/index.js`), `check`, `format`, `test`, `test:e2e`
 
 ### 0.3 — Install and configure UnoCSS
 
-- [ ] `bun add -d @unocss/vite unocss @unocss/preset-wind4 unocss-preset-animations unocss-preset-shadcn`
-- [ ] Create `vite.config.ts` with `sveltekit()` first, then `UnoCSS()`
-- [ ] Create `uno.config.ts` with `presetWind4()`, `presetTypography()`, `presetIcons()`, `presetShadcn({ darkSelector: '.dark' })`, `presetAnimations()`
-  - [ ] Add `createRemToPxProcessor()` to `postprocess`
-  - [ ] Configure `content.pipeline.include` for `.svelte`, `.svelte.ts`, `.svelte.js`, `.ts`, `.js`
-  - [ ] Define theme `radius` and `fontFamily` entries
-  - [ ] Add app-wide shortcuts: `page-shell`, `card`
-- [ ] Import `uno.css` in `src/hooks.client.ts` (Safari-safe pattern, not in root layout)
+- [x] `bun add -d @unocss/vite unocss @unocss/preset-wind4 unocss-preset-animations unocss-preset-shadcn`
+- [x] Create `vite.config.ts` with `sveltekit()` first, then `UnoCSS()`
+- [x] Create `uno.config.ts` with `presetWind4()`, `presetTypography()`, `presetIcons()`, `presetShadcn({ darkSelector: '.dark' })`, `presetAnimations()`
+  - [x] Add `createRemToPxProcessor()` to `postprocess`
+  - [x] Configure `content.pipeline.include` for `.svelte`, `.svelte.ts`, `.svelte.js`, `.ts`, `.js`
+  - [x] Define theme `radius` and `fontFamily` entries
+  - [x] Add app-wide shortcuts: `page-shell`, `card`
+- [x] Import `uno.css` in `src/hooks.client.ts` (Safari-safe pattern, not in root layout)
 
 ### 0.4 — Install and configure shadcn-svelte
 
-- [ ] `bun x shadcn-svelte@latest init` (configure for UnoCSS tokens, skip Tailwind)
-- [ ] Add core components: `bun x shadcn-svelte@latest add button card dialog tabs dropdown-menu sidebar sonner input label badge alert table separator avatar tooltip`
-- [ ] Create `src/lib/utils/cn.ts` with `clsx` + `tailwind-merge`
+- [x] `bun x shadcn-svelte@latest init` (configure for UnoCSS tokens, skip Tailwind)
+- [x] Add core components: `bun x shadcn-svelte@latest add button card dialog tabs dropdown-menu sidebar sonner input label badge alert table separator avatar tooltip`
+- [x] Create `src/lib/utils/cn.ts` with `clsx` + `tailwind-merge`
 
 ### 0.5 — Configure TypeScript strict mode
 
-- [ ] Create/update `tsconfig.json` extending `.svelte-kit/tsconfig.json`
-  - [ ] Enable `strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `useUnknownInCatchVariables`
-  - [ ] Enable `verbatimModuleSyntax`
-  - [ ] Configure `$lib` path alias
-  - [ ] Add `bun-types` to types array for `bun:sqlite`, `Bun.password`, etc.
+- [x] Create/update `tsconfig.json` extending `.svelte-kit/tsconfig.json`
+  - [x] Enable `strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `useUnknownInCatchVariables`
+  - [x] Enable `verbatimModuleSyntax`
+  - [x] Configure `$lib` path alias
+  - [x] Add `bun-types` to types array for `bun:sqlite`, `Bun.password`, etc.
 
 ### 0.6 — Configure Biome
 
-- [ ] `bun add -d @biomejs/biome`
-- [ ] Create `biome.json`:
-  - [ ] `indentStyle: "space"`, `indentWidth: 2`, `lineWidth: 100`
-  - [ ] `linter.rules.recommended: true`
-  - [ ] `organizeImports.enabled: true`
-  - [ ] Ignore `build/**`, `.svelte-kit/**`, `dist/**`
+- [x] `bun add -d @biomejs/biome`
+- [x] Create `biome.json`:
+  - [x] `indentStyle: "space"`, `indentWidth: 2`, `lineWidth: 100`
+  - [x] `linter.rules.recommended: true`
+  - [x] `organizeImports.enabled: true`
+  - [x] Ignore `build/**`, `.svelte-kit/**`, `dist/**`
 
 ### 0.7 — Configure testing infrastructure
 
-- [ ] `bunx sv add vitest="usages:unit,component"` + `bun add -d @testing-library/svelte @testing-library/jest-dom`
-- [ ] Create `vitest.config.ts` with `svelte()` + `svelteTesting()` plugins, `environment: 'jsdom'`, `setupFiles: ['./vitest-setup.ts']`
-- [ ] Create `vitest-setup.ts` importing `@testing-library/jest-dom/vitest`
-- [ ] `bun add -d @playwright/test && bunx playwright install`
-- [ ] Create `playwright.config.ts` with `testDir: './e2e'`, `baseURL: 'http://localhost:4173'`, webServer using `bun run preview`
+- [x] `bunx sv add vitest="usages:unit,component"` + `bun add -d @testing-library/svelte @testing-library/jest-dom`
+- [x] Create `vitest.config.ts` with `svelte()` + `svelteTesting()` plugins, `environment: 'jsdom'`, `setupFiles: ['./vitest-setup.ts']`
+- [x] Create `vitest-setup.ts` importing `@testing-library/jest-dom/vitest`
+- [x] `bun add -d @playwright/test && bunx playwright install`
+- [x] Create `playwright.config.ts` with `testDir: './e2e'`, `baseURL: 'http://localhost:4173'`, webServer using `bun run preview`
 
 ### 0.8 — Install application dependencies
 
-- [ ] `bun add @ctrl/plex` — Plex API client
-- [ ] `bun add ofetch` — HTTP client for Dispatcharr REST calls
-- [ ] `bun add zod` — runtime schema validation
-- [ ] `bun add sveltekit-superforms` — form handling with Zod adapters
-- [ ] `bun add qrcode` (or lightweight QR library) — client-side QR generation
-- [ ] `bun add -d bun-types` — Bun runtime type definitions
+- [x] `bun add @ctrl/plex` — Plex API client
+- [x] `bun add ofetch` — HTTP client for Dispatcharr REST calls
+- [x] `bun add zod` — runtime schema validation
+- [x] `bun add sveltekit-superforms` — form handling with Zod adapters
+- [x] `bun add qrcode` (or lightweight QR library) — client-side QR generation
+- [x] `bun add -d bun-types` — Bun runtime type definitions
 
 ### 0.9 — Environment variables and `.env`
 
-- [ ] Create `.env.example` with all required vars:
+- [x] Create `.env.example` with all required vars:
   ```
   OTPRAVKARR_SECRET=             # master encryption secret (required)
   DATABASE_PATH=./data/otpravkarr.sqlite
@@ -87,16 +87,16 @@
   PORT=3000
   ORIGIN=http://localhost:3000   # overridden during setup
   ```
-- [ ] In SvelteKit code, import env via `$env/static/private` and `$env/dynamic/private` as appropriate
-- [ ] Validate `OTPRAVKARR_SECRET` is set on startup; abort with clear error if missing
+- [x] In SvelteKit code, import env via `$env/static/private` and `$env/dynamic/private` as appropriate
+- [x] Validate `OTPRAVKARR_SECRET` is set on startup; abort with clear error if missing
 
 ### 0.10 — Create `app.html` shell
 
-- [ ] Write `src/app.html` minimal shell with `%sveltekit.head%`, `%sveltekit.body%`, `data-sveltekit-preload-data="hover"`
+- [x] Write `src/app.html` minimal shell with `%sveltekit.head%`, `%sveltekit.body%`, `data-sveltekit-preload-data="hover"`
 
 ### 0.11 — Create directory structure
 
-- [ ] Create all directories matching PRD Section 11:
+- [x] Create all directories matching PRD Section 11:
   ```
   src/lib/plex/
   src/lib/dispatcharr/
@@ -129,13 +129,13 @@
 
 ### 0.12 — Docker configuration
 
-- [ ] Create `Dockerfile`:
-  - [ ] Use `oven/bun` base image
-  - [ ] `COPY`, `bun install --frozen-lockfile`, `bun run build`
-  - [ ] `CMD ["bun", "./build/index.js"]`
-  - [ ] Expose single port, mount `./data` volume for SQLite persistence
-- [ ] Create `docker-compose.yml` with single service, volume for `./data`, environment variables
-- [ ] Create `.dockerignore` excluding `node_modules`, `.svelte-kit`, `build`, `data`
+- [x] Create `Dockerfile`:
+  - [x] Use `oven/bun` base image
+  - [x] `COPY`, `bun install --frozen-lockfile`, `bun run build`
+  - [x] `CMD ["bun", "./build/index.js"]`
+  - [x] Expose single port, mount `./data` volume for SQLite persistence
+- [x] Create `docker-compose.yml` with single service, volume for `./data`, environment variables
+- [x] Create `.dockerignore` excluding `node_modules`, `.svelte-kit`, `build`, `data`
 
 ---
 
@@ -145,43 +145,43 @@ All sensitive data handling depends on this module. It must be built and tested 
 
 ### 1.1 — Master key derivation (`src/lib/crypto/keys.ts`)
 
-- [ ] Read `OTPRAVKARR_SECRET` from `$env/dynamic/private` (runtime access, not build-time)
-- [ ] Implement HKDF key derivation using Web Crypto API (`crypto.subtle.importKey` + `crypto.subtle.deriveBits`)
-- [ ] Derive purpose-specific subkeys:
-  - [ ] `config-encryption` — for encrypting config table values
-  - [ ] `credential-encryption` — for encrypting XC passwords
-  - [ ] Each subkey derived with a unique `info` string via HKDF
-- [ ] Export `deriveKey(purpose: string): Promise<CryptoKey>` function
-- [ ] Cache derived keys in a module-level `Map<string, CryptoKey>` (they don't change at runtime)
-- [ ] Write unit tests: deterministic derivation, different purposes produce different keys
+- [x] Read `OTPRAVKARR_SECRET` from `$env/dynamic/private` (runtime access, not build-time)
+- [x] Implement HKDF key derivation using Web Crypto API (`crypto.subtle.importKey` + `crypto.subtle.deriveBits`)
+- [x] Derive purpose-specific subkeys:
+  - [x] `config-encryption` — for encrypting config table values
+  - [x] `credential-encryption` — for encrypting XC passwords
+  - [x] Each subkey derived with a unique `info` string via HKDF
+- [x] Export `deriveKey(purpose: string): Promise<CryptoKey>` function
+- [x] Cache derived keys in a module-level `Map<string, CryptoKey>` (they don't change at runtime)
+- [x] Write unit tests: deterministic derivation, different purposes produce different keys
 
 ### 1.2 — Field-level authenticated encryption (`src/lib/crypto/encryption.ts`)
 
-- [ ] Implement `encrypt(plaintext: string, purpose: string): Promise<string>` — AES-256-GCM
-  - [ ] Generate random 12-byte IV per encryption
-  - [ ] Concatenate IV + ciphertext + auth tag
-  - [ ] Return base64-encoded result
-- [ ] Implement `decrypt(ciphertext: string, purpose: string): Promise<string>` — reverse of above
-  - [ ] Parse IV from prefix, verify auth tag
-  - [ ] Throw typed `DecryptionError` on failure
-- [ ] Write unit tests: round-trip encrypt/decrypt, tamper detection, different purposes fail cross-decrypt
+- [x] Implement `encrypt(plaintext: string, purpose: string): Promise<string>` — AES-256-GCM
+  - [x] Generate random 12-byte IV per encryption
+  - [x] Concatenate IV + ciphertext + auth tag
+  - [x] Return base64-encoded result
+- [x] Implement `decrypt(ciphertext: string, purpose: string): Promise<string>` — reverse of above
+  - [x] Parse IV from prefix, verify auth tag
+  - [x] Throw typed `DecryptionError` on failure
+- [x] Write unit tests: round-trip encrypt/decrypt, tamper detection, different purposes fail cross-decrypt
 
 ### 1.3 — Password utilities (`src/lib/crypto/passwords.ts`)
 
-- [ ] Implement `hashAdminPassword(password: string): Promise<string>` using `Bun.password.hash(password, { algorithm: 'argon2id' })`
-- [ ] Implement `verifyAdminPassword(password: string, hash: string): Promise<boolean>` using `Bun.password.verify`
-- [ ] Implement `generateXcPassword(length?: number): string` — cryptographically random, default 24 chars, alphanumeric charset, using `crypto.getRandomValues`
-- [ ] Write unit tests: hash/verify round-trip, XC password length/charset constraints
+- [x] Implement `hashAdminPassword(password: string): Promise<string>` using `Bun.password.hash(password, { algorithm: 'argon2id' })`
+- [x] Implement `verifyAdminPassword(password: string, hash: string): Promise<boolean>` using `Bun.password.verify`
+- [x] Implement `generateXcPassword(length?: number): string` — cryptographically random, default 24 chars, alphanumeric charset, using `crypto.getRandomValues`
+- [x] Write unit tests: hash/verify round-trip, XC password length/charset constraints
 
 ### 1.4 — Bootstrap token generation (`src/lib/crypto/bootstrap.ts`)
 
-- [ ] Implement `generateBootstrapToken(): string` — format `xxxx-xxxx-xxxx` using `crypto.getRandomValues`
-- [ ] Token exists only in memory — never persisted to database
-- [ ] Export a singleton holder: `let activeToken: { value: string; expiresAt: number } | null`
-- [ ] Implement `createBootstrapToken(ttlMinutes?: number): string` — default 15 minutes, sets `activeToken`
-- [ ] Implement `consumeBootstrapToken(candidate: string): boolean` — constant-time comparison, single-use (nulls `activeToken` on success)
-- [ ] Implement `isBootstrapTokenExpired(): boolean`
-- [ ] Write unit tests: generation format, single-use consumption, expiry behavior, timing-safe comparison
+- [x] Implement `generateBootstrapToken(): string` — format `xxxx-xxxx-xxxx` using `crypto.getRandomValues`
+- [x] Token exists only in memory — never persisted to database
+- [x] Export a singleton holder: `let activeToken: { value: string; expiresAt: number } | null`
+- [x] Implement `createBootstrapToken(ttlMinutes?: number): string` — default 15 minutes, sets `activeToken`
+- [x] Implement `consumeBootstrapToken(candidate: string): boolean` — constant-time comparison, single-use (nulls `activeToken` on success)
+- [x] Implement `isBootstrapTokenExpired(): boolean`
+- [x] Write unit tests: generation format, single-use consumption, expiry behavior, timing-safe comparison
 
 ---
 
@@ -189,22 +189,22 @@ All sensitive data handling depends on this module. It must be built and tested 
 
 ### 2.1 — Connection management (`src/lib/db/connection.ts`)
 
-- [ ] Import `Database` from `bun:sqlite`
-- [ ] Initialize database at the path from `DATABASE_PATH` env var (default `./data/otpravkarr.sqlite`)
-- [ ] Enable WAL mode: `db.exec('PRAGMA journal_mode=WAL')`
-- [ ] Enable foreign keys: `db.exec('PRAGMA foreign_keys=ON')`
-- [ ] Export singleton `db` instance
-- [ ] Implement `initializeDatabase()` function that runs migrations
+- [x] Import `Database` from `bun:sqlite`
+- [x] Initialize database at the path from `DATABASE_PATH` env var (default `./data/otpravkarr.sqlite`)
+- [x] Enable WAL mode: `db.exec('PRAGMA journal_mode=WAL')`
+- [x] Enable foreign keys: `db.exec('PRAGMA foreign_keys=ON')`
+- [x] Export singleton `db` instance
+- [x] Implement `initializeDatabase()` function that runs migrations
 - [ ] Call `initializeDatabase()` from SvelteKit server startup (via `hooks.server.ts` init)
 
 ### 2.2 — Migration system (`src/lib/db/migrations/`)
 
-- [ ] Create `src/lib/db/migrate.ts`:
-  - [ ] Create internal `_migrations` table: `(version INTEGER PRIMARY KEY, name TEXT, applied_at TEXT)`
-  - [ ] Read SQL files from `src/lib/db/migrations/` sorted by numeric prefix
-  - [ ] Apply unapplied migrations in order within a transaction
-  - [ ] Forward-only — no down migrations
-- [ ] Create `001_initial.sql`:
+- [x] Create `src/lib/db/migrate.ts`:
+  - [x] Create internal `_migrations` table: `(version INTEGER PRIMARY KEY, name TEXT, applied_at TEXT)`
+  - [x] Read SQL files from `src/lib/db/migrations/` sorted by numeric prefix
+  - [x] Apply unapplied migrations in order within a transaction
+  - [x] Forward-only — no down migrations
+- [x] Create `001_initial.sql`:
   ```sql
   CREATE TABLE config (
     key TEXT PRIMARY KEY,
@@ -270,53 +270,53 @@ All sensitive data handling depends on this module. It must be built and tested 
 
 ### 2.3 — Config repository (`src/lib/db/repositories/config.ts`)
 
-- [ ] Implement `getConfig(key: string): Promise<string | null>` — reads row, decrypts if `encrypted = 1`
-- [ ] Implement `setConfig(key: string, value: string, encrypted?: boolean): Promise<void>` — upserts, encrypts value if `encrypted = true` using `lib/crypto` with `config-encryption` purpose
-- [ ] Implement `getAllConfig(): Promise<Record<string, string>>` — bulk read, decrypt all encrypted fields
-- [ ] Use prepared statements via `db.prepare()` — cache them at module level
-- [ ] Implement in-memory config cache:
-  - [ ] `let configCache: Record<string, string> | null = null`
-  - [ ] `loadConfigCache()` — populates cache on startup
-  - [ ] `invalidateConfigCache()` — called after any write
-- [ ] Write unit tests with an in-memory SQLite database
+- [x] Implement `getConfig(key: string): Promise<string | null>` — reads row, decrypts if `encrypted = 1`
+- [x] Implement `setConfig(key: string, value: string, encrypted?: boolean): Promise<void>` — upserts, encrypts value if `encrypted = true` using `lib/crypto` with `config-encryption` purpose
+- [x] Implement `getAllConfig(): Promise<Record<string, string>>` — bulk read, decrypt all encrypted fields
+- [x] Use prepared statements via `db.prepare()` — cache them at module level
+- [x] Implement in-memory config cache:
+  - [x] `let configCache: Record<string, string> | null = null`
+  - [x] `loadConfigCache()` — populates cache on startup
+  - [x] `invalidateConfigCache()` — called after any write
+- [x] Write unit tests with an in-memory SQLite database
 
 ### 2.4 — User mappings repository (`src/lib/db/repositories/users.ts`)
 
-- [ ] Define `UserMapping` type in `src/lib/db/types.ts` matching schema columns
-- [ ] Implement with prepared statements:
-  - [ ] `getUserMappingByPlexId(plexAccountId: number): UserMapping | null`
-  - [ ] `getUserMappingByDispatcharrId(dispatcharrUserId: number): UserMapping | null`
-  - [ ] `getAllUserMappings(filters?: { isActive?: boolean }): UserMapping[]`
-  - [ ] `createUserMapping(mapping: Omit<UserMapping, 'id' | 'created_at' | 'updated_at'>): UserMapping`
-  - [ ] `updateUserMapping(id: number, updates: Partial<UserMapping>): void`
-  - [ ] `markMappingInactive(id: number): void` — sets `is_active = 0`, updates `updated_at`
-  - [ ] `updateLastAccessed(id: number): void`
-  - [ ] `updateLastSynced(id: number): void`
-  - [ ] `updatePlexIdentity(id: number, username: string, email: string | null, thumb: string | null): void`
-- [ ] XC password stored/retrieved via `lib/crypto` encryption with `credential-encryption` purpose
-- [ ] Write unit tests
+- [x] Define `UserMapping` type in `src/lib/db/types.ts` matching schema columns
+- [x] Implement with prepared statements:
+  - [x] `getUserMappingByPlexId(plexAccountId: number): UserMapping | null`
+  - [x] `getUserMappingByDispatcharrId(dispatcharrUserId: number): UserMapping | null`
+  - [x] `getAllUserMappings(filters?: { isActive?: boolean }): UserMapping[]`
+  - [x] `createUserMapping(mapping: Omit<UserMapping, 'id' | 'created_at' | 'updated_at'>): UserMapping`
+  - [x] `updateUserMapping(id: number, updates: Partial<UserMapping>): void`
+  - [x] `markMappingInactive(id: number): void` — sets `is_active = 0`, updates `updated_at`
+  - [x] `updateLastAccessed(id: number): void`
+  - [x] `updateLastSynced(id: number): void`
+  - [x] `updatePlexIdentity(id: number, username: string, email: string | null, thumb: string | null): void`
+- [x] XC password stored/retrieved via `lib/crypto` encryption with `credential-encryption` purpose
+- [x] Write unit tests
 
 ### 2.5 — Session repository (`src/lib/db/repositories/sessions.ts`)
 
-- [ ] `createSession(userRef: string, type: 'admin' | 'user', ttlSeconds: number): string` — generates UUID session ID, inserts row, returns ID
-- [ ] `getSession(id: string): { userRef: string; sessionType: string; expiresAt: string } | null` — returns null if expired
-- [ ] `deleteSession(id: string): void`
-- [ ] `deleteExpiredSessions(): number` — cleanup, returns count deleted
-- [ ] Write unit tests
+- [x] `createSession(userRef: string, type: 'admin' | 'user', ttlSeconds: number): string` — generates UUID session ID, inserts row, returns ID
+- [x] `getSession(id: string): { userRef: string; sessionType: string; expiresAt: string } | null` — returns null if expired
+- [x] `deleteSession(id: string): void`
+- [x] `deleteExpiredSessions(): number` — cleanup, returns count deleted
+- [x] Write unit tests
 
 ### 2.6 — Admin accounts repository (`src/lib/db/repositories/admin.ts`)
 
-- [ ] `createAdmin(username: string, passwordHash: string): void`
-- [ ] `getAdminByUsername(username: string): { id: number; username: string; passwordHash: string } | null`
-- [ ] `adminExists(): boolean` — `SELECT COUNT(*) FROM admin_accounts > 0`
-- [ ] Write unit tests
+- [x] `createAdmin(username: string, passwordHash: string): void`
+- [x] `getAdminByUsername(username: string): { id: number; username: string; passwordHash: string } | null`
+- [x] `adminExists(): boolean` — `SELECT COUNT(*) FROM admin_accounts > 0`
+- [x] Write unit tests
 
 ### 2.7 — Audit log repository (`src/lib/db/repositories/audit.ts`)
 
-- [ ] `appendAuditLog(entry: { actor?: string; action: string; detail?: Record<string, unknown>; ipAddress?: string }): void`
-  - [ ] Serialize `detail` as JSON string
-- [ ] `queryAuditLog(filters: { action?: string; actor?: string; after?: string; before?: string; limit?: number; offset?: number }): { entries: AuditEntry[]; total: number }`
-- [ ] Action type constants exported from `src/lib/db/types.ts`:
+- [x] `appendAuditLog(entry: { actor?: string; action: string; detail?: Record<string, unknown>; ipAddress?: string }): void`
+  - [x] Serialize `detail` as JSON string
+- [x] `queryAuditLog(filters: { action?: string; actor?: string; after?: string; before?: string; limit?: number; offset?: number }): { entries: AuditEntry[]; total: number }`
+- [x] Action type constants exported from `src/lib/db/types.ts`:
   ```ts
   export const AuditAction = {
     SETUP_COMPLETED: 'setup.completed',
@@ -329,16 +329,16 @@ All sensitive data handling depends on this module. It must be built and tested 
     HEALTH_CHECK_FAILED: 'health.check_failed',
   } as const;
   ```
-- [ ] Write unit tests
+- [x] Write unit tests
 
 ### 2.8 — Database types (`src/lib/db/types.ts`)
 
-- [ ] Define `UserMapping` interface matching all columns
-- [ ] Define `AuditEntry` interface
-- [ ] Define `Session` interface
-- [ ] Define `AdminAccount` interface
-- [ ] Define `ConfigEntry` interface
-- [ ] Define `ProvisioningMode = 'automatic' | 'self_managed' | 'staff'`
+- [x] Define `UserMapping` interface matching all columns
+- [x] Define `AuditEntry` interface
+- [x] Define `Session` interface
+- [x] Define `AdminAccount` interface
+- [x] Define `ConfigEntry` interface
+- [x] Define `ProvisioningMode = 'automatic' | 'self_managed' | 'staff'`
 
 ---
 

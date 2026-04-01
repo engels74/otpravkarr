@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite dev",
     "dev:bun": "bun --bun run dev",
-    "build": "vite build",
+    "build": "vite build && cp -r src/lib/db/migrations build/server/migrations",
     "preview": "vite preview",
     "start": "bun ./build/index.js",
     "prepare": "svelte-kit sync || echo ''",

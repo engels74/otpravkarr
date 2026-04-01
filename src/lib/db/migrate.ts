@@ -2,6 +2,9 @@ import type { Database } from "bun:sqlite";
 import { readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 
+// After svelte-adapter-bun bundles the server, import.meta.dirname resolves to
+// build/server/. The build script copies src/lib/db/migrations/ there so .sql
+// files are available at runtime. See package.json "build" script.
 const MIGRATIONS_DIR = resolve(import.meta.dirname ?? ".", "migrations");
 
 const CREATE_MIGRATIONS_TABLE = `

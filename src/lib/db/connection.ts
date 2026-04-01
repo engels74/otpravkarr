@@ -40,7 +40,7 @@ export async function initializeDatabase(): Promise<void> {
 
 /**
  * Shorthand accessor — returns the singleton Database.
- * Throws if the database has not been initialized yet.
+ * Lazily initializes via getDb() on first property access.
  */
 export const db: Database = new Proxy({} as Database, {
   get(_target, prop, receiver) {

@@ -22,8 +22,10 @@ function parseMigrationFiles(dir: string): MigrationFile[] {
   let entries: string[];
   try {
     entries = readdirSync(dir);
-  } catch {
-    return [];
+  } catch (err) {
+    throw new Error(
+      `Failed to read migrations directory: ${dir} — ${err instanceof Error ? err.message : String(err)}`,
+    );
   }
 
   const migrations: MigrationFile[] = [];

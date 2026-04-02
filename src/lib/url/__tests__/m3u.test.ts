@@ -79,6 +79,26 @@ describe("generateM3U", () => {
     expect(result).toContain(",Héllo & Wörld <3>");
   });
 
+  it("replaces double quotes with single quotes in channel names", () => {
+    const result = generateM3U({
+      ...base,
+      channels: [ch(7, 'He said "hello"', 1)],
+    });
+
+    expect(result).toContain("tvg-name=\"He said 'hello'\"");
+    expect(result).toContain(",He said 'hello'");
+  });
+
+  it("strips newlines from channel names", () => {
+    const result = generateM3U({
+      ...base,
+      channels: [ch(8, "Line1\nLine2\rLine3", 1)],
+    });
+
+    expect(result).toContain('tvg-name="Line1Line2Line3"');
+    expect(result).toContain(",Line1Line2Line3");
+  });
+
   it("uses https when protocol is overridden", () => {
     const result = generateM3U({
       ...base,

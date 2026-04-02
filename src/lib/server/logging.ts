@@ -1,0 +1,31 @@
+import type { Handle } from "@sveltejs/kit";
+
+export interface RequestLogEntry {
+  timestamp: string;
+  method: string;
+  path: string;
+  status: number;
+  duration_ms: number;
+  ip: string;
+}
+
+export function createRequestLogger(): Handle {
+  return async ({ event, resolve }) => {
+    const start = performance.now();
+    const response = await resolve(event);
+    const duration = performance.now() - start;
+
+    const entry: RequestLogEntry = {
+      timestamp: new Date().toISOString(),
+      method: event.request.method,
+      path: event.url.pathname,
+      status: response.status,
+      duration_ms: Math.round(duration * 100) / 100,
+      ip: event.getClientAddress(),
+    };
+
+    console.log(JSON.stringify(entry));
+
+    return response;
+  };
+}

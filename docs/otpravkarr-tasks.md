@@ -590,45 +590,45 @@ All sensitive data handling depends on this module. It must be built and tested 
 
 ### 7.1 — Auth guards (`src/lib/server/auth.ts`)
 
-- [ ] Implement `requireAdmin(event: RequestEvent): Promise<AdminAccount>`
-  - [ ] Read session cookie, look up session in DB
-  - [ ] Verify session type is `admin` and not expired
-  - [ ] Throw `redirect(303, '/login')` if invalid
-- [ ] Implement `requireUser(event: RequestEvent): Promise<UserMapping>`
-  - [ ] Read session cookie, look up session in DB
-  - [ ] Verify session type is `user` and not expired
-  - [ ] Throw `redirect(303, '/')` if invalid
-- [ ] Implement `requireSetupIncomplete(): void`
-  - [ ] Check `adminExists()` — if admin exists, setup is complete → throw `error(404)`
-- [ ] Implement `isSetupComplete(): boolean`
+- [x] Implement `requireAdmin(event: RequestEvent): Promise<AdminAccount>`
+  - [x] Read session cookie, look up session in DB
+  - [x] Verify session type is `admin` and not expired
+  - [x] Throw `redirect(303, '/login')` if invalid
+- [x] Implement `requireUser(event: RequestEvent): Promise<UserMapping>`
+  - [x] Read session cookie, look up session in DB
+  - [x] Verify session type is `user` and not expired
+  - [x] Throw `redirect(303, '/')` if invalid
+- [x] Implement `requireSetupIncomplete(): void`
+  - [x] Check `adminExists()` — if admin exists, setup is complete → throw `error(404)`
+- [x] Implement `isSetupComplete(): boolean`
 
 ### 7.2 — CSRF origin validation (`src/lib/server/csrf.ts`)
 
-- [ ] Implement `validateOrigin(request: Request, allowedOrigins: string[]): void`
-  - [ ] Read `Origin` header from request
-  - [ ] Compare against `allowedOrigins` from config
-  - [ ] Throw `error(403, 'CSRF origin mismatch')` on failure
-- [ ] Only enforce on state-mutating methods (POST, PUT, PATCH, DELETE)
-- [ ] Skip during setup flow (no origin configured yet)
-- [ ] Write unit tests
+- [x] Implement `validateOrigin(request: Request, allowedOrigins: string[]): void`
+  - [x] Read `Origin` header from request
+  - [x] Compare against `allowedOrigins` from config
+  - [x] Throw `error(403, 'CSRF origin mismatch')` on failure
+- [x] Only enforce on state-mutating methods (POST, PUT, PATCH, DELETE)
+- [x] Skip during setup flow (no origin configured yet)
+- [x] Write unit tests
 
 ### 7.3 — Rate limiting (`src/lib/server/ratelimit.ts`)
 
-- [ ] Implement in-memory sliding-window rate limiter
-- [ ] `createRateLimiter(config: { windowMs: number; maxRequests: number }): RateLimiter`
-- [ ] `RateLimiter.check(key: string): { allowed: boolean; remaining: number; resetAt: number }`
-- [ ] Pre-configure limiters:
-  - [ ] Setup endpoint: 5 attempts per 15 minutes (keyed by IP)
-  - [ ] Admin login: 10 attempts per 15 minutes (keyed by IP)
-  - [ ] User OAuth: 20 attempts per 15 minutes (keyed by IP)
-- [ ] Write unit tests
+- [x] Implement in-memory sliding-window rate limiter
+- [x] `createRateLimiter(config: { windowMs: number; maxRequests: number }): RateLimiter`
+- [x] `RateLimiter.check(key: string): { allowed: boolean; remaining: number; resetAt: number }`
+- [x] Pre-configure limiters:
+  - [x] Setup endpoint: 5 attempts per 15 minutes (keyed by IP)
+  - [x] Admin login: 10 attempts per 15 minutes (keyed by IP)
+  - [x] User OAuth: 20 attempts per 15 minutes (keyed by IP)
+- [x] Write unit tests
 
 ### 7.4 — Logging (`src/lib/server/logging.ts`)
 
-- [ ] Implement structured request logger
-- [ ] Log method, path, status, duration, IP
-- [ ] Integrate with SvelteKit `handle` hook
-- [ ] Use `console.log` with JSON format for container-friendly logging
+- [x] Implement structured request logger
+- [x] Log method, path, status, duration, IP
+- [x] Integrate with SvelteKit `handle` hook
+- [x] Use `console.log` with JSON format for container-friendly logging
 
 ---
 

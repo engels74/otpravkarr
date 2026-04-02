@@ -99,6 +99,13 @@ export function getUserMappingByDispatcharrId(dispatcharrUserId: number): UserMa
 }
 
 /**
+ * Find a user mapping by its primary key ID.
+ */
+export function getUserMappingById(id: number): UserMapping | null {
+  return (getByIdStmt().get(id) as UserMapping | null) ?? null;
+}
+
+/**
  * Get all user mappings, optionally filtered by active status.
  */
 export function getAllUserMappings(filters?: { isActive?: boolean }): UserMapping[] {

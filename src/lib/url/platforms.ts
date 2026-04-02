@@ -75,6 +75,11 @@ export function buildPlatformUrl(platform: Platform, params: XcUrlParams): Platf
         },
       };
     }
+
+    default: {
+      const _exhaustive: never = platform;
+      throw new Error(`Unsupported platform: ${_exhaustive}`);
+    }
   }
 }
 

@@ -29,11 +29,22 @@ function buildUrl(host: string, path: string, params: Record<string, string>): s
 }
 
 function redactUrl(url: string, username: string, password: string): string {
-  return url
-    .replaceAll(encodeURIComponent(username), "***")
-    .replaceAll(encodeURIComponent(password), "***")
-    .replaceAll(username, "***")
-    .replaceAll(password, "***");
+  try {
+    const parsed = new URL(url);
+    for (const [key, value] of parsed.searchParams) {
+      if (value === username || value === password) {
+        parsed.searchParams.set(key, "***");
+      }
+    }
+    return parsed.toString();
+  } catch {
+    // Fallback for malformed URLs: use substring replacement
+    return url
+      .replaceAll(encodeURIComponent(username), "***")
+      .replaceAll(encodeURIComponent(password), "***")
+      .replaceAll(username, "***")
+      .replaceAll(password, "***");
+  }
 }
 
 function looksLikeM3U(text: string): boolean {

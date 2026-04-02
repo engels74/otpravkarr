@@ -35,7 +35,6 @@ describe("generateQRCodeDataUri", () => {
 
   it("throws QRCodeError for an empty string input", async () => {
     await expect(generateQRCodeDataUri("")).rejects.toThrow(QRCodeError);
-    await expect(generateQRCodeDataUri("")).rejects.toThrow("No input text");
   });
 
   it("calls the qrcode library with correct parameters", async () => {

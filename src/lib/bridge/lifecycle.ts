@@ -53,6 +53,18 @@ export async function rotateCredentials(
     isTransientResultError,
   );
   if (!result.ok) {
+    if (result.error === "not_found") {
+      // Dispatcharr user was deleted externally — clear stale fields before throwing
+      updateUserMapping(mapping.id, {
+        is_active: 0,
+        dispatcharr_user_id: null,
+        dispatcharr_username: null,
+        dispatcharr_xc_password_enc: null,
+      });
+      throw new Error(
+        "Cannot rotate credentials: Dispatcharr user no longer exists (cleaned up stale mapping)",
+      );
+    }
     throw new Error(`Failed to rotate credentials on Dispatcharr: ${result.message}`);
   }
 
@@ -121,6 +133,16 @@ export async function enableUser(client: DispatcharrClient, mapping: UserMapping
     isTransientResultError,
   );
   if (!result.ok) {
+    if (result.error === "not_found") {
+      // Dispatcharr user was deleted externally — clear stale fields
+      updateUserMapping(mapping.id, {
+        is_active: 0,
+        dispatcharr_user_id: null,
+        dispatcharr_username: null,
+        dispatcharr_xc_password_enc: null,
+      });
+      return;
+    }
     throw new Error(`Failed to enable user on Dispatcharr: ${result.message}`);
   }
 

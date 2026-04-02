@@ -189,6 +189,29 @@ describe("rotateCredentials", () => {
     expect(mockUpdateUserMapping).not.toHaveBeenCalled();
     expect(mockAppendAuditLog).not.toHaveBeenCalled();
   });
+
+  it("clears stale Dispatcharr fields on not_found and throws", async () => {
+    const mapping = makeMapping();
+    mockUpdateUser.mockResolvedValueOnce({
+      ok: false,
+      error: "not_found",
+      message: "Not Found",
+    });
+
+    await expect(rotateCredentials(mockClient, mapping)).rejects.toThrow(
+      "Cannot rotate credentials: Dispatcharr user no longer exists (cleaned up stale mapping)",
+    );
+
+    // Should clear stale fields
+    expect(mockUpdateUserMapping).toHaveBeenCalledWith(1, {
+      is_active: 0,
+      dispatcharr_user_id: null,
+      dispatcharr_username: null,
+      dispatcharr_xc_password_enc: null,
+    });
+    // Should NOT write credential rotation audit (rotation didn't happen)
+    expect(mockAppendAuditLog).not.toHaveBeenCalled();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -300,6 +323,24 @@ describe("enableUser", () => {
     );
 
     expect(mockUpdateUserMapping).not.toHaveBeenCalled();
+  });
+
+  it("clears stale Dispatcharr fields on not_found instead of throwing", async () => {
+    const mapping = makeMapping({ is_active: 0 });
+    mockUpdateUser.mockResolvedValueOnce({
+      ok: false,
+      error: "not_found",
+      message: "Not Found",
+    });
+
+    await enableUser(mockClient, mapping);
+
+    expect(mockUpdateUserMapping).toHaveBeenCalledWith(1, {
+      is_active: 0,
+      dispatcharr_user_id: null,
+      dispatcharr_username: null,
+      dispatcharr_xc_password_enc: null,
+    });
   });
 });
 

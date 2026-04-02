@@ -122,6 +122,29 @@ describe("probeXcSurface", () => {
       expect(result.probedPaths).toHaveLength(3);
       expect(mockOfetch).toHaveBeenCalledTimes(3);
     });
+
+    it("rejects empty JSON array as not XC", async () => {
+      mockOfetch.mockRejectedValueOnce(new Error("fail"));
+      mockOfetch.mockResolvedValueOnce({ error: "unknown_action" });
+      mockOfetch.mockResolvedValueOnce([]);
+
+      const result = await probeXcSurface(HOST, USER, PASS);
+
+      expect(result.found).toBe(false);
+    });
+
+    it("rejects array without category_id field as not XC", async () => {
+      mockOfetch.mockRejectedValueOnce(new Error("fail"));
+      mockOfetch.mockResolvedValueOnce({ error: "unknown_action" });
+      mockOfetch.mockResolvedValueOnce([
+        { id: 1, name: "not-xc-data" },
+        { id: 2, name: "also-not-xc" },
+      ]);
+
+      const result = await probeXcSurface(HOST, USER, PASS);
+
+      expect(result.found).toBe(false);
+    });
   });
 
   describe("all probes fail (network error)", () => {

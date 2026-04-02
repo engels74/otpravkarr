@@ -20,6 +20,7 @@ const PROBE_TIMEOUT_MS = 5_000;
 // Helpers
 // ---------------------------------------------------------------------------
 
+/** Ensures the host string has an `http(s)://` scheme prefix. Defaults to `http://` for bare hosts. */
 function ensureScheme(host: string): string {
   if (/^https?:\/\//i.test(host)) return host;
   return `http://${host}`;
@@ -62,8 +63,10 @@ function looksLikePlayerApiJson(data: unknown): boolean {
   return "user_info" in obj || "server_info" in obj;
 }
 
-function looksLikeJsonArray(data: unknown): boolean {
-  return Array.isArray(data);
+function looksLikeXcCategories(data: unknown): boolean {
+  if (!Array.isArray(data) || data.length === 0) return false;
+  const first = data[0] as Record<string, unknown>;
+  return typeof first === "object" && first !== null && "category_id" in first;
 }
 
 // ---------------------------------------------------------------------------
@@ -145,7 +148,7 @@ async function probeLiveCategories(
       timeout: PROBE_TIMEOUT_MS,
     });
 
-    if (looksLikeJsonArray(response)) {
+    if (looksLikeXcCategories(response)) {
       const base = ensureScheme(host).replace(/\/+$/, "");
       return {
         ok: true,
@@ -164,6 +167,15 @@ async function probeLiveCategories(
 // Main export
 // ---------------------------------------------------------------------------
 
+/**
+ * Probe an XC-compatible server to detect supported API surfaces.
+ *
+ * @param host - Server host with optional scheme (e.g. `http://iptv.example.com`).
+ *   Bare hostnames default to `http://` via {@link ensureScheme}. Pass an explicit
+ *   `https://` prefix for HTTPS-only servers.
+ * @param username - XC username.
+ * @param password - XC password.
+ */
 export async function probeXcSurface(
   host: string,
   username: string,

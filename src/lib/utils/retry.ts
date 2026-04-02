@@ -35,12 +35,18 @@ export async function retryAsync<T>(
   options?: RetryOptions,
 ): Promise<T> {
   const config: RetryConfig = { ...DEFAULT_RETRY_CONFIG, ...options };
-  config.maxRetries = Math.max(0, config.maxRetries);
-  config.baseDelayMs = Math.max(0, config.baseDelayMs);
+  config.maxRetries = Number.isFinite(config.maxRetries)
+    ? Math.max(0, config.maxRetries)
+    : DEFAULT_RETRY_CONFIG.maxRetries;
+  config.baseDelayMs = Number.isFinite(config.baseDelayMs)
+    ? Math.max(0, config.baseDelayMs)
+    : DEFAULT_RETRY_CONFIG.baseDelayMs;
   config.maxDelayMs = Number.isFinite(config.maxDelayMs)
     ? Math.max(0, config.maxDelayMs)
     : DEFAULT_RETRY_CONFIG.maxDelayMs;
-  config.jitter = Math.max(0, Math.min(1, config.jitter));
+  config.jitter = Number.isFinite(config.jitter)
+    ? Math.max(0, Math.min(1, config.jitter))
+    : DEFAULT_RETRY_CONFIG.jitter;
 
   let lastError: unknown;
   for (let attempt = 0; attempt <= config.maxRetries; attempt++) {
@@ -65,12 +71,18 @@ export async function retryResult<T, R extends { ok: boolean }>(
   options?: RetryOptions,
 ): Promise<R> {
   const config: RetryConfig = { ...DEFAULT_RETRY_CONFIG, ...options };
-  config.maxRetries = Math.max(0, config.maxRetries);
-  config.baseDelayMs = Math.max(0, config.baseDelayMs);
+  config.maxRetries = Number.isFinite(config.maxRetries)
+    ? Math.max(0, config.maxRetries)
+    : DEFAULT_RETRY_CONFIG.maxRetries;
+  config.baseDelayMs = Number.isFinite(config.baseDelayMs)
+    ? Math.max(0, config.baseDelayMs)
+    : DEFAULT_RETRY_CONFIG.baseDelayMs;
   config.maxDelayMs = Number.isFinite(config.maxDelayMs)
     ? Math.max(0, config.maxDelayMs)
     : DEFAULT_RETRY_CONFIG.maxDelayMs;
-  config.jitter = Math.max(0, Math.min(1, config.jitter));
+  config.jitter = Number.isFinite(config.jitter)
+    ? Math.max(0, Math.min(1, config.jitter))
+    : DEFAULT_RETRY_CONFIG.jitter;
 
   let lastResult!: R;
   for (let attempt = 0; attempt <= config.maxRetries; attempt++) {

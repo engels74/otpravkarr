@@ -60,7 +60,8 @@ export function updateUser(
   id: number,
   data: UpdateUserData,
 ): Promise<DispatcharrResult<DispatcharrUser>> {
-  return client.request("PATCH", `/api/accounts/users/${id}/`, {
+  // API docs list PUT for this endpoint; UpdateUserData is Partial for caller convenience
+  return client.request("PUT", `/api/accounts/users/${id}/`, {
     body: data,
     schema: DispatcharrUserSchema,
   });

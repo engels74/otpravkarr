@@ -18,7 +18,9 @@ export class DispatcharrClient {
     path: string,
     options?: { body?: unknown; schema?: z.ZodType<T> },
   ): Promise<DispatcharrResult<T>> {
-    const url = `${this.baseUrl}${path}`;
+    // Ensure path starts with / for consistent URL joining
+    const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+    const url = `${this.baseUrl}${normalizedPath}`;
 
     const fetchOptions: FetchOptions = {
       method,
@@ -72,6 +74,10 @@ export class DispatcharrClient {
       }
       if (statusCode === 404) {
         return { ok: false, error: "not_found", message: String(message) };
+      }
+      // Distinguish client errors (4xx) from server/network errors (5xx)
+      if (statusCode >= 400 && statusCode < 500) {
+        return { ok: false, error: "validation_error", message: String(message) };
       }
       return { ok: false, error: "network_error", message: String(message) };
     }

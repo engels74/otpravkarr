@@ -214,7 +214,7 @@ describe("getUser", () => {
 });
 
 describe("updateUser", () => {
-  it("updates user fields via PATCH", async () => {
+  it("updates user fields via PUT", async () => {
     const user = makeUser({ email: "new@example.com" });
     mockOfetch.mockResolvedValueOnce(user);
     const client = createClient();
@@ -228,7 +228,7 @@ describe("updateUser", () => {
     expect(mockOfetch).toHaveBeenCalledWith(
       "https://dispatch.example.com/api/accounts/users/1/",
       expect.objectContaining({
-        method: "PATCH",
+        method: "PUT",
         body: { email: "new@example.com" },
       }),
     );

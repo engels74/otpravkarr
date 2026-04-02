@@ -50,6 +50,18 @@ describe("DispatcharrClient constructor", () => {
 });
 
 describe("DispatcharrClient.request", () => {
+  it("normalizes path without leading slash", async () => {
+    mockOfetch.mockResolvedValueOnce({ id: 1 });
+    const client = createClient("https://dispatch.example.com");
+
+    await client.request("GET", "api/test/");
+
+    expect(mockOfetch).toHaveBeenCalledWith(
+      "https://dispatch.example.com/api/test/",
+      expect.any(Object),
+    );
+  });
+
   it("sends ApiKey authorization header", async () => {
     mockOfetch.mockResolvedValueOnce({ id: 1 });
     const client = createClient("https://dispatch.example.com", "my-api-key");
@@ -134,6 +146,28 @@ describe("DispatcharrClient.request", () => {
     const result = await client.request("GET", "/api/resource/999/");
 
     expect(result).toEqual({ ok: false, error: "not_found", message: "Not Found" });
+  });
+
+  it("maps 400 to validation_error", async () => {
+    mockOfetch.mockRejectedValueOnce(makeFetchError(400, "Bad Request"));
+    const client = createClient();
+
+    const result = await client.request("POST", "/api/resource/");
+
+    expect(result).toEqual({ ok: false, error: "validation_error", message: "Bad Request" });
+  });
+
+  it("maps 422 to validation_error", async () => {
+    mockOfetch.mockRejectedValueOnce(makeFetchError(422, "Unprocessable Entity"));
+    const client = createClient();
+
+    const result = await client.request("POST", "/api/resource/");
+
+    expect(result).toEqual({
+      ok: false,
+      error: "validation_error",
+      message: "Unprocessable Entity",
+    });
   });
 
   it("maps 500 to network_error", async () => {

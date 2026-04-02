@@ -22,8 +22,12 @@ export function createHealthEndpoints(client: DispatcharrClient) {
         return { ok: true, data: { reachable: true, authValid: false } };
       }
 
-      // unexpected_shape / not_found → server responded but schema or endpoint differs
-      if (result.error === "unexpected_shape" || result.error === "not_found") {
+      // unexpected_shape / not_found / validation_error → server responded but schema or endpoint differs
+      if (
+        result.error === "unexpected_shape" ||
+        result.error === "not_found" ||
+        result.error === "validation_error"
+      ) {
         return { ok: true, data: { reachable: true, authValid: false } };
       }
 

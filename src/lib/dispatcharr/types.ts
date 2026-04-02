@@ -36,7 +36,8 @@ export type DispatcharrErrorCode =
   | "auth_failure"
   | "network_error"
   | "unexpected_shape"
-  | "not_found";
+  | "not_found"
+  | "validation_error";
 
 export type DispatcharrResult<T> =
   | { ok: true; data: T }

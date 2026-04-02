@@ -51,7 +51,15 @@ export async function provisionUser(
   client: DispatcharrClient,
   request: ProvisioningRequest,
 ): Promise<ProvisioningResult> {
-  const existingMapping = getUserMappingByPlexId(request.plexIdentity.id);
+  let existingMapping: UserMapping | null;
+  try {
+    existingMapping = getUserMappingByPlexId(request.plexIdentity.id);
+  } catch (err) {
+    return {
+      status: "failed",
+      error: `Database lookup failed: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
 
   // Already active — nothing to do
   if (existingMapping && existingMapping.is_active === 1) {
@@ -116,7 +124,15 @@ export async function provisionUser(
   }
 
   // New user — create flow
-  const allMappings = getAllUserMappings();
+  let allMappings: UserMapping[];
+  try {
+    allMappings = getAllUserMappings();
+  } catch (err) {
+    return {
+      status: "failed",
+      error: `Database lookup failed: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
   const existingUsernames = allMappings
     .map((m: UserMapping) => m.dispatcharr_username)
     .filter((u): u is string => u != null);

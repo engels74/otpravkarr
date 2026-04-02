@@ -224,7 +224,23 @@ export async function reconcileSync(
     return report;
   }
 
-  const allMappings = getAllUserMappings();
+  let allMappings: UserMapping[];
+  try {
+    allMappings = getAllUserMappings();
+  } catch (error) {
+    report.errors.push(
+      `Failed to load user mappings: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    try {
+      appendAuditLog({ action: AuditAction.SYNC_COMPLETED, detail: { ...report } });
+    } catch (auditErr) {
+      report.errors.push(
+        `Failed to write sync-completed audit log: ${auditErr instanceof Error ? auditErr.message : String(auditErr)}`,
+      );
+    }
+    return report;
+  }
+
   // Only treat accepted friends as active — pending invites should not grant access
   const acceptedFriends = friends.filter((f) => f.status === "accepted");
   const friendIds = new Set(acceptedFriends.map((f) => f.id));

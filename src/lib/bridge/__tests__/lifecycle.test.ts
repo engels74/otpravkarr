@@ -741,6 +741,24 @@ describe("reconcileSync", () => {
     });
   });
 
+  it("handles getAllUserMappings DB failure gracefully", async () => {
+    mockFetchFriends.mockResolvedValueOnce([]);
+    mockGetAllUserMappings.mockImplementationOnce(() => {
+      throw new Error("database is locked");
+    });
+
+    const report = await reconcileSync(mockClient, "admin-token");
+
+    expect(report.errors).toHaveLength(1);
+    expect(report.errors[0]).toContain("Failed to load user mappings");
+    expect(report.errors[0]).toContain("database is locked");
+    // Should still write audit log
+    expect(mockAppendAuditLog).toHaveBeenCalledWith({
+      action: AuditAction.SYNC_COMPLETED,
+      detail: expect.objectContaining({ errors: expect.any(Array) }),
+    });
+  });
+
   it("writes sync.completed audit log entry", async () => {
     mockFetchFriends.mockResolvedValueOnce([]);
     mockGetAllUserMappings.mockReturnValueOnce([]);

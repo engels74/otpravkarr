@@ -74,11 +74,18 @@ export async function provisionUser(
     if (!result.ok) {
       if (result.error === "not_found") {
         // Dispatcharr user was deleted externally — clear stale ID and fall through to create flow
-        updateUserMapping(existingMapping.id, {
-          dispatcharr_user_id: null,
-          dispatcharr_username: null,
-          dispatcharr_xc_password_enc: null,
-        });
+        try {
+          updateUserMapping(existingMapping.id, {
+            dispatcharr_user_id: null,
+            dispatcharr_username: null,
+            dispatcharr_xc_password_enc: null,
+          });
+        } catch (err) {
+          return {
+            status: "failed",
+            error: `Failed to clean up stale mapping after Dispatcharr user not found: ${err instanceof Error ? err.message : String(err)}`,
+          };
+        }
       } else {
         return { status: "failed", error: result.message };
       }

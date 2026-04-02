@@ -313,8 +313,12 @@ describe("reconcileSync", () => {
     expect(report.disabled).toBe(1);
     // Should NOT call Dispatcharr API
     expect(mockUpdateUser).not.toHaveBeenCalled();
-    // Should mark inactive locally
-    expect(mockMarkMappingInactive).toHaveBeenCalledWith(1);
+    // Should deactivate and clear stale credential fields
+    expect(mockUpdateUserMapping).toHaveBeenCalledWith(1, {
+      is_active: 0,
+      dispatcharr_username: null,
+      dispatcharr_xc_password_enc: null,
+    });
     // Should write audit log
     expect(mockAppendAuditLog).toHaveBeenCalledWith({
       action: AuditAction.USER_DISABLED,
@@ -326,8 +330,33 @@ describe("reconcileSync", () => {
     });
   });
 
-  it("does not disable already-inactive mappings for removed friends", async () => {
-    const mapping = makeMapping({ plex_account_id: 100, is_active: 0 });
+  it("disables Dispatcharr user even when local mapping is inactive (handles drift)", async () => {
+    const mapping = makeMapping({
+      plex_account_id: 100,
+      dispatcharr_user_id: 10,
+      is_active: 0,
+    });
+    mockFetchFriends.mockResolvedValueOnce([]);
+    mockGetAllUserMappings.mockReturnValueOnce([mapping]);
+    mockUpdateUser.mockResolvedValueOnce({
+      ok: true,
+      data: makeDispatcharrUser({ is_active: false }),
+    });
+
+    const report = await reconcileSync(mockClient, "admin-token");
+
+    // Should still call Dispatcharr to handle potential drift
+    expect(report.disabled).toBe(1);
+    expect(mockUpdateUser).toHaveBeenCalledWith(mockClient, 10, { is_active: false });
+    expect(mockMarkMappingInactive).toHaveBeenCalledWith(1);
+  });
+
+  it("skips already-inactive mappings without dispatcharr_user_id for removed friends", async () => {
+    const mapping = makeMapping({
+      plex_account_id: 100,
+      dispatcharr_user_id: null,
+      is_active: 0,
+    });
     mockFetchFriends.mockResolvedValueOnce([]);
     mockGetAllUserMappings.mockReturnValueOnce([mapping]);
 
@@ -335,6 +364,7 @@ describe("reconcileSync", () => {
 
     expect(report.disabled).toBe(0);
     expect(mockUpdateUser).not.toHaveBeenCalled();
+    expect(mockUpdateUserMapping).not.toHaveBeenCalled();
   });
 
   it("counts new Plex friends not yet mapped", async () => {

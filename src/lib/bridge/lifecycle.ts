@@ -152,30 +152,34 @@ export async function reconcileSync(
 
   for (const mapping of allMappings) {
     if (!friendIds.has(mapping.plex_account_id)) {
-      // User removed from Plex friends — disable if active
-      if (mapping.is_active === 1) {
-        if (mapping.dispatcharr_user_id == null) {
-          // No Dispatcharr user — deactivate locally without API call
-          markMappingInactive(mapping.id);
+      // User removed from Plex friends — ensure disabled
+      if (mapping.dispatcharr_user_id != null) {
+        // Always disable on Dispatcharr regardless of local is_active,
+        // in case the Dispatcharr user drifted back to active externally
+        try {
+          await disableUser(client, mapping);
           report.disabled++;
-          appendAuditLog({
-            action: AuditAction.USER_DISABLED,
-            detail: {
-              mapping_id: mapping.id,
-              dispatcharr_username: mapping.dispatcharr_username,
-              reason: "plex_friend_removed_no_dispatcharr_user",
-            },
-          });
-        } else {
-          try {
-            await disableUser(client, mapping);
-            report.disabled++;
-          } catch (err) {
-            report.errors.push(
-              `Failed to disable user ${mapping.plex_username}: ${err instanceof Error ? err.message : String(err)}`,
-            );
-          }
+        } catch (err) {
+          report.errors.push(
+            `Failed to disable user ${mapping.plex_username}: ${err instanceof Error ? err.message : String(err)}`,
+          );
         }
+      } else if (mapping.is_active === 1) {
+        // No Dispatcharr user — deactivate locally and clear stale credentials
+        updateUserMapping(mapping.id, {
+          is_active: 0,
+          dispatcharr_username: null,
+          dispatcharr_xc_password_enc: null,
+        });
+        report.disabled++;
+        appendAuditLog({
+          action: AuditAction.USER_DISABLED,
+          detail: {
+            mapping_id: mapping.id,
+            dispatcharr_username: mapping.dispatcharr_username,
+            reason: "plex_friend_removed_no_dispatcharr_user",
+          },
+        });
       }
     } else {
       // Still on Plex — refresh identity if changed

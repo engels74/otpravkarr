@@ -143,55 +143,62 @@ export async function provisionUser(
 
   let finalMapping: UserMapping;
 
-  if (existingMapping) {
-    // Existing mapping present (inactive with null dispatcharr_user_id, or stale fields cleared).
-    // Update instead of insert to avoid UNIQUE constraint violation on plex_account_id.
-    updateUserMapping(existingMapping.id, {
-      plex_uuid: request.plexIdentity.uuid,
-      plex_username: request.plexIdentity.username,
-      plex_email: request.plexIdentity.email,
-      plex_thumb: request.plexIdentity.thumb,
-      dispatcharr_user_id: dispatcharrUser.id,
-      dispatcharr_username: dispatcharrUser.username ?? sanitizedUsername,
-      dispatcharr_xc_password_enc: encryptedPassword,
-      dispatcharr_group_ids: JSON.stringify(request.groupIds),
-      dispatcharr_profile_id: request.profileId ?? null,
-      provisioning_mode: request.mode,
-      is_active: 1,
-    });
+  try {
+    if (existingMapping) {
+      // Existing mapping present (inactive with null dispatcharr_user_id, or stale fields cleared).
+      // Update instead of insert to avoid UNIQUE constraint violation on plex_account_id.
+      updateUserMapping(existingMapping.id, {
+        plex_uuid: request.plexIdentity.uuid,
+        plex_username: request.plexIdentity.username,
+        plex_email: request.plexIdentity.email,
+        plex_thumb: request.plexIdentity.thumb,
+        dispatcharr_user_id: dispatcharrUser.id,
+        dispatcharr_username: dispatcharrUser.username ?? sanitizedUsername,
+        dispatcharr_xc_password_enc: encryptedPassword,
+        dispatcharr_group_ids: JSON.stringify(request.groupIds),
+        dispatcharr_profile_id: request.profileId ?? null,
+        provisioning_mode: request.mode,
+        is_active: 1,
+      });
 
-    const updated = getUserMappingByPlexId(request.plexIdentity.id);
-    if (!updated) {
-      return { status: "failed", error: "Failed to retrieve updated mapping" };
+      const updated = getUserMappingByPlexId(request.plexIdentity.id);
+      if (!updated) {
+        return { status: "failed", error: "Failed to retrieve updated mapping" };
+      }
+      finalMapping = updated;
+    } else {
+      finalMapping = createUserMapping({
+        plex_account_id: request.plexIdentity.id,
+        plex_uuid: request.plexIdentity.uuid,
+        plex_username: request.plexIdentity.username,
+        plex_email: request.plexIdentity.email,
+        plex_thumb: request.plexIdentity.thumb,
+        dispatcharr_user_id: dispatcharrUser.id,
+        dispatcharr_username: dispatcharrUser.username ?? sanitizedUsername,
+        dispatcharr_xc_password_enc: encryptedPassword,
+        dispatcharr_group_ids: JSON.stringify(request.groupIds),
+        dispatcharr_profile_id: request.profileId ?? null,
+        provisioning_mode: request.mode,
+        is_active: 1,
+        last_synced_at: null,
+        last_accessed_at: null,
+      });
     }
-    finalMapping = updated;
-  } else {
-    finalMapping = createUserMapping({
-      plex_account_id: request.plexIdentity.id,
-      plex_uuid: request.plexIdentity.uuid,
-      plex_username: request.plexIdentity.username,
-      plex_email: request.plexIdentity.email,
-      plex_thumb: request.plexIdentity.thumb,
-      dispatcharr_user_id: dispatcharrUser.id,
-      dispatcharr_username: dispatcharrUser.username ?? sanitizedUsername,
-      dispatcharr_xc_password_enc: encryptedPassword,
-      dispatcharr_group_ids: JSON.stringify(request.groupIds),
-      dispatcharr_profile_id: request.profileId ?? null,
-      provisioning_mode: request.mode,
-      is_active: 1,
-      last_synced_at: null,
-      last_accessed_at: null,
-    });
-  }
 
-  appendAuditLog({
-    action: AuditAction.USER_PROVISIONED,
-    detail: {
-      plex_username: request.plexIdentity.username,
-      dispatcharr_username: dispatcharrUser.username ?? sanitizedUsername,
-      mode: request.mode,
-    },
-  });
+    appendAuditLog({
+      action: AuditAction.USER_PROVISIONED,
+      detail: {
+        plex_username: request.plexIdentity.username,
+        dispatcharr_username: dispatcharrUser.username ?? sanitizedUsername,
+        mode: request.mode,
+      },
+    });
+  } catch (err) {
+    return {
+      status: "failed",
+      error: `Dispatcharr user created but local mapping write failed: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
 
   // For self_managed/staff modes the password isn't persisted locally, so surface it
   // as a one-time value the caller can communicate to the user/admin for onboarding.

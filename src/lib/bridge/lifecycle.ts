@@ -68,15 +68,21 @@ export async function rotateCredentials(
     throw new Error(`Failed to rotate credentials on Dispatcharr: ${result.message}`);
   }
 
-  updateUserMapping(mapping.id, { dispatcharr_xc_password_enc: encryptedPassword });
+  try {
+    updateUserMapping(mapping.id, { dispatcharr_xc_password_enc: encryptedPassword });
 
-  appendAuditLog({
-    action: AuditAction.USER_CREDENTIALS_ROTATED,
-    detail: {
-      mapping_id: mapping.id,
-      dispatcharr_username: mapping.dispatcharr_username,
-    },
-  });
+    appendAuditLog({
+      action: AuditAction.USER_CREDENTIALS_ROTATED,
+      detail: {
+        mapping_id: mapping.id,
+        dispatcharr_username: mapping.dispatcharr_username,
+      },
+    });
+  } catch (err) {
+    throw new Error(
+      `Dispatcharr password rotated but local DB write failed (state may be inconsistent): ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
 }
 
 /**

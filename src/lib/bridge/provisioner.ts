@@ -126,7 +126,7 @@ export async function provisionUser(
     plex_email: request.plexIdentity.email,
     plex_thumb: request.plexIdentity.thumb,
     dispatcharr_user_id: dispatcharrUser.id,
-    dispatcharr_username: sanitizedUsername,
+    dispatcharr_username: dispatcharrUser.username ?? sanitizedUsername,
     dispatcharr_xc_password_enc: encryptedPassword,
     dispatcharr_group_ids: JSON.stringify(request.groupIds),
     dispatcharr_profile_id: request.profileId ?? null,
@@ -140,7 +140,7 @@ export async function provisionUser(
     action: AuditAction.USER_PROVISIONED,
     detail: {
       plex_username: request.plexIdentity.username,
-      dispatcharr_username: sanitizedUsername,
+      dispatcharr_username: dispatcharrUser.username ?? sanitizedUsername,
       mode: request.mode,
     },
   });

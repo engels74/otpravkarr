@@ -197,18 +197,25 @@ export async function reconcileSync(
           }
         } else {
           // Reconcile drift — Dispatcharr is source of truth for groups and active status
-          const dispatcharrUser = userResult.data;
-          const localGroups = JSON.parse(mapping.dispatcharr_group_ids) as number[];
-          const remoteGroups = dispatcharrUser.groups;
-          const groupsDrift =
-            JSON.stringify([...localGroups].sort()) !== JSON.stringify([...remoteGroups].sort());
-          const activeDrift = (mapping.is_active === 1) !== dispatcharrUser.is_active;
+          try {
+            const dispatcharrUser = userResult.data;
+            const localGroups = JSON.parse(mapping.dispatcharr_group_ids) as number[];
+            const remoteGroups = dispatcharrUser.groups;
+            const groupsDrift =
+              JSON.stringify([...localGroups].sort()) !== JSON.stringify([...remoteGroups].sort());
+            const activeDrift = (mapping.is_active === 1) !== dispatcharrUser.is_active;
 
-          if (groupsDrift || activeDrift) {
-            updateUserMapping(mapping.id, {
-              dispatcharr_group_ids: JSON.stringify(remoteGroups),
-              is_active: dispatcharrUser.is_active ? 1 : 0,
-            });
+            if (groupsDrift || activeDrift) {
+              updateUserMapping(mapping.id, {
+                dispatcharr_group_ids: JSON.stringify(remoteGroups),
+                is_active: dispatcharrUser.is_active ? 1 : 0,
+              });
+            }
+          } catch (err) {
+            report.errors.push(
+              `Failed to reconcile groups for user ${mapping.dispatcharr_username}: ${err instanceof Error ? err.message : String(err)}`,
+            );
+            continue;
           }
         }
       }

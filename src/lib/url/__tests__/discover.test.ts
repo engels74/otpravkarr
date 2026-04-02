@@ -210,6 +210,21 @@ describe("probeXcSurface", () => {
       );
     });
 
+    it("adds http:// scheme to bare host", async () => {
+      mockOfetch.mockResolvedValueOnce("#EXTM3U\ncontent");
+
+      const result = await probeXcSurface("iptv.example.com", USER, PASS);
+
+      expect(result.found).toBe(true);
+      expect(result.template).toBe(
+        "http://iptv.example.com/get.php?username={username}&password={password}&type=m3u_plus",
+      );
+      expect(mockOfetch).toHaveBeenCalledWith(
+        expect.stringContaining("http://iptv.example.com/get.php"),
+        expect.any(Object),
+      );
+    });
+
     it("get.php returns empty string — treated as not found", async () => {
       mockOfetch.mockResolvedValueOnce("");
       // player_api.php succeeds

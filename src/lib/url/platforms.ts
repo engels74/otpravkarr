@@ -61,7 +61,9 @@ export function buildPlatformUrl(platform: Platform, params: XcUrlParams): Platf
         return { type: "url", url };
       }
       const separator = (params.template ?? DEFAULT_XC_TEMPLATE).includes("?") ? "&" : "?";
-      return { type: "url", url: `${url}${separator}output=ts` };
+      // Guard against templates ending with ? or & to avoid ?& or && in the URL
+      const cleanUrl = url.replace(/[?&]+$/, "");
+      return { type: "url", url: `${cleanUrl}${separator}output=ts` };
     }
 
     case "smarters": {

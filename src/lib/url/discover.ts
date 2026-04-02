@@ -20,8 +20,13 @@ const PROBE_TIMEOUT_MS = 5_000;
 // Helpers
 // ---------------------------------------------------------------------------
 
+function ensureScheme(host: string): string {
+  if (/^https?:\/\//i.test(host)) return host;
+  return `http://${host}`;
+}
+
 function buildUrl(host: string, path: string, params: Record<string, string>): string {
-  const base = host.replace(/\/+$/, "");
+  const base = ensureScheme(host).replace(/\/+$/, "");
   const query = Object.entries(params)
     .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
     .join("&");
@@ -83,7 +88,7 @@ async function probeGetPhp(
     });
 
     if (looksLikeM3U(response)) {
-      const base = host.replace(/\/+$/, "");
+      const base = ensureScheme(host).replace(/\/+$/, "");
       return {
         ok: true,
         url,
@@ -110,7 +115,7 @@ async function probePlayerApi(
     });
 
     if (looksLikePlayerApiJson(response)) {
-      const base = host.replace(/\/+$/, "");
+      const base = ensureScheme(host).replace(/\/+$/, "");
       return {
         ok: true,
         url,
@@ -141,7 +146,7 @@ async function probeLiveCategories(
     });
 
     if (looksLikeJsonArray(response)) {
-      const base = host.replace(/\/+$/, "");
+      const base = ensureScheme(host).replace(/\/+$/, "");
       return {
         ok: true,
         url,

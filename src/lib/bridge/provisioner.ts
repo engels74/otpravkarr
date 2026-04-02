@@ -83,21 +83,28 @@ export async function provisionUser(
         return { status: "failed", error: result.message };
       }
     } else {
-      updateUserMapping(existingMapping.id, { is_active: 1 });
+      try {
+        updateUserMapping(existingMapping.id, { is_active: 1 });
 
-      appendAuditLog({
-        action: AuditAction.USER_PROVISIONED,
-        detail: {
-          plex_username: request.plexIdentity.username,
-          reactivated: true,
-        },
-      });
+        appendAuditLog({
+          action: AuditAction.USER_PROVISIONED,
+          detail: {
+            plex_username: request.plexIdentity.username,
+            reactivated: true,
+          },
+        });
 
-      const updatedMapping = getUserMappingByPlexId(request.plexIdentity.id);
-      if (!updatedMapping) {
-        return { status: "failed", error: "Failed to retrieve reactivated mapping" };
+        const updatedMapping = getUserMappingByPlexId(request.plexIdentity.id);
+        if (!updatedMapping) {
+          return { status: "failed", error: "Failed to retrieve reactivated mapping" };
+        }
+        return { status: "reactivated", mapping: updatedMapping };
+      } catch (err) {
+        return {
+          status: "failed",
+          error: `Dispatcharr user reactivated but local mapping write failed: ${err instanceof Error ? err.message : String(err)}`,
+        };
       }
-      return { status: "reactivated", mapping: updatedMapping };
     }
   }
 

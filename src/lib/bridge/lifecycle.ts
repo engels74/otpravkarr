@@ -112,16 +112,22 @@ export async function disableUser(client: DispatcharrClient, mapping: UserMappin
     throw new Error(`Failed to disable user on Dispatcharr: ${result.message}`);
   }
 
-  markMappingInactive(mapping.id);
+  try {
+    markMappingInactive(mapping.id);
 
-  if (mapping.is_active === 1) {
-    appendAuditLog({
-      action: AuditAction.USER_DISABLED,
-      detail: {
-        mapping_id: mapping.id,
-        dispatcharr_username: mapping.dispatcharr_username,
-      },
-    });
+    if (mapping.is_active === 1) {
+      appendAuditLog({
+        action: AuditAction.USER_DISABLED,
+        detail: {
+          mapping_id: mapping.id,
+          dispatcharr_username: mapping.dispatcharr_username,
+        },
+      });
+    }
+  } catch (err) {
+    throw new Error(
+      `Dispatcharr user disabled but local DB write failed (state may be inconsistent): ${err instanceof Error ? err.message : String(err)}`,
+    );
   }
 }
 
@@ -152,7 +158,13 @@ export async function enableUser(client: DispatcharrClient, mapping: UserMapping
     throw new Error(`Failed to enable user on Dispatcharr: ${result.message}`);
   }
 
-  updateUserMapping(mapping.id, { is_active: 1 });
+  try {
+    updateUserMapping(mapping.id, { is_active: 1 });
+  } catch (err) {
+    throw new Error(
+      `Dispatcharr user enabled but local DB write failed (state may be inconsistent): ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
 }
 
 /**

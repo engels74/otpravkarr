@@ -128,22 +128,48 @@ export async function provisionUser(
   const encryptedPassword =
     request.mode === "automatic" ? await encrypt(password, CREDENTIAL_PURPOSE) : null;
 
-  const newMapping = createUserMapping({
-    plex_account_id: request.plexIdentity.id,
-    plex_uuid: request.plexIdentity.uuid,
-    plex_username: request.plexIdentity.username,
-    plex_email: request.plexIdentity.email,
-    plex_thumb: request.plexIdentity.thumb,
-    dispatcharr_user_id: dispatcharrUser.id,
-    dispatcharr_username: dispatcharrUser.username ?? sanitizedUsername,
-    dispatcharr_xc_password_enc: encryptedPassword,
-    dispatcharr_group_ids: JSON.stringify(request.groupIds),
-    dispatcharr_profile_id: request.profileId ?? null,
-    provisioning_mode: request.mode,
-    is_active: 1,
-    last_synced_at: null,
-    last_accessed_at: null,
-  });
+  let finalMapping: UserMapping;
+
+  if (existingMapping) {
+    // Existing mapping present (inactive with null dispatcharr_user_id, or stale fields cleared).
+    // Update instead of insert to avoid UNIQUE constraint violation on plex_account_id.
+    updateUserMapping(existingMapping.id, {
+      plex_uuid: request.plexIdentity.uuid,
+      plex_username: request.plexIdentity.username,
+      plex_email: request.plexIdentity.email,
+      plex_thumb: request.plexIdentity.thumb,
+      dispatcharr_user_id: dispatcharrUser.id,
+      dispatcharr_username: dispatcharrUser.username ?? sanitizedUsername,
+      dispatcharr_xc_password_enc: encryptedPassword,
+      dispatcharr_group_ids: JSON.stringify(request.groupIds),
+      dispatcharr_profile_id: request.profileId ?? null,
+      provisioning_mode: request.mode,
+      is_active: 1,
+    });
+
+    const updated = getUserMappingByPlexId(request.plexIdentity.id);
+    if (!updated) {
+      return { status: "failed", error: "Failed to retrieve updated mapping" };
+    }
+    finalMapping = updated;
+  } else {
+    finalMapping = createUserMapping({
+      plex_account_id: request.plexIdentity.id,
+      plex_uuid: request.plexIdentity.uuid,
+      plex_username: request.plexIdentity.username,
+      plex_email: request.plexIdentity.email,
+      plex_thumb: request.plexIdentity.thumb,
+      dispatcharr_user_id: dispatcharrUser.id,
+      dispatcharr_username: dispatcharrUser.username ?? sanitizedUsername,
+      dispatcharr_xc_password_enc: encryptedPassword,
+      dispatcharr_group_ids: JSON.stringify(request.groupIds),
+      dispatcharr_profile_id: request.profileId ?? null,
+      provisioning_mode: request.mode,
+      is_active: 1,
+      last_synced_at: null,
+      last_accessed_at: null,
+    });
+  }
 
   appendAuditLog({
     action: AuditAction.USER_PROVISIONED,
@@ -154,5 +180,5 @@ export async function provisionUser(
     },
   });
 
-  return { status: "provisioned", mapping: newMapping };
+  return { status: "provisioned", mapping: finalMapping };
 }

@@ -206,8 +206,12 @@ export async function reconcileSync(
 
         if (!userResult.ok) {
           if (userResult.error === "not_found") {
-            // Orphaned — Dispatcharr user was deleted externally
-            updateUserMapping(mapping.id, { is_active: 0 });
+            // Orphaned — Dispatcharr user was deleted externally; clear stale Dispatcharr fields
+            updateUserMapping(mapping.id, {
+              is_active: 0,
+              dispatcharr_user_id: null,
+              dispatcharr_username: null,
+            });
             report.orphaned++;
           } else {
             report.errors.push(

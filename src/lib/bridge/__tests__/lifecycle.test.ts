@@ -368,7 +368,11 @@ describe("reconcileSync", () => {
     const report = await reconcileSync(mockClient, "admin-token");
 
     expect(report.orphaned).toBe(1);
-    expect(mockUpdateUserMapping).toHaveBeenCalledWith(1, { is_active: 0 });
+    expect(mockUpdateUserMapping).toHaveBeenCalledWith(1, {
+      is_active: 0,
+      dispatcharr_user_id: null,
+      dispatcharr_username: null,
+    });
   });
 
   it("refreshes Plex identity when username/email/thumb changed", async () => {

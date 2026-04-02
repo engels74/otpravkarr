@@ -245,7 +245,17 @@ describe("provisionUser — reactivation", () => {
 
   it("falls through to create flow when reactivation returns not_found", async () => {
     const inactive = makeMapping({ is_active: 0, dispatcharr_user_id: 42 });
-    vi.mocked(getUserMappingByPlexId).mockReturnValueOnce(inactive);
+    const updatedMapping = makeMapping({
+      id: 1,
+      dispatcharr_user_id: 200,
+      dispatcharr_username: "testuser",
+      provisioning_mode: "automatic",
+      is_active: 1,
+    });
+
+    vi.mocked(getUserMappingByPlexId)
+      .mockReturnValueOnce(inactive) // initial lookup
+      .mockReturnValueOnce(updatedMapping); // re-read after updateUserMapping in create flow
 
     // Reactivation fails with not_found (user deleted externally)
     vi.mocked(updateUser).mockResolvedValue({
@@ -254,16 +264,9 @@ describe("provisionUser — reactivation", () => {
       message: "User not found",
     } as DispatcharrResult<DispatcharrUser>);
 
-    // Create flow succeeds
+    // Create flow succeeds on Dispatcharr
     const dispatcharrUser = makeDispatcharrUser({ id: 200, username: "testuser" });
-    const newMapping = makeMapping({
-      id: 20,
-      dispatcharr_user_id: 200,
-      dispatcharr_username: "testuser",
-      provisioning_mode: "automatic",
-    });
     vi.mocked(createUser).mockResolvedValue({ ok: true, data: dispatcharrUser });
-    vi.mocked(createUserMapping).mockReturnValue(newMapping);
 
     const result = await provisionUser(mockClient, {
       plexIdentity: makePlexIdentity(),
@@ -271,13 +274,23 @@ describe("provisionUser — reactivation", () => {
       groupIds: [1, 2],
     });
 
-    // Should have cleared stale dispatcharr data
+    // Should have cleared stale dispatcharr data first
     expect(updateUserMapping).toHaveBeenCalledWith(inactive.id, {
       dispatcharr_user_id: null,
       dispatcharr_username: null,
     });
 
-    // Should have fallen through to create flow
+    // Should update existing mapping instead of creating a new one (avoids UNIQUE constraint)
+    expect(updateUserMapping).toHaveBeenCalledWith(
+      inactive.id,
+      expect.objectContaining({
+        dispatcharr_user_id: 200,
+        dispatcharr_username: "testuser",
+        is_active: 1,
+      }),
+    );
+    expect(createUserMapping).not.toHaveBeenCalled();
+
     expect(result.status).toBe("provisioned");
     expect(createUser).toHaveBeenCalled();
     if (result.status === "provisioned") {
@@ -287,17 +300,20 @@ describe("provisionUser — reactivation", () => {
 
   it("falls through to create flow when inactive mapping has null dispatcharr_user_id", async () => {
     const inactive = makeMapping({ is_active: 0, dispatcharr_user_id: null });
-    vi.mocked(getUserMappingByPlexId).mockReturnValueOnce(inactive);
-
-    const dispatcharrUser = makeDispatcharrUser({ id: 300, username: "testuser" });
-    const newMapping = makeMapping({
-      id: 30,
+    const updatedMapping = makeMapping({
+      id: 1,
       dispatcharr_user_id: 300,
       dispatcharr_username: "testuser",
       provisioning_mode: "automatic",
+      is_active: 1,
     });
+
+    vi.mocked(getUserMappingByPlexId)
+      .mockReturnValueOnce(inactive) // initial lookup
+      .mockReturnValueOnce(updatedMapping); // re-read after updateUserMapping in create flow
+
+    const dispatcharrUser = makeDispatcharrUser({ id: 300, username: "testuser" });
     vi.mocked(createUser).mockResolvedValue({ ok: true, data: dispatcharrUser });
-    vi.mocked(createUserMapping).mockReturnValue(newMapping);
 
     const result = await provisionUser(mockClient, {
       plexIdentity: makePlexIdentity(),
@@ -307,6 +323,18 @@ describe("provisionUser — reactivation", () => {
 
     // Should skip reactivation entirely and go to create flow
     expect(updateUser).not.toHaveBeenCalled();
+
+    // Should update existing mapping instead of creating a new one (avoids UNIQUE constraint)
+    expect(updateUserMapping).toHaveBeenCalledWith(
+      inactive.id,
+      expect.objectContaining({
+        dispatcharr_user_id: 300,
+        dispatcharr_username: "testuser",
+        is_active: 1,
+      }),
+    );
+    expect(createUserMapping).not.toHaveBeenCalled();
+
     expect(result.status).toBe("provisioned");
     expect(createUser).toHaveBeenCalled();
   });

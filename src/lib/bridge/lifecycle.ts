@@ -36,6 +36,11 @@ export async function rotateCredentials(
   if (mapping.dispatcharr_user_id == null) {
     throw new Error("Cannot rotate credentials: no Dispatcharr user ID");
   }
+  if (mapping.provisioning_mode !== "automatic") {
+    throw new Error(
+      `Cannot rotate credentials for non-automatic user (mode: ${mapping.provisioning_mode})`,
+    );
+  }
   const dispatcharrUserId = mapping.dispatcharr_user_id;
 
   const newPassword = generateXcPassword();
@@ -149,13 +154,27 @@ export async function reconcileSync(
     if (!friendIds.has(mapping.plex_account_id)) {
       // User removed from Plex friends — disable if active
       if (mapping.is_active === 1) {
-        try {
-          await disableUser(client, mapping);
+        if (mapping.dispatcharr_user_id == null) {
+          // No Dispatcharr user — deactivate locally without API call
+          markMappingInactive(mapping.id);
           report.disabled++;
-        } catch (err) {
-          report.errors.push(
-            `Failed to disable user ${mapping.plex_username}: ${err instanceof Error ? err.message : String(err)}`,
-          );
+          appendAuditLog({
+            action: AuditAction.USER_DISABLED,
+            detail: {
+              mapping_id: mapping.id,
+              dispatcharr_username: mapping.dispatcharr_username,
+              reason: "plex_friend_removed_no_dispatcharr_user",
+            },
+          });
+        } else {
+          try {
+            await disableUser(client, mapping);
+            report.disabled++;
+          } catch (err) {
+            report.errors.push(
+              `Failed to disable user ${mapping.plex_username}: ${err instanceof Error ? err.message : String(err)}`,
+            );
+          }
         }
       }
     } else {

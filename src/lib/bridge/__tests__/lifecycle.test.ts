@@ -165,6 +165,30 @@ describe("rotateCredentials", () => {
     expect(mockUpdateUserMapping).not.toHaveBeenCalled();
     expect(mockAppendAuditLog).not.toHaveBeenCalled();
   });
+
+  it("throws for self_managed provisioning mode", async () => {
+    const mapping = makeMapping({ provisioning_mode: "self_managed" });
+
+    await expect(rotateCredentials(mockClient, mapping)).rejects.toThrow(
+      "Cannot rotate credentials for non-automatic user (mode: self_managed)",
+    );
+
+    expect(mockUpdateUser).not.toHaveBeenCalled();
+    expect(mockUpdateUserMapping).not.toHaveBeenCalled();
+    expect(mockAppendAuditLog).not.toHaveBeenCalled();
+  });
+
+  it("throws for staff provisioning mode", async () => {
+    const mapping = makeMapping({ provisioning_mode: "staff" });
+
+    await expect(rotateCredentials(mockClient, mapping)).rejects.toThrow(
+      "Cannot rotate credentials for non-automatic user (mode: staff)",
+    );
+
+    expect(mockUpdateUser).not.toHaveBeenCalled();
+    expect(mockUpdateUserMapping).not.toHaveBeenCalled();
+    expect(mockAppendAuditLog).not.toHaveBeenCalled();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -271,6 +295,35 @@ describe("reconcileSync", () => {
     expect(report.disabled).toBe(1);
     expect(mockUpdateUser).toHaveBeenCalledWith(mockClient, 10, { is_active: false });
     expect(mockMarkMappingInactive).toHaveBeenCalledWith(1);
+  });
+
+  it("deactivates locally without Dispatcharr call when dispatcharr_user_id is null and friend removed", async () => {
+    const mapping = makeMapping({
+      plex_account_id: 100,
+      dispatcharr_user_id: null,
+      is_active: 1,
+    });
+    mockFetchFriends.mockResolvedValueOnce([
+      { id: 200, email: "other@example.com", status: "accepted" },
+    ]);
+    mockGetAllUserMappings.mockReturnValueOnce([mapping]);
+
+    const report = await reconcileSync(mockClient, "admin-token");
+
+    expect(report.disabled).toBe(1);
+    // Should NOT call Dispatcharr API
+    expect(mockUpdateUser).not.toHaveBeenCalled();
+    // Should mark inactive locally
+    expect(mockMarkMappingInactive).toHaveBeenCalledWith(1);
+    // Should write audit log
+    expect(mockAppendAuditLog).toHaveBeenCalledWith({
+      action: AuditAction.USER_DISABLED,
+      detail: {
+        mapping_id: 1,
+        dispatcharr_username: "dispuser",
+        reason: "plex_friend_removed_no_dispatcharr_user",
+      },
+    });
   });
 
   it("does not disable already-inactive mappings for removed friends", async () => {

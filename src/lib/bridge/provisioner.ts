@@ -111,8 +111,17 @@ export async function provisionUser(
   const password = generateXcPassword();
 
   // Encrypt before creating remote user — if encrypt fails, no orphaned Dispatcharr account
-  const encryptedPassword =
-    request.mode === "automatic" ? await encrypt(password, CREDENTIAL_PURPOSE) : null;
+  let encryptedPassword: string | null = null;
+  if (request.mode === "automatic") {
+    try {
+      encryptedPassword = await encrypt(password, CREDENTIAL_PURPOSE);
+    } catch (err) {
+      return {
+        status: "failed",
+        error: `Encryption failed: ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
+  }
 
   const createResult = await retryResult(
     () =>

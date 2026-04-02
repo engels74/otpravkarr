@@ -513,6 +513,26 @@ describe("provisionUser — create (staff mode)", () => {
 // ---------------------------------------------------------------------------
 
 describe("provisionUser — create failure", () => {
+  it("returns failed when encrypt throws", async () => {
+    vi.mocked(encrypt).mockRejectedValue(new Error("Key derivation failed"));
+
+    const result = await provisionUser(mockClient, {
+      plexIdentity: makePlexIdentity(),
+      mode: "automatic",
+      groupIds: [1],
+    });
+
+    expect(result.status).toBe("failed");
+    if (result.status === "failed") {
+      expect(result.error).toBe("Encryption failed: Key derivation failed");
+    }
+
+    // Should NOT call createUser or store mapping when encrypt fails
+    expect(createUser).not.toHaveBeenCalled();
+    expect(createUserMapping).not.toHaveBeenCalled();
+    expect(appendAuditLog).not.toHaveBeenCalled();
+  });
+
   it("returns failed when Dispatcharr createUser fails", async () => {
     vi.mocked(createUser).mockResolvedValue({
       ok: false,

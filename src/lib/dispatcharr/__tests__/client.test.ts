@@ -74,6 +74,19 @@ describe("DispatcharrClient.request", () => {
     );
   });
 
+  it("returns validation_error for malformed absolute URLs", async () => {
+    const client = createClient();
+
+    const result = await client.request("GET", "http://[invalid");
+
+    expect(result).toEqual({
+      ok: false,
+      error: "validation_error",
+      message: "Invalid URL path: http://[invalid",
+    });
+    expect(mockOfetch).not.toHaveBeenCalled();
+  });
+
   it("sends ApiKey authorization header", async () => {
     mockOfetch.mockResolvedValueOnce({ id: 1 });
     const client = createClient("https://dispatch.example.com", "my-api-key");

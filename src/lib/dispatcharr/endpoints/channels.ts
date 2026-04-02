@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import type { DispatcharrClient } from "../client";
-import { fetchAllPages, PaginationError } from "../pagination";
+import { fetchAllPages } from "../pagination";
 import { DispatcharrChannelSchema, paginatedSchema } from "../schemas";
 import type { DispatcharrChannel, DispatcharrResult, PaginatedResponse } from "../types";
 
@@ -26,18 +26,7 @@ export function createChannelEndpoints(client: DispatcharrClient) {
     },
 
     async getAllChannels(): Promise<DispatcharrResult<DispatcharrChannel[]>> {
-      try {
-        const data = await fetchAllPages(
-          client,
-          "/api/channels/channels/",
-          DispatcharrChannelSchema,
-        );
-        return { ok: true, data };
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        const code = error instanceof PaginationError ? error.code : "network_error";
-        return { ok: false, error: code, message };
-      }
+      return fetchAllPages(client, "/api/channels/channels/", DispatcharrChannelSchema);
     },
 
     async getChannelStreams(channelId: number): Promise<DispatcharrResult<unknown[]>> {

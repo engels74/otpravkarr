@@ -51,10 +51,18 @@ export async function fetchAllPages<T>(
   client: DispatcharrClient,
   url: string,
   itemSchema: z.ZodType<T>,
-): Promise<T[]> {
+): Promise<DispatcharrResult<T[]>> {
   const all: T[] = [];
-  for await (const page of paginate(client, url, itemSchema)) {
-    all.push(...page);
+  try {
+    for await (const page of paginate(client, url, itemSchema)) {
+      all.push(...page);
+    }
+  } catch (error) {
+    if (error instanceof PaginationError) {
+      return { ok: false, error: error.code, message: error.message };
+    }
+    const message = error instanceof Error ? error.message : String(error);
+    return { ok: false, error: "network_error", message };
   }
-  return all;
+  return { ok: true, data: all };
 }

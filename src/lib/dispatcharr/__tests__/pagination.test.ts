@@ -75,23 +75,26 @@ describe("fetchAllPages", () => {
       );
 
     const client = createClient();
-    const all = await fetchAllPages(client, "/api/resource/", itemSchema);
+    const result = await fetchAllPages(client, "/api/resource/", itemSchema);
 
-    expect(all).toEqual([
-      { id: 1, name: "one" },
-      { id: 2, name: "two" },
-      { id: 3, name: "three" },
-      { id: 4, name: "four" },
-    ]);
+    expect(result).toEqual({
+      ok: true,
+      data: [
+        { id: 1, name: "one" },
+        { id: 2, name: "two" },
+        { id: 3, name: "three" },
+        { id: 4, name: "four" },
+      ],
+    });
   });
 
   it("returns empty array for empty response", async () => {
     mockOfetch.mockResolvedValueOnce(makePaginatedResponse([], null, null, 0));
 
     const client = createClient();
-    const all = await fetchAllPages(client, "/api/resource/", itemSchema);
+    const result = await fetchAllPages(client, "/api/resource/", itemSchema);
 
-    expect(all).toEqual([]);
+    expect(result).toEqual({ ok: true, data: [] });
   });
 
   it("follows multiple pages via next URLs", async () => {
@@ -122,13 +125,16 @@ describe("fetchAllPages", () => {
       );
 
     const client = createClient();
-    const all = await fetchAllPages(client, "/api/resource/", itemSchema);
+    const result = await fetchAllPages(client, "/api/resource/", itemSchema);
 
-    expect(all).toEqual([
-      { id: 1, name: "one" },
-      { id: 2, name: "two" },
-      { id: 3, name: "three" },
-    ]);
+    expect(result).toEqual({
+      ok: true,
+      data: [
+        { id: 1, name: "one" },
+        { id: 2, name: "two" },
+        { id: 3, name: "three" },
+      ],
+    });
     expect(mockOfetch).toHaveBeenCalledTimes(3);
   });
 
@@ -153,17 +159,19 @@ describe("fetchAllPages", () => {
     );
   });
 
-  it("throws on fetch error", async () => {
+  it("returns error result on fetch error", async () => {
     mockOfetch.mockRejectedValueOnce(new Error("ECONNREFUSED"));
 
     const client = createClient();
+    const result = await fetchAllPages(client, "/api/resource/", itemSchema);
 
-    await expect(fetchAllPages(client, "/api/resource/", itemSchema)).rejects.toThrow(
-      "Pagination failed",
-    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBe("network_error");
+    }
   });
 
-  it("throws on schema validation failure", async () => {
+  it("returns error result on schema validation failure", async () => {
     mockOfetch.mockResolvedValueOnce({
       count: 1,
       next: null,
@@ -172,9 +180,11 @@ describe("fetchAllPages", () => {
     });
 
     const client = createClient();
+    const result = await fetchAllPages(client, "/api/resource/", itemSchema);
 
-    await expect(fetchAllPages(client, "/api/resource/", itemSchema)).rejects.toThrow(
-      "Pagination failed",
-    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBe("unexpected_shape");
+    }
   });
 });

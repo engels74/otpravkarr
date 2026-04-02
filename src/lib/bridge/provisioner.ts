@@ -170,7 +170,7 @@ export async function provisionUser(
         dispatcharr_username: dispatcharrUser.username ?? sanitizedUsername,
         dispatcharr_xc_password_enc: encryptedPassword,
         dispatcharr_group_ids: JSON.stringify(request.groupIds),
-        dispatcharr_profile_id: request.profileId ?? null,
+        ...(request.profileId !== undefined && { dispatcharr_profile_id: request.profileId }),
         provisioning_mode: request.mode,
         is_active: 1,
       });

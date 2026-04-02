@@ -244,20 +244,26 @@ export async function reconcileSync(
         }
       } else if (mapping.is_active === 1) {
         // No Dispatcharr user — deactivate locally and clear stale credentials
-        updateUserMapping(mapping.id, {
-          is_active: 0,
-          dispatcharr_username: null,
-          dispatcharr_xc_password_enc: null,
-        });
-        report.disabled++;
-        appendAuditLog({
-          action: AuditAction.USER_DISABLED,
-          detail: {
-            mapping_id: mapping.id,
-            dispatcharr_username: mapping.dispatcharr_username,
-            reason: "plex_friend_removed_no_dispatcharr_user",
-          },
-        });
+        try {
+          updateUserMapping(mapping.id, {
+            is_active: 0,
+            dispatcharr_username: null,
+            dispatcharr_xc_password_enc: null,
+          });
+          report.disabled++;
+          appendAuditLog({
+            action: AuditAction.USER_DISABLED,
+            detail: {
+              mapping_id: mapping.id,
+              dispatcharr_username: mapping.dispatcharr_username,
+              reason: "plex_friend_removed_no_dispatcharr_user",
+            },
+          });
+        } catch (err) {
+          report.errors.push(
+            `Failed to deactivate local mapping for ${mapping.plex_username}: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
       }
     } else {
       // Still on Plex — refresh identity if changed
@@ -273,8 +279,14 @@ export async function reconcileSync(
           newEmail !== mapping.plex_email ||
           newThumb !== mapping.plex_thumb
         ) {
-          updatePlexIdentity(mapping.id, newUsername, newEmail, newThumb);
-          report.refreshed++;
+          try {
+            updatePlexIdentity(mapping.id, newUsername, newEmail, newThumb);
+            report.refreshed++;
+          } catch (err) {
+            report.errors.push(
+              `Failed to refresh Plex identity for ${mapping.plex_username}: ${err instanceof Error ? err.message : String(err)}`,
+            );
+          }
         }
       }
 
@@ -290,13 +302,19 @@ export async function reconcileSync(
         if (!userResult.ok) {
           if (userResult.error === "not_found") {
             // Orphaned — Dispatcharr user was deleted externally; clear stale Dispatcharr fields
-            updateUserMapping(mapping.id, {
-              is_active: 0,
-              dispatcharr_user_id: null,
-              dispatcharr_username: null,
-              dispatcharr_xc_password_enc: null,
-            });
-            report.orphaned++;
+            try {
+              updateUserMapping(mapping.id, {
+                is_active: 0,
+                dispatcharr_user_id: null,
+                dispatcharr_username: null,
+                dispatcharr_xc_password_enc: null,
+              });
+              report.orphaned++;
+            } catch (err) {
+              report.errors.push(
+                `Failed to clean up orphaned mapping for ${mapping.plex_username}: ${err instanceof Error ? err.message : String(err)}`,
+              );
+            }
           } else {
             report.errors.push(
               `Failed to verify Dispatcharr user ${mapping.dispatcharr_username}: ${userResult.message}`,
@@ -329,7 +347,13 @@ export async function reconcileSync(
       }
 
       if (!verificationFailed) {
-        updateLastSynced(mapping.id);
+        try {
+          updateLastSynced(mapping.id);
+        } catch (err) {
+          report.errors.push(
+            `Failed to update last-synced timestamp for ${mapping.plex_username}: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
       }
     }
   }
@@ -342,7 +366,13 @@ export async function reconcileSync(
     }
   }
 
-  appendAuditLog({ action: AuditAction.SYNC_COMPLETED, detail: { ...report } });
+  try {
+    appendAuditLog({ action: AuditAction.SYNC_COMPLETED, detail: { ...report } });
+  } catch (err) {
+    report.errors.push(
+      `Failed to write sync-completed audit log: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
 
   return report;
 }

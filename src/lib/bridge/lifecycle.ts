@@ -214,7 +214,13 @@ export async function reconcileSync(
     report.errors.push(
       `Failed to fetch Plex friends: ${error instanceof Error ? error.message : String(error)}`,
     );
-    appendAuditLog({ action: AuditAction.SYNC_COMPLETED, detail: { ...report } });
+    try {
+      appendAuditLog({ action: AuditAction.SYNC_COMPLETED, detail: { ...report } });
+    } catch (auditErr) {
+      report.errors.push(
+        `Failed to write sync-completed audit log: ${auditErr instanceof Error ? auditErr.message : String(auditErr)}`,
+      );
+    }
     return report;
   }
 
@@ -314,6 +320,7 @@ export async function reconcileSync(
               report.errors.push(
                 `Failed to clean up orphaned mapping for ${mapping.plex_username}: ${err instanceof Error ? err.message : String(err)}`,
               );
+              verificationFailed = true;
             }
           } else {
             report.errors.push(
@@ -328,7 +335,8 @@ export async function reconcileSync(
             const localGroups = JSON.parse(mapping.dispatcharr_group_ids) as number[];
             const remoteGroups = dispatcharrUser.groups;
             const groupsDrift =
-              JSON.stringify([...localGroups].sort()) !== JSON.stringify([...remoteGroups].sort());
+              JSON.stringify([...localGroups].sort((a, b) => a - b)) !==
+              JSON.stringify([...remoteGroups].sort((a, b) => a - b));
             const activeDrift = (mapping.is_active === 1) !== dispatcharrUser.is_active;
 
             if (groupsDrift || activeDrift) {

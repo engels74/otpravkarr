@@ -22,8 +22,9 @@ const PROBE_TIMEOUT_MS = 5_000;
 
 /** Ensures the host string has an `http(s)://` scheme prefix. Defaults to `http://` for bare hosts. */
 function ensureScheme(host: string): string {
-  if (/^https?:\/\//i.test(host)) return host;
-  return `http://${host}`;
+  const trimmed = host.trim();
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  return `http://${trimmed}`;
 }
 
 function buildUrl(host: string, path: string, params: Record<string, string>): string {
@@ -45,11 +46,14 @@ function redactUrl(url: string, username: string, password: string): string {
     return parsed.toString();
   } catch {
     // Fallback for malformed URLs: use substring replacement
-    return url
-      .replaceAll(encodeURIComponent(username), "***")
-      .replaceAll(encodeURIComponent(password), "***")
-      .replaceAll(username, "***")
-      .replaceAll(password, "***");
+    let result = url;
+    if (username) {
+      result = result.replaceAll(encodeURIComponent(username), "***").replaceAll(username, "***");
+    }
+    if (password) {
+      result = result.replaceAll(encodeURIComponent(password), "***").replaceAll(password, "***");
+    }
+    return result;
   }
 }
 

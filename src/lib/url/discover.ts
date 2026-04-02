@@ -67,8 +67,8 @@ function looksLikePlayerApiJson(data: unknown): boolean {
   const userInfo = obj.user_info;
   const serverInfo = obj.server_info;
   return (
-    (typeof userInfo === "object" && userInfo !== null) ||
-    (typeof serverInfo === "object" && serverInfo !== null)
+    (typeof userInfo === "object" && userInfo !== null && !Array.isArray(userInfo)) ||
+    (typeof serverInfo === "object" && serverInfo !== null && !Array.isArray(serverInfo))
   );
 }
 

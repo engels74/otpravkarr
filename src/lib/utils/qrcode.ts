@@ -17,7 +17,7 @@ export async function generateQRCodeDataUri(
   text: string,
   options?: QRCodeOptions,
 ): Promise<string> {
-  if (!text) {
+  if (!text || !text.trim()) {
     throw new QRCodeError("Input text must not be empty");
   }
 

@@ -38,10 +38,11 @@ export function normalizeHost(host: string): string {
  */
 export function buildXcUrl(params: XcUrlParams): string {
   const { host, username, password, protocol = "http", template = DEFAULT_XC_TEMPLATE } = params;
+  const effectiveProtocol = /^https:\/\//i.test(host.trim()) ? "https" : protocol;
   const normalizedHost = normalizeHost(host);
 
   return template
-    .replaceAll("{protocol}", protocol)
+    .replaceAll("{protocol}", effectiveProtocol)
     .replaceAll("{host}", normalizedHost)
     .replaceAll("{username}", username)
     .replaceAll("{password}", password);
@@ -58,8 +59,9 @@ export function buildPlayerApiUrl(params: {
   protocol?: "http" | "https";
 }): string {
   const { host, username, password, protocol = "http" } = params;
+  const effectiveProtocol = /^https:\/\//i.test(host.trim()) ? "https" : protocol;
   const normalizedHost = normalizeHost(host);
-  return `${protocol}://${normalizedHost}/player_api.php?username=${username}&password=${password}`;
+  return `${effectiveProtocol}://${normalizedHost}/player_api.php?username=${username}&password=${password}`;
 }
 
 /**
@@ -77,6 +79,7 @@ export function buildLiveStreamUrl(
   channelId: number,
 ): string {
   const { host, username, password, protocol = "http" } = params;
+  const effectiveProtocol = /^https:\/\//i.test(host.trim()) ? "https" : protocol;
   const normalizedHost = normalizeHost(host);
-  return `${protocol}://${normalizedHost}/live/${username}/${password}/${channelId}.ts`;
+  return `${effectiveProtocol}://${normalizedHost}/live/${username}/${password}/${channelId}.ts`;
 }

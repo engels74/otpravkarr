@@ -60,7 +60,7 @@ export function buildPlatformUrl(platform: Platform, params: XcUrlParams): Platf
       if ((params.template ?? DEFAULT_XC_TEMPLATE).includes("output=")) {
         return { type: "url", url };
       }
-      const separator = url.includes("?") ? "&" : "?";
+      const separator = (params.template ?? DEFAULT_XC_TEMPLATE).includes("?") ? "&" : "?";
       return { type: "url", url: `${url}${separator}output=ts` };
     }
 

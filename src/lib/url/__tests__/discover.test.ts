@@ -232,6 +232,23 @@ describe("probeXcSurface", () => {
       expect(result.found).toBe(false);
     });
 
+    it("redacts URL-encoded credentials from probedPaths", async () => {
+      const specialUser = "user&name";
+      const specialPass = "p@ss=word";
+      mockOfetch.mockRejectedValue(new Error("ECONNREFUSED"));
+
+      const result = await probeXcSurface(HOST, specialUser, specialPass);
+
+      expect(result.found).toBe(false);
+      for (const path of result.probedPaths) {
+        expect(path).not.toContain(specialUser);
+        expect(path).not.toContain(specialPass);
+        expect(path).not.toContain(encodeURIComponent(specialUser));
+        expect(path).not.toContain(encodeURIComponent(specialPass));
+        expect(path).toContain("***");
+      }
+    });
+
     it("player_api returns null — not matched", async () => {
       mockOfetch.mockRejectedValueOnce(new Error("fail"));
       mockOfetch.mockResolvedValueOnce(null);

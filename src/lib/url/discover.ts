@@ -22,7 +22,9 @@ const PROBE_TIMEOUT_MS = 5_000;
 
 function buildUrl(host: string, path: string, params: Record<string, string>): string {
   const base = host.replace(/\/+$/, "");
-  const query = new URLSearchParams(params).toString();
+  const query = Object.entries(params)
+    .map(([k, v]) => `${k}=${v}`)
+    .join("&");
   return `${base}/${path}?${query}`;
 }
 
@@ -62,16 +64,6 @@ async function probeGetPhp(
     });
 
     if (looksLikeM3U(response)) {
-      const base = host.replace(/\/+$/, "");
-      return {
-        ok: true,
-        url,
-        template: `${base}/get.php?username={username}&password={password}&type=m3u_plus`,
-      };
-    }
-
-    // Non-error 200 with content is still a positive signal
-    if (typeof response === "string" && response.length > 0) {
       const base = host.replace(/\/+$/, "");
       return {
         ok: true,

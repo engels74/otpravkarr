@@ -2,7 +2,12 @@
 // Platform-specific URL variants — pure functions, no side effects
 // ---------------------------------------------------------------------------
 
-import { buildXcUrl, type XcUrlParams } from "./xc";
+import { buildXcUrl, DEFAULT_XC_TEMPLATE, type XcUrlParams } from "./xc";
+
+/** Strip scheme prefix and trailing slashes from a host string. */
+function normalizeHost(host: string): string {
+  return host.replace(/^https?:\/\//, "").replace(/\/+$/, "");
+}
 
 /** Supported IPTV player platforms. */
 export type Platform = "generic" | "vlc" | "tivimate" | "smarters";
@@ -56,8 +61,8 @@ export function buildPlatformUrl(platform: Platform, params: XcUrlParams): Platf
 
     case "tivimate": {
       const url = buildXcUrl(params);
-      // Only append output=ts if the URL doesn't already contain it
-      if (url.includes("output=")) {
+      // Only append output=ts if the template doesn't already contain it
+      if ((params.template ?? DEFAULT_XC_TEMPLATE).includes("output=")) {
         return { type: "url", url };
       }
       const separator = url.includes("?") ? "&" : "?";
@@ -69,7 +74,7 @@ export function buildPlatformUrl(platform: Platform, params: XcUrlParams): Platf
       return {
         type: "fields",
         fields: {
-          host: `${protocol}://${params.host}`,
+          host: `${protocol}://${normalizeHost(params.host)}`,
           username: params.username,
           password: params.password,
         },

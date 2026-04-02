@@ -17,6 +17,11 @@ export interface M3UParams {
   protocol?: "http" | "https";
 }
 
+/** Strip characters that would break M3U line structure or attribute quoting. */
+function sanitizeM3UValue(value: string): string {
+  return value.replace(/[\r\n]/g, "").replace(/"/g, "'");
+}
+
 /**
  * Generate an M3U playlist string from a list of Dispatcharr channels.
  *
@@ -36,7 +41,8 @@ export function generateM3U(params: M3UParams): string {
       { host, username, password, ...(protocol !== undefined ? { protocol } : {}) },
       ch.id,
     );
-    output += `#EXTINF:-1 tvg-name="${ch.name}" tvg-chno="${ch.number}",${ch.name}\n`;
+    const name = sanitizeM3UValue(ch.name);
+    output += `#EXTINF:-1 tvg-name="${name}" tvg-chno="${ch.number}",${name}\n`;
     output += `${url}\n`;
   }
 

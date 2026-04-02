@@ -507,7 +507,7 @@ All sensitive data handling depends on this module. It must be built and tested 
 
 ### 5.3 — M3U playlist generation (`src/lib/url/m3u.ts`)
 
-- [x] Implement `generateM3U(params: { channels: DispatcharrChannel[]; host: string; username: string; password: string; template?: string }): string`
+- [x] Implement `generateM3U(params: { channels: DispatcharrChannel[]; host: string; username: string; password: string; protocol?: 'http' | 'https' }): string`
   - [x] Generate `#EXTM3U` header
   - [x] For each channel: `#EXTINF:-1 tvg-name="{name}" tvg-chno="{number}",{name}` followed by stream URL
   - [x] Bake credentials into each stream URL using XC live-stream path format
@@ -517,7 +517,7 @@ All sensitive data handling depends on this module. It must be built and tested 
 ### 5.4 — Platform-specific variants (`src/lib/url/platforms.ts`)
 
 - [x] Define `Platform = 'generic' | 'vlc' | 'tivimate' | 'smarters'`
-- [x] Implement `buildPlatformUrl(platform: Platform, params: XcUrlParams): string`
+- [x] Implement `buildPlatformUrl(platform: Platform, params: XcUrlParams): PlatformUrlResult`
 - [x] Each platform may adjust URL parameters or format slightly
 - [x] Write unit tests
 

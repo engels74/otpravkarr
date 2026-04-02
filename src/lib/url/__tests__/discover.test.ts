@@ -222,6 +222,16 @@ describe("probeXcSurface", () => {
       expect(result.probedPaths).toHaveLength(2);
     });
 
+    it("get.php returns HTML — treated as not found", async () => {
+      mockOfetch.mockResolvedValueOnce("<html>Access Denied</html>");
+      // subsequent probes also fail
+      mockOfetch.mockRejectedValueOnce(new Error("fail"));
+      mockOfetch.mockRejectedValueOnce(new Error("fail"));
+
+      const result = await probeXcSurface(HOST, USER, PASS);
+      expect(result.found).toBe(false);
+    });
+
     it("player_api returns null — not matched", async () => {
       mockOfetch.mockRejectedValueOnce(new Error("fail"));
       mockOfetch.mockResolvedValueOnce(null);

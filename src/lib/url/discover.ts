@@ -64,7 +64,12 @@ function looksLikeM3U(text: string): boolean {
 function looksLikePlayerApiJson(data: unknown): boolean {
   if (typeof data !== "object" || data === null) return false;
   const obj = data as Record<string, unknown>;
-  return "user_info" in obj || "server_info" in obj;
+  const userInfo = obj.user_info;
+  const serverInfo = obj.server_info;
+  return (
+    (typeof userInfo === "object" && userInfo !== null) ||
+    (typeof serverInfo === "object" && serverInfo !== null)
+  );
 }
 
 function looksLikeXcCategories(data: unknown): boolean {

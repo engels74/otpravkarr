@@ -231,6 +231,33 @@ describe("getAccount", () => {
 
     await expect(getAccount("bad-token")).rejects.toThrow(PlexAuthError);
   });
+
+  it("throws PlexConnectionError on BadRequest", async () => {
+    resetMocks();
+    mockAccountConnect.mockImplementation(async () => {
+      throw new BadRequest("Bad request");
+    });
+
+    await expect(getAccount("token")).rejects.toThrow(PlexConnectionError);
+  });
+
+  it("throws PlexConnectionError on NotFound", async () => {
+    resetMocks();
+    mockAccountConnect.mockImplementation(async () => {
+      throw new NotFound("Not found");
+    });
+
+    await expect(getAccount("token")).rejects.toThrow(PlexConnectionError);
+  });
+
+  it("throws PlexConnectionError on generic error", async () => {
+    resetMocks();
+    mockAccountConnect.mockImplementation(async () => {
+      throw new Error("ECONNREFUSED");
+    });
+
+    await expect(getAccount("token")).rejects.toThrow(PlexConnectionError);
+  });
 });
 
 describe("getServerResources", () => {
@@ -269,5 +296,41 @@ describe("getServerResources", () => {
     // Verify connect() delegates to resource.connect()
     await first?.connect();
     expect(mockResource1.connect).toHaveBeenCalledOnce();
+  });
+
+  it("throws PlexAuthError on Unauthorized", async () => {
+    resetMocks();
+    mockResources.mockImplementation(async () => {
+      throw new Unauthorized("Unauthorized");
+    });
+
+    const account = new MyPlexAccount({ token: "token" });
+    await expect(
+      getServerResources(account as unknown as InstanceType<typeof MyPlexAccount>),
+    ).rejects.toThrow(PlexAuthError);
+  });
+
+  it("throws PlexConnectionError on BadRequest", async () => {
+    resetMocks();
+    mockResources.mockImplementation(async () => {
+      throw new BadRequest("Bad request");
+    });
+
+    const account = new MyPlexAccount({ token: "token" });
+    await expect(
+      getServerResources(account as unknown as InstanceType<typeof MyPlexAccount>),
+    ).rejects.toThrow(PlexConnectionError);
+  });
+
+  it("throws PlexConnectionError on generic error", async () => {
+    resetMocks();
+    mockResources.mockImplementation(async () => {
+      throw new Error("Network failure");
+    });
+
+    const account = new MyPlexAccount({ token: "token" });
+    await expect(
+      getServerResources(account as unknown as InstanceType<typeof MyPlexAccount>),
+    ).rejects.toThrow(PlexConnectionError);
   });
 });

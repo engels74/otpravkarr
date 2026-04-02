@@ -26,6 +26,10 @@ describe("oauth", () => {
   });
 
   afterEach(() => {
+    // Clean up any pending OAuth sessions to prevent cross-test leakage.
+    // Advance past the 10-minute expiry window so cleanExpiredOAuth() removes all entries.
+    vi.advanceTimersByTime(11 * 60 * 1000);
+    cleanExpiredOAuth();
     vi.useRealTimers();
   });
 

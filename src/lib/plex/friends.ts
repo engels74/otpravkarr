@@ -28,14 +28,15 @@ export async function fetchFriends(account: MyPlexAccount): Promise<PlexFriend[]
       "Failed to fetch Plex friends:",
       error instanceof Error ? error.message : String(error),
     );
-    return [];
+    throw error;
   }
 
   const parseResult = PlexFriendsResponseSchema.safeParse(response);
 
   if (!parseResult.success) {
-    console.warn("Unexpected Plex friends response shape:", parseResult.error.message);
-    return [];
+    const msg = `Unexpected Plex friends response shape: ${parseResult.error.message}`;
+    console.warn(msg);
+    throw new Error(msg);
   }
 
   friendsCache = { friends: parseResult.data, fetchedAt: Date.now() };

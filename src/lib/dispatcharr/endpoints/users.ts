@@ -14,6 +14,7 @@ export interface CreateUserData {
 }
 
 export type UpdateUserData = Partial<{
+  password: string;
   email: string;
   is_active: boolean;
   is_staff: boolean;

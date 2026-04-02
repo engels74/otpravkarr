@@ -534,55 +534,55 @@ All sensitive data handling depends on this module. It must be built and tested 
 
 ### 6.1 — Type definitions (`src/lib/bridge/types.ts`)
 
-- [ ] Define `ProvisioningMode = 'automatic' | 'self_managed' | 'staff'`
-- [ ] Define `ProvisioningRequest` — `{ plexIdentity: PlexIdentity; mode: ProvisioningMode; groupIds: number[]; profileId?: number }`
-- [ ] Define `ProvisioningResult` — discriminated union for success/already-exists/failure
-- [ ] Define `SyncReport` — `{ newFriends: number; disabled: number; orphaned: number; refreshed: number; errors: string[] }`
+- [x] Define `ProvisioningMode = 'automatic' | 'self_managed' | 'staff'`
+- [x] Define `ProvisioningRequest` — `{ plexIdentity: PlexIdentity; mode: ProvisioningMode; groupIds: number[]; profileId?: number }`
+- [x] Define `ProvisioningResult` — discriminated union for success/already-exists/failure
+- [x] Define `SyncReport` — `{ newFriends: number; disabled: number; orphaned: number; refreshed: number; errors: string[] }`
 
 ### 6.2 — User provisioning (`src/lib/bridge/provisioner.ts`)
 
-- [ ] Implement `provisionUser(request: ProvisioningRequest): Promise<ProvisioningResult>`:
+- [x] Implement `provisionUser(request: ProvisioningRequest): Promise<ProvisioningResult>`:
   1. Check `user_mappings` for existing mapping by `plex_account_id`
   2. If mapping exists and is active → return `already_exists` with existing data
   3. If mapping exists but inactive → re-enable flow (PUT `is_active: true` on Dispatcharr, reactivate local mapping)
   4. If no mapping → create new:
-     - [ ] Sanitize Plex username for Dispatcharr uniqueness (append numeric suffix if needed)
-     - [ ] **Automatic mode:** generate XC password via `lib/crypto/passwords.generateXcPassword()`
-     - [ ] **Self-managed mode:** generate temporary password (discarded after Dispatcharr creation)
-     - [ ] **Staff mode:** same as self-managed but with `is_staff: true`
-     - [ ] POST to Dispatcharr `/api/accounts/users/` with `{ username, password, is_staff, is_active: true, groups: [...groupIds] }`
-     - [ ] On success: store mapping in `user_mappings` table
-     - [ ] For automatic mode: encrypt and store XC password in `dispatcharr_xc_password_enc`
-     - [ ] For self-managed/staff: set `dispatcharr_xc_password_enc = null`
+     - [x] Sanitize Plex username for Dispatcharr uniqueness (append numeric suffix if needed)
+     - [x] **Automatic mode:** generate XC password via `lib/crypto/passwords.generateXcPassword()`
+     - [x] **Self-managed mode:** generate temporary password (discarded after Dispatcharr creation)
+     - [x] **Staff mode:** same as self-managed but with `is_staff: true`
+     - [x] POST to Dispatcharr `/api/accounts/users/` with `{ username, password, is_staff, is_active: true, groups: [...groupIds] }`
+     - [x] On success: store mapping in `user_mappings` table
+     - [x] For automatic mode: encrypt and store XC password in `dispatcharr_xc_password_enc`
+     - [x] For self-managed/staff: set `dispatcharr_xc_password_enc = null`
   5. Append audit log entry `user.provisioned`
-- [ ] Write unit tests with mocked database and Dispatcharr client
+- [x] Write unit tests with mocked database and Dispatcharr client
 
 ### 6.3 — Credential lifecycle (`src/lib/bridge/lifecycle.ts`)
 
-- [ ] Implement `rotateCredentials(mappingId: number): Promise<void>`:
-  - [ ] Generate new XC password
-  - [ ] PUT new password to Dispatcharr `/api/accounts/users/{id}/`
-  - [ ] Re-encrypt and update `dispatcharr_xc_password_enc` in local DB
-  - [ ] Append audit log `user.credentials_rotated`
-- [ ] Implement `disableUser(mappingId: number): Promise<void>`:
-  - [ ] PUT `{ is_active: false }` to Dispatcharr
-  - [ ] Mark local mapping as inactive
-  - [ ] Append audit log `user.disabled`
-- [ ] Implement `enableUser(mappingId: number): Promise<void>`:
-  - [ ] PUT `{ is_active: true }` to Dispatcharr
-  - [ ] Mark local mapping as active
-- [ ] Implement `reconcileSync(): Promise<SyncReport>`:
+- [x] Implement `rotateCredentials(mappingId: number): Promise<void>`:
+  - [x] Generate new XC password
+  - [x] PUT new password to Dispatcharr `/api/accounts/users/{id}/`
+  - [x] Re-encrypt and update `dispatcharr_xc_password_enc` in local DB
+  - [x] Append audit log `user.credentials_rotated`
+- [x] Implement `disableUser(mappingId: number): Promise<void>`:
+  - [x] PUT `{ is_active: false }` to Dispatcharr
+  - [x] Mark local mapping as inactive
+  - [x] Append audit log `user.disabled`
+- [x] Implement `enableUser(mappingId: number): Promise<void>`:
+  - [x] PUT `{ is_active: true }` to Dispatcharr
+  - [x] Mark local mapping as active
+- [x] Implement `reconcileSync(): Promise<SyncReport>`:
   1. Fetch Plex friends via `lib/plex/friends.ts`
   2. Fetch all local `user_mappings`
   3. **Removed from Plex** — call `disableUser()` for each
   4. **New on Plex** — flag as "available" (do NOT auto-provision; provisioning is OAuth-triggered or admin-initiated)
   5. **Existing** — verify Dispatcharr account still exists via GET `/api/accounts/users/{id}/`
-     - [ ] If 404 → mark mapping as `orphaned`
-     - [ ] If exists → compare `groups` and `is_active`, reconcile drift
+     - [x] If 404 → mark mapping as `orphaned`
+     - [x] If exists → compare `groups` and `is_active`, reconcile drift
   6. **Plex identity refresh** — update `plex_username`, `plex_email`, `plex_thumb` from friend data
   7. Write sync results to audit log
   8. Return `SyncReport`
-- [ ] Write unit tests
+- [x] Write unit tests
 
 ---
 

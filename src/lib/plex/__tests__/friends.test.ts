@@ -62,17 +62,24 @@ describe("fetchFriends", () => {
     });
   });
 
-  it("logs warning and returns empty array for malformed response", async () => {
+  it("throws on malformed response", async () => {
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     const mockAccount = createMockAccount(vi.fn().mockResolvedValue([{ bad: "data" }]));
 
-    const result = await fetchFriends(mockAccount);
-
-    expect(result).toEqual([]);
-    expect(warnSpy).toHaveBeenCalledWith(
+    await expect(fetchFriends(mockAccount)).rejects.toThrow(
       "Unexpected Plex friends response shape:",
-      expect.any(String),
     );
+    expect(warnSpy).toHaveBeenCalled();
+
+    warnSpy.mockRestore();
+  });
+
+  it("throws on network error", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const mockAccount = createMockAccount(vi.fn().mockRejectedValue(new Error("Network failure")));
+
+    await expect(fetchFriends(mockAccount)).rejects.toThrow("Network failure");
+    expect(warnSpy).toHaveBeenCalledWith("Failed to fetch Plex friends:", "Network failure");
 
     warnSpy.mockRestore();
   });

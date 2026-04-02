@@ -156,6 +156,14 @@ describe("sanitizeUsername", () => {
   it("handles plexuser collision", () => {
     expect(sanitizeUsername("", ["plexuser"])).toBe("plexuser_2");
   });
+
+  it("detects collision case-insensitively", () => {
+    expect(sanitizeUsername("John", ["JOHN"])).toBe("john_2");
+  });
+
+  it("detects suffixed collision case-insensitively", () => {
+    expect(sanitizeUsername("John", ["John", "JOHN_2"])).toBe("john_3");
+  });
 });
 
 // ---------------------------------------------------------------------------

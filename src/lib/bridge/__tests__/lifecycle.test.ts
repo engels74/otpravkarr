@@ -216,7 +216,7 @@ describe("disableUser", () => {
     });
   });
 
-  it("throws when Dispatcharr update fails", async () => {
+  it("throws when Dispatcharr update fails with non-not_found error", async () => {
     const mapping = makeMapping();
     mockUpdateUser.mockResolvedValueOnce({
       ok: false,
@@ -229,6 +229,42 @@ describe("disableUser", () => {
     );
 
     expect(mockMarkMappingInactive).not.toHaveBeenCalled();
+    expect(mockAppendAuditLog).not.toHaveBeenCalled();
+  });
+
+  it("clears stale Dispatcharr fields on not_found instead of throwing", async () => {
+    const mapping = makeMapping();
+    mockUpdateUser.mockResolvedValueOnce({
+      ok: false,
+      error: "not_found",
+      message: "Not Found",
+    });
+
+    await disableUser(mockClient, mapping);
+
+    expect(mockUpdateUserMapping).toHaveBeenCalledWith(1, {
+      is_active: 0,
+      dispatcharr_user_id: null,
+      dispatcharr_username: null,
+      dispatcharr_xc_password_enc: null,
+    });
+    // Should NOT call markMappingInactive or appendAuditLog
+    expect(mockMarkMappingInactive).not.toHaveBeenCalled();
+    expect(mockAppendAuditLog).not.toHaveBeenCalled();
+  });
+
+  it("skips audit log when mapping is already inactive (idempotent re-disable)", async () => {
+    const mapping = makeMapping({ is_active: 0 });
+    mockUpdateUser.mockResolvedValueOnce({
+      ok: true,
+      data: makeDispatcharrUser({ is_active: false }),
+    });
+
+    await disableUser(mockClient, mapping);
+
+    expect(mockUpdateUser).toHaveBeenCalledWith(mockClient, 10, { is_active: false });
+    expect(mockMarkMappingInactive).toHaveBeenCalledWith(1);
+    // Audit should NOT fire for re-disable
     expect(mockAppendAuditLog).not.toHaveBeenCalled();
   });
 });
@@ -346,9 +382,39 @@ describe("reconcileSync", () => {
     const report = await reconcileSync(mockClient, "admin-token");
 
     // Should still call Dispatcharr to handle potential drift
-    expect(report.disabled).toBe(1);
     expect(mockUpdateUser).toHaveBeenCalledWith(mockClient, 10, { is_active: false });
     expect(mockMarkMappingInactive).toHaveBeenCalledWith(1);
+    // But report.disabled should NOT increment (already inactive — idempotent)
+    expect(report.disabled).toBe(0);
+  });
+
+  it("handles not_found during disable of removed friend by clearing stale fields", async () => {
+    const mapping = makeMapping({
+      plex_account_id: 100,
+      dispatcharr_user_id: 10,
+      is_active: 1,
+    });
+    mockFetchFriends.mockResolvedValueOnce([]);
+    mockGetAllUserMappings.mockReturnValueOnce([mapping]);
+    mockUpdateUser.mockResolvedValueOnce({
+      ok: false,
+      error: "not_found",
+      message: "Not Found",
+    });
+
+    const report = await reconcileSync(mockClient, "admin-token");
+
+    // disableUser should handle not_found by clearing stale Dispatcharr fields
+    expect(mockUpdateUserMapping).toHaveBeenCalledWith(1, {
+      is_active: 0,
+      dispatcharr_user_id: null,
+      dispatcharr_username: null,
+      dispatcharr_xc_password_enc: null,
+    });
+    // Should count as disabled (was active)
+    expect(report.disabled).toBe(1);
+    // No errors — not_found is handled gracefully
+    expect(report.errors).toHaveLength(0);
   });
 
   it("skips already-inactive mappings without dispatcharr_user_id for removed friends", async () => {

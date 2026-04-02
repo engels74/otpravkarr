@@ -26,12 +26,14 @@ export function sanitizeUsername(plexUsername: string, existingUsernames: string
     base = "plexuser";
   }
 
-  if (!existingUsernames.includes(base)) {
+  const loweredUsernames = existingUsernames.map((u) => u.toLowerCase());
+
+  if (!loweredUsernames.includes(base)) {
     return base;
   }
 
   let suffix = 2;
-  while (existingUsernames.includes(`${base}_${suffix}`)) {
+  while (loweredUsernames.includes(`${base}_${suffix}`)) {
     suffix++;
   }
   return `${base}_${suffix}`;

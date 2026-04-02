@@ -79,18 +79,30 @@ export async function disableUser(client: DispatcharrClient, mapping: UserMappin
     isTransientResultError,
   );
   if (!result.ok) {
+    if (result.error === "not_found") {
+      // Dispatcharr user was deleted externally — clear stale fields and mark inactive
+      updateUserMapping(mapping.id, {
+        is_active: 0,
+        dispatcharr_user_id: null,
+        dispatcharr_username: null,
+        dispatcharr_xc_password_enc: null,
+      });
+      return;
+    }
     throw new Error(`Failed to disable user on Dispatcharr: ${result.message}`);
   }
 
   markMappingInactive(mapping.id);
 
-  appendAuditLog({
-    action: AuditAction.USER_DISABLED,
-    detail: {
-      mapping_id: mapping.id,
-      dispatcharr_username: mapping.dispatcharr_username,
-    },
-  });
+  if (mapping.is_active === 1) {
+    appendAuditLog({
+      action: AuditAction.USER_DISABLED,
+      detail: {
+        mapping_id: mapping.id,
+        dispatcharr_username: mapping.dispatcharr_username,
+      },
+    });
+  }
 }
 
 /**
@@ -155,10 +167,14 @@ export async function reconcileSync(
       // User removed from Plex friends — ensure disabled
       if (mapping.dispatcharr_user_id != null) {
         // Always disable on Dispatcharr regardless of local is_active,
-        // in case the Dispatcharr user drifted back to active externally
+        // in case the Dispatcharr user drifted back to active externally.
+        // Only increment report.disabled on actual state transitions to stay idempotent.
+        const wasActive = mapping.is_active === 1;
         try {
           await disableUser(client, mapping);
-          report.disabled++;
+          if (wasActive) {
+            report.disabled++;
+          }
         } catch (err) {
           report.errors.push(
             `Failed to disable user ${mapping.plex_username}: ${err instanceof Error ? err.message : String(err)}`,

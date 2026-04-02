@@ -23,9 +23,13 @@ const PROBE_TIMEOUT_MS = 5_000;
 function buildUrl(host: string, path: string, params: Record<string, string>): string {
   const base = host.replace(/\/+$/, "");
   const query = Object.entries(params)
-    .map(([k, v]) => `${k}=${v}`)
+    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
     .join("&");
   return `${base}/${path}?${query}`;
+}
+
+function redactUrl(url: string, username: string, password: string): string {
+  return url.replaceAll(username, "***").replaceAll(password, "***");
 }
 
 function looksLikeM3U(text: string): boolean {
@@ -155,7 +159,7 @@ export async function probeXcSurface(
 
   for (const probe of probes) {
     const result = await probe();
-    probedPaths.push(result.url);
+    probedPaths.push(redactUrl(result.url, username, password));
 
     if (result.ok && result.template !== undefined) {
       return {

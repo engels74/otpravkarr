@@ -2,12 +2,7 @@
 // Platform-specific URL variants — pure functions, no side effects
 // ---------------------------------------------------------------------------
 
-import { buildXcUrl, DEFAULT_XC_TEMPLATE, type XcUrlParams } from "./xc";
-
-/** Strip scheme prefix and trailing slashes from a host string. */
-function normalizeHost(host: string): string {
-  return host.replace(/^https?:\/\//, "").replace(/\/+$/, "");
-}
+import { buildXcUrl, DEFAULT_XC_TEMPLATE, normalizeHost, type XcUrlParams } from "./xc";
 
 /** Supported IPTV player platforms. */
 export type Platform = "generic" | "vlc" | "tivimate" | "smarters";

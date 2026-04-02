@@ -22,6 +22,11 @@ export interface XcUrlParams {
   template?: string;
 }
 
+/** Strip scheme prefix and trailing slashes from a host string. */
+export function normalizeHost(host: string): string {
+  return host.replace(/^https?:\/\//, "").replace(/\/+$/, "");
+}
+
 /**
  * Build an XC-format playlist URL by substituting template placeholders.
  *
@@ -30,10 +35,11 @@ export interface XcUrlParams {
  */
 export function buildXcUrl(params: XcUrlParams): string {
   const { host, username, password, protocol = "http", template = DEFAULT_XC_TEMPLATE } = params;
+  const normalizedHost = normalizeHost(host);
 
   return template
     .replaceAll("{protocol}", protocol)
-    .replaceAll("{host}", host)
+    .replaceAll("{host}", normalizedHost)
     .replaceAll("{username}", username)
     .replaceAll("{password}", password);
 }
@@ -49,7 +55,8 @@ export function buildPlayerApiUrl(params: {
   protocol?: "http" | "https";
 }): string {
   const { host, username, password, protocol = "http" } = params;
-  return `${protocol}://${host}/player_api.php?username=${username}&password=${password}`;
+  const normalizedHost = normalizeHost(host);
+  return `${protocol}://${normalizedHost}/player_api.php?username=${username}&password=${password}`;
 }
 
 /**
@@ -67,5 +74,6 @@ export function buildLiveStreamUrl(
   channelId: number,
 ): string {
   const { host, username, password, protocol = "http" } = params;
-  return `${protocol}://${host}/live/${username}/${password}/${channelId}.ts`;
+  const normalizedHost = normalizeHost(host);
+  return `${protocol}://${normalizedHost}/live/${username}/${password}/${channelId}.ts`;
 }

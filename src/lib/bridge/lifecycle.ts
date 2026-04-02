@@ -55,12 +55,18 @@ export async function rotateCredentials(
   if (!result.ok) {
     if (result.error === "not_found") {
       // Dispatcharr user was deleted externally — clear stale fields before throwing
-      updateUserMapping(mapping.id, {
-        is_active: 0,
-        dispatcharr_user_id: null,
-        dispatcharr_username: null,
-        dispatcharr_xc_password_enc: null,
-      });
+      try {
+        updateUserMapping(mapping.id, {
+          is_active: 0,
+          dispatcharr_user_id: null,
+          dispatcharr_username: null,
+          dispatcharr_xc_password_enc: null,
+        });
+      } catch (dbErr) {
+        throw new Error(
+          `Cannot rotate credentials: Dispatcharr user no longer exists and cleanup failed: ${dbErr instanceof Error ? dbErr.message : String(dbErr)}`,
+        );
+      }
       throw new Error(
         "Cannot rotate credentials: Dispatcharr user no longer exists (cleaned up stale mapping)",
       );
@@ -101,12 +107,18 @@ export async function disableUser(client: DispatcharrClient, mapping: UserMappin
   if (!result.ok) {
     if (result.error === "not_found") {
       // Dispatcharr user was deleted externally — clear stale fields and mark inactive
-      updateUserMapping(mapping.id, {
-        is_active: 0,
-        dispatcharr_user_id: null,
-        dispatcharr_username: null,
-        dispatcharr_xc_password_enc: null,
-      });
+      try {
+        updateUserMapping(mapping.id, {
+          is_active: 0,
+          dispatcharr_user_id: null,
+          dispatcharr_username: null,
+          dispatcharr_xc_password_enc: null,
+        });
+      } catch (dbErr) {
+        throw new Error(
+          `Dispatcharr user not found and cleanup failed: ${dbErr instanceof Error ? dbErr.message : String(dbErr)}`,
+        );
+      }
       return;
     }
     throw new Error(`Failed to disable user on Dispatcharr: ${result.message}`);
@@ -147,12 +159,18 @@ export async function enableUser(client: DispatcharrClient, mapping: UserMapping
   if (!result.ok) {
     if (result.error === "not_found") {
       // Dispatcharr user was deleted externally — clear stale fields
-      updateUserMapping(mapping.id, {
-        is_active: 0,
-        dispatcharr_user_id: null,
-        dispatcharr_username: null,
-        dispatcharr_xc_password_enc: null,
-      });
+      try {
+        updateUserMapping(mapping.id, {
+          is_active: 0,
+          dispatcharr_user_id: null,
+          dispatcharr_username: null,
+          dispatcharr_xc_password_enc: null,
+        });
+      } catch (dbErr) {
+        throw new Error(
+          `Dispatcharr user not found and cleanup failed: ${dbErr instanceof Error ? dbErr.message : String(dbErr)}`,
+        );
+      }
       return;
     }
     throw new Error(`Failed to enable user on Dispatcharr: ${result.message}`);
@@ -261,6 +279,7 @@ export async function reconcileSync(
       }
 
       // Verify on Dispatcharr (only if provisioned)
+      let verificationFailed = false;
       if (mapping.dispatcharr_user_id != null) {
         const dispatcharrUserId = mapping.dispatcharr_user_id;
         const userResult = await retryResult(
@@ -282,6 +301,7 @@ export async function reconcileSync(
             report.errors.push(
               `Failed to verify Dispatcharr user ${mapping.dispatcharr_username}: ${userResult.message}`,
             );
+            verificationFailed = true;
           }
         } else {
           // Reconcile drift — Dispatcharr is source of truth for groups and active status
@@ -308,7 +328,9 @@ export async function reconcileSync(
         }
       }
 
-      updateLastSynced(mapping.id);
+      if (!verificationFailed) {
+        updateLastSynced(mapping.id);
+      }
     }
   }
 

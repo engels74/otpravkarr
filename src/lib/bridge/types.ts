@@ -11,7 +11,7 @@ export interface ProvisioningRequest {
 }
 
 export type ProvisioningResult =
-  | { status: "provisioned"; mapping: UserMapping }
+  | { status: "provisioned"; mapping: UserMapping; initialPassword?: string }
   | { status: "already_exists"; mapping: UserMapping }
   | { status: "reactivated"; mapping: UserMapping }
   | { status: "failed"; error: string };

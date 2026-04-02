@@ -376,6 +376,8 @@ describe("provisionUser — create (automatic mode)", () => {
     expect(result.status).toBe("provisioned");
     if (result.status === "provisioned") {
       expect(result.mapping.dispatcharr_user_id).toBe(99);
+      // Automatic mode should NOT expose initialPassword (it's encrypted and stored)
+      expect(result.initialPassword).toBeUndefined();
     }
 
     // Verify createUser was called with correct data
@@ -434,6 +436,10 @@ describe("provisionUser — create (self_managed mode)", () => {
     });
 
     expect(result.status).toBe("provisioned");
+    if (result.status === "provisioned") {
+      // Self-managed mode surfaces the one-time password for admin onboarding
+      expect(result.initialPassword).toBe("generated-password-24");
+    }
 
     // Password should NOT be encrypted for self_managed
     expect(encrypt).not.toHaveBeenCalled();
@@ -478,6 +484,10 @@ describe("provisionUser — create (staff mode)", () => {
     });
 
     expect(result.status).toBe("provisioned");
+    if (result.status === "provisioned") {
+      // Staff mode surfaces the one-time password for admin onboarding
+      expect(result.initialPassword).toBe("generated-password-24");
+    }
 
     // is_staff should be true
     expect(createUser).toHaveBeenCalledWith(

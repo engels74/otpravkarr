@@ -45,6 +45,9 @@ export async function rotateCredentials(
 
   const newPassword = generateXcPassword();
 
+  // Encrypt before pushing to Dispatcharr — if encrypt fails, remote state is unchanged
+  const encryptedPassword = await encrypt(newPassword, CREDENTIAL_PURPOSE);
+
   const result = await retryResult(
     () => updateUser(client, dispatcharrUserId, { password: newPassword }),
     isTransientResultError,
@@ -53,7 +56,6 @@ export async function rotateCredentials(
     throw new Error(`Failed to rotate credentials on Dispatcharr: ${result.message}`);
   }
 
-  const encryptedPassword = await encrypt(newPassword, CREDENTIAL_PURPOSE);
   updateUserMapping(mapping.id, { dispatcharr_xc_password_enc: encryptedPassword });
 
   appendAuditLog({

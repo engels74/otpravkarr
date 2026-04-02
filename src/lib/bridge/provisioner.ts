@@ -110,6 +110,10 @@ export async function provisionUser(
 
   const password = generateXcPassword();
 
+  // Encrypt before creating remote user — if encrypt fails, no orphaned Dispatcharr account
+  const encryptedPassword =
+    request.mode === "automatic" ? await encrypt(password, CREDENTIAL_PURPOSE) : null;
+
   const createResult = await retryResult(
     () =>
       createUser(client, {
@@ -127,9 +131,6 @@ export async function provisionUser(
   }
 
   const dispatcharrUser = createResult.data;
-
-  const encryptedPassword =
-    request.mode === "automatic" ? await encrypt(password, CREDENTIAL_PURPOSE) : null;
 
   let finalMapping: UserMapping;
 
@@ -182,6 +183,12 @@ export async function provisionUser(
       mode: request.mode,
     },
   });
+
+  // For self_managed/staff modes the password isn't persisted locally, so surface it
+  // as a one-time value the caller can communicate to the user/admin for onboarding.
+  if (request.mode !== "automatic") {
+    return { status: "provisioned", mapping: finalMapping, initialPassword: password };
+  }
 
   return { status: "provisioned", mapping: finalMapping };
 }

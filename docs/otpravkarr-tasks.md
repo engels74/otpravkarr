@@ -486,47 +486,47 @@ All sensitive data handling depends on this module. It must be built and tested 
 
 ### 5.1 — XC format URL generation (`src/lib/url/xc.ts`)
 
-- [ ] Define configurable URL template:
+- [x] Define configurable URL template:
   ```ts
   const DEFAULT_XC_TEMPLATE = '{protocol}://{host}/get.php?username={username}&password={password}&type=m3u_plus';
   ```
-- [ ] Implement `buildXcUrl(params: { host: string; username: string; password: string; protocol?: 'http' | 'https'; template?: string }): string`
-- [ ] Implement `buildPlayerApiUrl(params: { host: string; username: string; password: string }): string` — `player_api.php` variant
-- [ ] Pure functions, no side effects
-- [ ] Write unit tests with template substitution edge cases
+- [x] Implement `buildXcUrl(params: { host: string; username: string; password: string; protocol?: 'http' | 'https'; template?: string }): string`
+- [x] Implement `buildPlayerApiUrl(params: { host: string; username: string; password: string }): string` — `player_api.php` variant
+- [x] Pure functions, no side effects
+- [x] Write unit tests with template substitution edge cases
 
 ### 5.2 — XC surface discovery probe (`src/lib/url/discover.ts`)
 
-- [ ] Implement `probeXcSurface(host: string, username: string, password: string): Promise<{ found: boolean; template?: string; probedPaths: string[] }>`
-  - [ ] Try `GET {host}/get.php?username={user}&password={pass}&type=m3u_plus`
-  - [ ] Try `GET {host}/player_api.php?username={user}&password={pass}`
-  - [ ] Check for recognizable XC response patterns
-  - [ ] Return discovered template or failure info
-- [ ] Used during setup step and surfaced in admin settings
-- [ ] Write unit tests
+- [x] Implement `probeXcSurface(host: string, username: string, password: string): Promise<{ found: boolean; template?: string; probedPaths: string[] }>`
+  - [x] Try `GET {host}/get.php?username={user}&password={pass}&type=m3u_plus`
+  - [x] Try `GET {host}/player_api.php?username={user}&password={pass}`
+  - [x] Check for recognizable XC response patterns
+  - [x] Return discovered template or failure info
+- [x] Used during setup step and surfaced in admin settings
+- [x] Write unit tests
 
 ### 5.3 — M3U playlist generation (`src/lib/url/m3u.ts`)
 
-- [ ] Implement `generateM3U(params: { channels: DispatcharrChannel[]; host: string; username: string; password: string; template?: string }): string`
-  - [ ] Generate `#EXTM3U` header
-  - [ ] For each channel: `#EXTINF:-1 tvg-name="{name}" tvg-chno="{number}",{name}` followed by stream URL
-  - [ ] Bake credentials into each stream URL using XC live-stream path format
-- [ ] Return complete `.m3u` file body as string
-- [ ] Write unit tests
+- [x] Implement `generateM3U(params: { channels: DispatcharrChannel[]; host: string; username: string; password: string; template?: string }): string`
+  - [x] Generate `#EXTM3U` header
+  - [x] For each channel: `#EXTINF:-1 tvg-name="{name}" tvg-chno="{number}",{name}` followed by stream URL
+  - [x] Bake credentials into each stream URL using XC live-stream path format
+- [x] Return complete `.m3u` file body as string
+- [x] Write unit tests
 
 ### 5.4 — Platform-specific variants (`src/lib/url/platforms.ts`)
 
-- [ ] Define `Platform = 'generic' | 'vlc' | 'tivimate' | 'smarters'`
-- [ ] Implement `buildPlatformUrl(platform: Platform, params: XcUrlParams): string`
-- [ ] Each platform may adjust URL parameters or format slightly
-- [ ] Write unit tests
+- [x] Define `Platform = 'generic' | 'vlc' | 'tivimate' | 'smarters'`
+- [x] Implement `buildPlatformUrl(platform: Platform, params: XcUrlParams): string`
+- [x] Each platform may adjust URL parameters or format slightly
+- [x] Write unit tests
 
 ### 5.5 — QR code data URI generation (client-side)
 
-- [ ] Implement in a Svelte component or `$lib/utils/qrcode.ts`
-- [ ] Generate QR code from URL string as data URI
-- [ ] No server round-trip — entirely browser-side
-- [ ] Use a lightweight QR library or canvas-based approach
+- [x] Implement in a Svelte component or `$lib/utils/qrcode.ts`
+- [x] Generate QR code from URL string as data URI
+- [x] No server round-trip — entirely browser-side
+- [x] Use a lightweight QR library or canvas-based approach
 
 ---
 

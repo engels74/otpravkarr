@@ -211,6 +211,7 @@ export async function reconcileSync(
               is_active: 0,
               dispatcharr_user_id: null,
               dispatcharr_username: null,
+              dispatcharr_xc_password_enc: null,
             });
             report.orphaned++;
           } else {

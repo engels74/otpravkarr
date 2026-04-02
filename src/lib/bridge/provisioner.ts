@@ -75,6 +75,7 @@ export async function provisionUser(
         updateUserMapping(existingMapping.id, {
           dispatcharr_user_id: null,
           dispatcharr_username: null,
+          dispatcharr_xc_password_enc: null,
         });
       } else {
         return { status: "failed", error: result.message };

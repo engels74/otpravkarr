@@ -278,6 +278,7 @@ describe("provisionUser — reactivation", () => {
     expect(updateUserMapping).toHaveBeenCalledWith(inactive.id, {
       dispatcharr_user_id: null,
       dispatcharr_username: null,
+      dispatcharr_xc_password_enc: null,
     });
 
     // Should update existing mapping instead of creating a new one (avoids UNIQUE constraint)

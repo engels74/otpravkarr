@@ -37,6 +37,9 @@ export async function retryAsync<T>(
   const config: RetryConfig = { ...DEFAULT_RETRY_CONFIG, ...options };
   config.maxRetries = Math.max(0, config.maxRetries);
   config.baseDelayMs = Math.max(0, config.baseDelayMs);
+  config.maxDelayMs = Number.isFinite(config.maxDelayMs)
+    ? Math.max(0, config.maxDelayMs)
+    : DEFAULT_RETRY_CONFIG.maxDelayMs;
   config.jitter = Math.max(0, Math.min(1, config.jitter));
 
   let lastError: unknown;
@@ -64,6 +67,9 @@ export async function retryResult<T, R extends { ok: boolean }>(
   const config: RetryConfig = { ...DEFAULT_RETRY_CONFIG, ...options };
   config.maxRetries = Math.max(0, config.maxRetries);
   config.baseDelayMs = Math.max(0, config.baseDelayMs);
+  config.maxDelayMs = Number.isFinite(config.maxDelayMs)
+    ? Math.max(0, config.maxDelayMs)
+    : DEFAULT_RETRY_CONFIG.maxDelayMs;
   config.jitter = Math.max(0, Math.min(1, config.jitter));
 
   let lastResult!: R;

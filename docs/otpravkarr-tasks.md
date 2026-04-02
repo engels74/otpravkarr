@@ -398,12 +398,12 @@ All sensitive data handling depends on this module. It must be built and tested 
 
 ### 4.1 — Type definitions (`src/lib/dispatcharr/types.ts`)
 
-- [ ] Define `DispatcharrUser` — `{ id: number; username: string; email?: string; is_staff: boolean; is_active: boolean; groups: number[] }`
-- [ ] Define `DispatcharrGroup` — `{ id: number; name: string; permissions: number[] }`
-- [ ] Define `DispatcharrChannelProfile` — `{ id: number; name: string }`
-- [ ] Define `DispatcharrChannel` — `{ id: number; name: string; number: number; enabled: boolean }`
-- [ ] Define `PaginatedResponse<T>` — `{ count: number; next: string | null; previous: string | null; results: T[] }`
-- [ ] Define `DispatcharrResult<T>` — discriminated union:
+- [x] Define `DispatcharrUser` — `{ id: number; username: string; email?: string; is_staff: boolean; is_active: boolean; groups: number[] }`
+- [x] Define `DispatcharrGroup` — `{ id: number; name: string; permissions: number[] }`
+- [x] Define `DispatcharrChannelProfile` — `{ id: number; name: string }`
+- [x] Define `DispatcharrChannel` — `{ id: number; name: string; number: number; enabled: boolean }`
+- [x] Define `PaginatedResponse<T>` — `{ count: number; next: string | null; previous: string | null; results: T[] }`
+- [x] Define `DispatcharrResult<T>` — discriminated union:
   ```ts
   type DispatcharrResult<T> =
     | { ok: true; data: T }
@@ -412,73 +412,73 @@ All sensitive data handling depends on this module. It must be built and tested 
 
 ### 4.2 — Pagination helper (`src/lib/dispatcharr/pagination.ts`)
 
-- [ ] Implement `async function* paginate<T>(client: DispatcharrClient, initialUrl: string): AsyncGenerator<T[], void, undefined>`
-  - [ ] Fetch first page, yield `results`
-  - [ ] Follow `next` URL until `null`
-  - [ ] Handle DRF pagination envelope (`count`, `next`, `previous`, `results`)
-- [ ] Implement `fetchAllPages<T>(client: DispatcharrClient, url: string): Promise<T[]>` — collects all pages into array
-- [ ] Write unit tests with mock paginated responses
+- [x] Implement `async function* paginate<T>(client: DispatcharrClient, initialUrl: string): AsyncGenerator<T[], void, undefined>`
+  - [x] Fetch first page, yield `results`
+  - [x] Follow `next` URL until `null`
+  - [x] Handle DRF pagination envelope (`count`, `next`, `previous`, `results`)
+- [x] Implement `fetchAllPages<T>(client: DispatcharrClient, url: string): Promise<T[]>` — collects all pages into array
+- [x] Write unit tests with mock paginated responses
 
 ### 4.3 — Base client (`src/lib/dispatcharr/client.ts`)
 
-- [ ] Import `ofetch` from `ofetch`
-- [ ] Implement `DispatcharrClient` class:
-  - [ ] Constructor takes `baseUrl: string` and `apiKey: string`
-  - [ ] All requests include `Authorization: ApiKey <key>` header
-  - [ ] Implement `request<T>(method, path, body?): Promise<DispatcharrResult<T>>`
-    - [ ] Wrap `ofetch` call in try/catch
-    - [ ] Map HTTP 401 → `{ ok: false, error: 'auth_failure' }`
-    - [ ] Map HTTP 404 → `{ ok: false, error: 'not_found' }`
-    - [ ] Map network errors → `{ ok: false, error: 'network_error' }`
-    - [ ] Validate response shape with Zod → `{ ok: false, error: 'unexpected_shape' }` on mismatch
-    - [ ] No raw exceptions leak to callers
-- [ ] Write unit tests
+- [x] Import `ofetch` from `ofetch`
+- [x] Implement `DispatcharrClient` class:
+  - [x] Constructor takes `baseUrl: string` and `apiKey: string`
+  - [x] All requests include `Authorization: ApiKey <key>` header
+  - [x] Implement `request<T>(method, path, body?): Promise<DispatcharrResult<T>>`
+    - [x] Wrap `ofetch` call in try/catch
+    - [x] Map HTTP 401 → `{ ok: false, error: 'auth_failure' }`
+    - [x] Map HTTP 404 → `{ ok: false, error: 'not_found' }`
+    - [x] Map network errors → `{ ok: false, error: 'network_error' }`
+    - [x] Validate response shape with Zod → `{ ok: false, error: 'unexpected_shape' }` on mismatch
+    - [x] No raw exceptions leak to callers
+- [x] Write unit tests
 
 ### 4.4 — User endpoints (`src/lib/dispatcharr/endpoints/users.ts`)
 
-- [ ] `listUsers(page?: number, pageSize?: number): Promise<DispatcharrResult<PaginatedResponse<DispatcharrUser>>>`
-  - [ ] `GET /api/accounts/users/?page={page}&page_size={pageSize}`
-- [ ] `createUser(data: { username: string; password: string; email?: string; is_staff?: boolean; is_active?: boolean; groups?: number[] }): Promise<DispatcharrResult<DispatcharrUser>>`
-  - [ ] `POST /api/accounts/users/`
-- [ ] `getUser(id: number): Promise<DispatcharrResult<DispatcharrUser>>`
-  - [ ] `GET /api/accounts/users/{id}/`
-- [ ] `updateUser(id: number, data: Partial<{ password: string; email: string; is_active: boolean; is_staff: boolean; groups: number[] }>): Promise<DispatcharrResult<DispatcharrUser>>`
-  - [ ] `PUT /api/accounts/users/{id}/`
-- [ ] `deleteUser(id: number): Promise<DispatcharrResult<void>>`
-  - [ ] `DELETE /api/accounts/users/{id}/` (used rarely; prefer deactivation)
-- [ ] Validate all responses against Zod schemas for `DispatcharrUser`
-- [ ] Write unit tests
+- [x] `listUsers(page?: number, pageSize?: number): Promise<DispatcharrResult<PaginatedResponse<DispatcharrUser>>>`
+  - [x] `GET /api/accounts/users/?page={page}&page_size={pageSize}`
+- [x] `createUser(data: { username: string; password: string; email?: string; is_staff?: boolean; is_active?: boolean; groups?: number[] }): Promise<DispatcharrResult<DispatcharrUser>>`
+  - [x] `POST /api/accounts/users/`
+- [x] `getUser(id: number): Promise<DispatcharrResult<DispatcharrUser>>`
+  - [x] `GET /api/accounts/users/{id}/`
+- [x] `updateUser(id: number, data: Partial<{ password: string; email: string; is_active: boolean; is_staff: boolean; groups: number[] }>): Promise<DispatcharrResult<DispatcharrUser>>`
+  - [x] `PUT /api/accounts/users/{id}/`
+- [x] `deleteUser(id: number): Promise<DispatcharrResult<void>>`
+  - [x] `DELETE /api/accounts/users/{id}/` (used rarely; prefer deactivation)
+- [x] Validate all responses against Zod schemas for `DispatcharrUser`
+- [x] Write unit tests
 
 ### 4.5 — Group endpoints (`src/lib/dispatcharr/endpoints/groups.ts`)
 
-- [ ] `listGroups(): Promise<DispatcharrResult<DispatcharrGroup[]>>`
-  - [ ] `GET /api/accounts/groups/` — may be paginated; handle accordingly
-- [ ] Write unit tests
+- [x] `listGroups(): Promise<DispatcharrResult<DispatcharrGroup[]>>`
+  - [x] `GET /api/accounts/groups/` — may be paginated; handle accordingly
+- [x] Write unit tests
 
 ### 4.6 — Channel profile endpoints (`src/lib/dispatcharr/endpoints/profiles.ts`)
 
-- [ ] `listProfiles(): Promise<DispatcharrResult<DispatcharrChannelProfile[]>>`
-  - [ ] `GET /api/channels/profiles/`
-- [ ] Write unit tests
+- [x] `listProfiles(): Promise<DispatcharrResult<DispatcharrChannelProfile[]>>`
+  - [x] `GET /api/channels/profiles/`
+- [x] Write unit tests
 
 ### 4.7 — Channel endpoints (`src/lib/dispatcharr/endpoints/channels.ts`)
 
-- [ ] `listChannels(page?: number, pageSize?: number): Promise<DispatcharrResult<PaginatedResponse<DispatcharrChannel>>>`
-  - [ ] `GET /api/channels/channels/?page={page}&page_size={pageSize}`
-- [ ] `getAllChannels(): Promise<DispatcharrResult<DispatcharrChannel[]>>`
-  - [ ] Uses `fetchAllPages` to iterate through all pages
-- [ ] `getChannelStreams(channelId: number): Promise<DispatcharrResult<any[]>>`
-  - [ ] `GET /api/channels/channels/{id}/streams/`
-- [ ] Write unit tests
+- [x] `listChannels(page?: number, pageSize?: number): Promise<DispatcharrResult<PaginatedResponse<DispatcharrChannel>>>`
+  - [x] `GET /api/channels/channels/?page={page}&page_size={pageSize}`
+- [x] `getAllChannels(): Promise<DispatcharrResult<DispatcharrChannel[]>>`
+  - [x] Uses `fetchAllPages` to iterate through all pages
+- [x] `getChannelStreams(channelId: number): Promise<DispatcharrResult<any[]>>`
+  - [x] `GET /api/channels/channels/{id}/streams/`
+- [x] Write unit tests
 
 ### 4.8 — Health check (`src/lib/dispatcharr/endpoints/health.ts`)
 
-- [ ] `checkHealth(): Promise<DispatcharrResult<{ reachable: boolean; authValid: boolean }>>`
-  - [ ] `GET /api/accounts/users/?page=1&page_size=1`
-  - [ ] 200 → `{ reachable: true, authValid: true }`
-  - [ ] 401 → `{ reachable: true, authValid: false }`
-  - [ ] Network error → `{ reachable: false, authValid: false }`
-- [ ] Write unit tests
+- [x] `checkHealth(): Promise<DispatcharrResult<{ reachable: boolean; authValid: boolean }>>`
+  - [x] `GET /api/accounts/users/?page=1&page_size=1`
+  - [x] 200 → `{ reachable: true, authValid: true }`
+  - [x] 401 → `{ reachable: true, authValid: false }`
+  - [x] Network error → `{ reachable: false, authValid: false }`
+- [x] Write unit tests
 
 ---
 

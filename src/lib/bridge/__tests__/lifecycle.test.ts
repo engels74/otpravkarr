@@ -703,6 +703,29 @@ describe("reconcileSync", () => {
     expect(report.errors).toHaveLength(0);
   });
 
+  it("excludes non-accepted friends (e.g. pending invites) from reconciliation", async () => {
+    const mapping = makeMapping({ plex_account_id: 100, dispatcharr_user_id: 10, is_active: 1 });
+    mockFetchFriends.mockResolvedValueOnce([
+      // plex_account_id 100 is returned but with pending status
+      { id: 100, email: "plex@example.com", status: "pending" },
+      { id: 200, email: "new@example.com", status: "accepted" },
+      { id: 300, email: "invited@example.com", status: "pending" },
+    ]);
+    mockGetAllUserMappings.mockReturnValueOnce([mapping]);
+    mockUpdateUser.mockResolvedValueOnce({
+      ok: true,
+      data: makeDispatcharrUser({ is_active: false }),
+    });
+
+    const report = await reconcileSync(mockClient, "admin-token");
+
+    // Pending friend with id 100 should be treated as removed — user should be disabled
+    expect(report.disabled).toBe(1);
+    expect(mockUpdateUser).toHaveBeenCalledWith(mockClient, 10, { is_active: false });
+    // Only accepted unmapped friends should be counted as new
+    expect(report.newFriends).toBe(1); // only id=200 (accepted), not id=300 (pending)
+  });
+
   it("handles Plex fetch failure gracefully", async () => {
     mockGetAccount.mockRejectedValueOnce(new Error("Plex is down"));
 

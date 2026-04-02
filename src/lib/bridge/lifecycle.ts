@@ -183,8 +183,10 @@ export async function reconcileSync(
   }
 
   const allMappings = getAllUserMappings();
-  const friendIds = new Set(friends.map((f) => f.id));
-  const friendMap = new Map(friends.map((f) => [f.id, f]));
+  // Only treat accepted friends as active — pending invites should not grant access
+  const acceptedFriends = friends.filter((f) => f.status === "accepted");
+  const friendIds = new Set(acceptedFriends.map((f) => f.id));
+  const friendMap = new Map(acceptedFriends.map((f) => [f.id, f]));
 
   for (const mapping of allMappings) {
     if (!friendIds.has(mapping.plex_account_id)) {
@@ -292,9 +294,9 @@ export async function reconcileSync(
     }
   }
 
-  // Count new friends not yet mapped
+  // Count new accepted friends not yet mapped
   const mappedPlexIds = new Set(allMappings.map((m) => m.plex_account_id));
-  for (const friend of friends) {
+  for (const friend of acceptedFriends) {
     if (!mappedPlexIds.has(friend.id)) {
       report.newFriends++;
     }

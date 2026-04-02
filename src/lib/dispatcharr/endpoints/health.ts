@@ -22,7 +22,12 @@ export function createHealthEndpoints(client: DispatcharrClient) {
         return { ok: true, data: { reachable: true, authValid: false } };
       }
 
-      // network_error, not_found, unexpected_shape → unreachable
+      // unexpected_shape / not_found → server responded but schema or endpoint differs
+      if (result.error === "unexpected_shape" || result.error === "not_found") {
+        return { ok: true, data: { reachable: true, authValid: false } };
+      }
+
+      // network_error → truly unreachable (connection refused, DNS failure, 5xx)
       return { ok: true, data: { reachable: false, authValid: false } };
     },
   };

@@ -110,7 +110,7 @@ describe("checkHealth", () => {
     });
   });
 
-  it("returns not reachable on 404", async () => {
+  it("returns reachable but not authValid on 404", async () => {
     mockOfetch.mockRejectedValueOnce(makeFetchError(404, "Not Found"));
     const endpoints = createHealthEndpoints(createClient());
 
@@ -118,7 +118,20 @@ describe("checkHealth", () => {
 
     expect(result).toEqual({
       ok: true,
-      data: { reachable: false, authValid: false },
+      data: { reachable: true, authValid: false },
+    });
+  });
+
+  it("returns reachable but not authValid on unexpected response shape", async () => {
+    // Server responds with 200 but unexpected JSON structure (e.g. different API version)
+    mockOfetch.mockResolvedValueOnce({ unexpected: "data" });
+    const endpoints = createHealthEndpoints(createClient());
+
+    const result = await endpoints.checkHealth();
+
+    expect(result).toEqual({
+      ok: true,
+      data: { reachable: true, authValid: false },
     });
   });
 });

@@ -1,5 +1,5 @@
 import type { DispatcharrClient } from "../client";
-import { fetchAllPages } from "../pagination";
+import { fetchAllPages, PaginationError } from "../pagination";
 import { DispatcharrChannelProfileSchema } from "../schemas";
 import type { DispatcharrChannelProfile, DispatcharrResult } from "../types";
 
@@ -15,6 +15,7 @@ export async function listProfiles(
     return { ok: true, data: profiles };
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
-    return { ok: false, error: "network_error", message };
+    const code = error instanceof PaginationError ? error.code : "network_error";
+    return { ok: false, error: code, message };
   }
 }

@@ -60,7 +60,7 @@ export function updateUser(
   id: number,
   data: UpdateUserData,
 ): Promise<DispatcharrResult<DispatcharrUser>> {
-  return client.request("PUT", `/api/accounts/users/${id}/`, {
+  return client.request("PATCH", `/api/accounts/users/${id}/`, {
     body: data,
     schema: DispatcharrUserSchema,
   });

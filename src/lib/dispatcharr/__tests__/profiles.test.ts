@@ -116,7 +116,7 @@ describe("listProfiles", () => {
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.error).toBe("network_error");
+      expect(result.error).toBe("auth_failure");
       expect(result.message).toContain("Pagination failed");
     }
   });

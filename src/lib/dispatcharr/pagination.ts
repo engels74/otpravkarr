@@ -2,7 +2,17 @@ import type { z } from "zod";
 
 import type { DispatcharrClient } from "./client";
 import { paginatedSchema } from "./schemas";
-import type { DispatcharrResult, PaginatedResponse } from "./types";
+import type { DispatcharrErrorCode, DispatcharrResult, PaginatedResponse } from "./types";
+
+export class PaginationError extends Error {
+  readonly code: DispatcharrErrorCode;
+
+  constructor(code: DispatcharrErrorCode, message: string) {
+    super(`Pagination failed: ${code} — ${message}`);
+    this.name = "PaginationError";
+    this.code = code;
+  }
+}
 
 async function* paginate<T>(
   client: DispatcharrClient,
@@ -14,7 +24,13 @@ async function* paginate<T>(
 
   while (url != null) {
     // Convert absolute URLs to relative paths for the client
-    const path: string = url.startsWith(client.baseUrl) ? url.slice(client.baseUrl.length) : url;
+    let path: string;
+    try {
+      const parsed = new URL(url, client.baseUrl);
+      path = parsed.pathname + parsed.search;
+    } catch {
+      path = url.startsWith("/") ? url : `/${url}`;
+    }
 
     const result: DispatcharrResult<PaginatedResponse<T>> = await client.request<
       PaginatedResponse<T>
@@ -23,7 +39,7 @@ async function* paginate<T>(
     });
 
     if (!result.ok) {
-      throw new Error(`Pagination failed: ${result.error} — ${result.message}`);
+      throw new PaginationError(result.error, result.message);
     }
 
     yield result.data.results;

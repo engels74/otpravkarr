@@ -1,5 +1,5 @@
 import type { DispatcharrClient } from "../client";
-import { fetchAllPages } from "../pagination";
+import { fetchAllPages, PaginationError } from "../pagination";
 import { DispatcharrGroupSchema } from "../schemas";
 import type { DispatcharrGroup, DispatcharrResult } from "../types";
 
@@ -11,6 +11,7 @@ export async function listGroups(
     return { ok: true, data: groups };
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
-    return { ok: false, error: "network_error", message };
+    const code = error instanceof PaginationError ? error.code : "network_error";
+    return { ok: false, error: code, message };
   }
 }

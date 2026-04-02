@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import type { DispatcharrClient } from "../client";
-import { fetchAllPages } from "../pagination";
+import { fetchAllPages, PaginationError } from "../pagination";
 import { DispatcharrChannelSchema, paginatedSchema } from "../schemas";
 import type { DispatcharrChannel, DispatcharrResult, PaginatedResponse } from "../types";
 
@@ -35,7 +35,8 @@ export function createChannelEndpoints(client: DispatcharrClient) {
         return { ok: true, data };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        return { ok: false, error: "network_error", message };
+        const code = error instanceof PaginationError ? error.code : "network_error";
+        return { ok: false, error: code, message };
       }
     },
 

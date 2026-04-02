@@ -67,11 +67,13 @@ export function buildPlatformUrl(platform: Platform, params: XcUrlParams): Platf
     }
 
     case "smarters": {
-      const protocol = params.protocol ?? "http";
+      const effectiveProtocol = /^https:\/\//i.test(params.host.trim())
+        ? "https"
+        : (params.protocol ?? "http");
       return {
         type: "fields",
         fields: {
-          host: `${protocol}://${normalizeHost(params.host)}`,
+          host: `${effectiveProtocol}://${normalizeHost(params.host)}`,
           username: params.username,
           password: params.password,
         },

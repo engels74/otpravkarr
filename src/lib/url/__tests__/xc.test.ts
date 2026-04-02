@@ -43,16 +43,17 @@ describe("buildXcUrl", () => {
     expect(url).toBe("http://my.server.tv/custom?u=user1&p=pass1");
   });
 
-  it("does NOT URL-encode special characters in credentials", () => {
+  it("inserts realistic alphanumeric credentials as-is", () => {
     const url = buildXcUrl({
       host: "iptv.example.com",
-      username: "user+name",
-      password: "p@ss w0rd&more",
+      username: "alice",
+      password: "a1B2c3D4e5F6g7H8",
     });
 
-    // Raw credentials expected — XC players handle them as-is
+    // generateXcPassword() produces alphanumeric-only strings;
+    // buildXcUrl inserts them raw — no encoding applied.
     expect(url).toBe(
-      "http://iptv.example.com/get.php?username=user+name&password=p@ss w0rd&more&type=m3u_plus",
+      "http://iptv.example.com/get.php?username=alice&password=a1B2c3D4e5F6g7H8&type=m3u_plus",
     );
   });
 

@@ -24,7 +24,7 @@ export interface XcUrlParams {
 
 /** Strip scheme prefix and trailing slashes from a host string. */
 export function normalizeHost(host: string): string {
-  return host.replace(/^https?:\/\//, "").replace(/\/+$/, "");
+  return host.replace(/^https?:\/\//i, "").replace(/\/+$/, "");
 }
 
 /**

@@ -60,9 +60,9 @@ export function buildPlatformUrl(platform: Platform, params: XcUrlParams): Platf
       if ((params.template ?? DEFAULT_XC_TEMPLATE).includes("output=")) {
         return { type: "url", url };
       }
-      const separator = (params.template ?? DEFAULT_XC_TEMPLATE).includes("?") ? "&" : "?";
-      // Guard against templates ending with ? or & to avoid ?& or && in the URL
+      // Clean trailing separators first, then decide separator from the cleaned URL
       const cleanUrl = url.replace(/[?&]+$/, "");
+      const separator = cleanUrl.includes("?") ? "&" : "?";
       return { type: "url", url: `${cleanUrl}${separator}output=ts` };
     }
 

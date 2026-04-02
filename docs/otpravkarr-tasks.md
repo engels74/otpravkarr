@@ -347,7 +347,7 @@ All sensitive data handling depends on this module. It must be built and tested 
 ### 3.1 — Type definitions (`src/lib/plex/types.ts`)
 
 - [x] Define `PlexIdentity` — `{ id: number; uuid: string; username: string; email: string; thumb: string; authenticationToken: string }`
-- [x] Define `PlexFriend` — `{ id: number; uuid?: string; username: string; email: string; thumb?: string; status: string }` (response shape from plex.tv friends endpoint, validated defensively)
+- [x] Define `PlexFriend` — `{ id: number; uuid?: string; username?: string; title?: string; friendlyName?: string; email: string; thumb?: string; status: string }` (response shape from plex.tv friends endpoint, validated defensively)
 - [x] Define `PlexConnectionStatus` — `'healthy' | 'unauthorized' | 'unreachable' | 'server_changed'`
 - [x] Define `PlexServerInfo` — `{ friendlyName: string; machineIdentifier: string; version: string }`
 

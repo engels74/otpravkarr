@@ -39,7 +39,7 @@ export function isCurrentFriend(plexAccountId: number, friends: PlexFriend[]): b
 export function getCachedFriends(ttlMs: number = DEFAULT_CACHE_TTL_MS): PlexFriend[] | null {
   if (!friendsCache) return null;
   if (Date.now() - friendsCache.fetchedAt > ttlMs) return null;
-  return friendsCache.friends;
+  return [...friendsCache.friends];
 }
 
 export function invalidateFriendsCache(): void {

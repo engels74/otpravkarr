@@ -120,6 +120,14 @@ describe("retryAsync", () => {
     }
   });
 
+  it("clamps negative maxRetries to 0 and calls fn once", async () => {
+    const fn = vi.fn().mockRejectedValueOnce(new Error("fail"));
+    await expect(retryAsync(fn, undefined, { maxRetries: -5, baseDelayMs: 0 })).rejects.toThrow(
+      "fail",
+    );
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
   it("retries all errors when shouldRetry is omitted", async () => {
     vi.useFakeTimers();
     try {
@@ -188,6 +196,15 @@ describe("retryResult", () => {
 
     const result = await retryResult(fn, shouldRetry, { maxRetries: 3, baseDelayMs: 0 });
     expect(result).toEqual({ ok: false, error: "auth_failure", message: "bad key" });
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
+  it("clamps negative maxRetries to 0 and calls fn once", async () => {
+    const fn = vi
+      .fn<() => Promise<Result>>()
+      .mockResolvedValueOnce({ ok: false, error: "network_error", message: "only" });
+    const result = await retryResult(fn, shouldRetry, { maxRetries: -3, baseDelayMs: 0 });
+    expect(result).toEqual({ ok: false, error: "network_error", message: "only" });
     expect(fn).toHaveBeenCalledTimes(1);
   });
 

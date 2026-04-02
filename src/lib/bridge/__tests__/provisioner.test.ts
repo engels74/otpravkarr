@@ -219,7 +219,7 @@ describe("provisionUser — reactivation", () => {
     });
   });
 
-  it("returns failed when Dispatcharr updateUser fails", async () => {
+  it("returns failed when Dispatcharr updateUser fails with non-not_found error", async () => {
     const inactive = makeMapping({ is_active: 0, dispatcharr_user_id: 42 });
     vi.mocked(getUserMappingByPlexId).mockReturnValue(inactive);
 
@@ -239,8 +239,76 @@ describe("provisionUser — reactivation", () => {
     if (result.status === "failed") {
       expect(result.error).toBe("User not found on Dispatcharr");
     }
-    // Should NOT update local DB on failure
+    // Should NOT update local DB on non-not_found failure
     expect(updateUserMapping).not.toHaveBeenCalled();
+  });
+
+  it("falls through to create flow when reactivation returns not_found", async () => {
+    const inactive = makeMapping({ is_active: 0, dispatcharr_user_id: 42 });
+    vi.mocked(getUserMappingByPlexId).mockReturnValueOnce(inactive);
+
+    // Reactivation fails with not_found (user deleted externally)
+    vi.mocked(updateUser).mockResolvedValue({
+      ok: false,
+      error: "not_found",
+      message: "User not found",
+    } as DispatcharrResult<DispatcharrUser>);
+
+    // Create flow succeeds
+    const dispatcharrUser = makeDispatcharrUser({ id: 200, username: "testuser" });
+    const newMapping = makeMapping({
+      id: 20,
+      dispatcharr_user_id: 200,
+      dispatcharr_username: "testuser",
+      provisioning_mode: "automatic",
+    });
+    vi.mocked(createUser).mockResolvedValue({ ok: true, data: dispatcharrUser });
+    vi.mocked(createUserMapping).mockReturnValue(newMapping);
+
+    const result = await provisionUser(mockClient, {
+      plexIdentity: makePlexIdentity(),
+      mode: "automatic",
+      groupIds: [1, 2],
+    });
+
+    // Should have cleared stale dispatcharr data
+    expect(updateUserMapping).toHaveBeenCalledWith(inactive.id, {
+      dispatcharr_user_id: null,
+      dispatcharr_username: null,
+    });
+
+    // Should have fallen through to create flow
+    expect(result.status).toBe("provisioned");
+    expect(createUser).toHaveBeenCalled();
+    if (result.status === "provisioned") {
+      expect(result.mapping.dispatcharr_user_id).toBe(200);
+    }
+  });
+
+  it("falls through to create flow when inactive mapping has null dispatcharr_user_id", async () => {
+    const inactive = makeMapping({ is_active: 0, dispatcharr_user_id: null });
+    vi.mocked(getUserMappingByPlexId).mockReturnValueOnce(inactive);
+
+    const dispatcharrUser = makeDispatcharrUser({ id: 300, username: "testuser" });
+    const newMapping = makeMapping({
+      id: 30,
+      dispatcharr_user_id: 300,
+      dispatcharr_username: "testuser",
+      provisioning_mode: "automatic",
+    });
+    vi.mocked(createUser).mockResolvedValue({ ok: true, data: dispatcharrUser });
+    vi.mocked(createUserMapping).mockReturnValue(newMapping);
+
+    const result = await provisionUser(mockClient, {
+      plexIdentity: makePlexIdentity(),
+      mode: "automatic",
+      groupIds: [1],
+    });
+
+    // Should skip reactivation entirely and go to create flow
+    expect(updateUser).not.toHaveBeenCalled();
+    expect(result.status).toBe("provisioned");
+    expect(createUser).toHaveBeenCalled();
   });
 });
 

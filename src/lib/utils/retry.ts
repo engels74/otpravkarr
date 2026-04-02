@@ -35,6 +35,9 @@ export async function retryAsync<T>(
   options?: RetryOptions,
 ): Promise<T> {
   const config: RetryConfig = { ...DEFAULT_RETRY_CONFIG, ...options };
+  config.maxRetries = Math.max(0, config.maxRetries);
+  config.baseDelayMs = Math.max(0, config.baseDelayMs);
+  config.jitter = Math.max(0, Math.min(1, config.jitter));
 
   let lastError: unknown;
   for (let attempt = 0; attempt <= config.maxRetries; attempt++) {
@@ -59,6 +62,9 @@ export async function retryResult<T, R extends { ok: boolean }>(
   options?: RetryOptions,
 ): Promise<R> {
   const config: RetryConfig = { ...DEFAULT_RETRY_CONFIG, ...options };
+  config.maxRetries = Math.max(0, config.maxRetries);
+  config.baseDelayMs = Math.max(0, config.baseDelayMs);
+  config.jitter = Math.max(0, Math.min(1, config.jitter));
 
   let lastResult!: R;
   for (let attempt = 0; attempt <= config.maxRetries; attempt++) {

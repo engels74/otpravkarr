@@ -57,10 +57,11 @@ export async function provisionUser(
   }
 
   // Inactive mapping — reactivation flow
-  if (existingMapping && existingMapping.is_active === 0) {
-    if (existingMapping.dispatcharr_user_id == null) {
-      return { status: "failed", error: "Cannot reactivate: no Dispatcharr user ID" };
-    }
+  if (
+    existingMapping &&
+    existingMapping.is_active === 0 &&
+    existingMapping.dispatcharr_user_id != null
+  ) {
     const dispatcharrUserId = existingMapping.dispatcharr_user_id;
 
     const result = await retryResult(
@@ -69,24 +70,32 @@ export async function provisionUser(
     );
 
     if (!result.ok) {
-      return { status: "failed", error: result.message };
+      if (result.error === "not_found") {
+        // Dispatcharr user was deleted externally — clear stale ID and fall through to create flow
+        updateUserMapping(existingMapping.id, {
+          dispatcharr_user_id: null,
+          dispatcharr_username: null,
+        });
+      } else {
+        return { status: "failed", error: result.message };
+      }
+    } else {
+      updateUserMapping(existingMapping.id, { is_active: 1 });
+
+      appendAuditLog({
+        action: AuditAction.USER_PROVISIONED,
+        detail: {
+          plex_username: request.plexIdentity.username,
+          reactivated: true,
+        },
+      });
+
+      const updatedMapping = getUserMappingByPlexId(request.plexIdentity.id);
+      if (!updatedMapping) {
+        return { status: "failed", error: "Failed to retrieve reactivated mapping" };
+      }
+      return { status: "reactivated", mapping: updatedMapping };
     }
-
-    updateUserMapping(existingMapping.id, { is_active: 1 });
-
-    appendAuditLog({
-      action: AuditAction.USER_PROVISIONED,
-      detail: {
-        plex_username: request.plexIdentity.username,
-        reactivated: true,
-      },
-    });
-
-    const updatedMapping = getUserMappingByPlexId(request.plexIdentity.id);
-    if (!updatedMapping) {
-      return { status: "failed", error: "Failed to retrieve reactivated mapping" };
-    }
-    return { status: "reactivated", mapping: updatedMapping };
   }
 
   // New user — create flow

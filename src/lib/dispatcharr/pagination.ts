@@ -29,7 +29,7 @@ async function* paginate<T>(
       const parsed = new URL(url, client.baseUrl);
       path = parsed.pathname + parsed.search;
     } catch {
-      path = url.startsWith("/") ? url : `/${url}`;
+      throw new PaginationError("validation_error", `Invalid pagination URL: ${url}`);
     }
 
     const result: DispatcharrResult<PaginatedResponse<T>> = await client.request<

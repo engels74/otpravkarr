@@ -18,8 +18,15 @@ export class DispatcharrClient {
     path: string,
     options?: { body?: unknown; schema?: z.ZodType<T> },
   ): Promise<DispatcharrResult<T>> {
-    // Ensure path starts with / for consistent URL joining
-    const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+    // Guard against absolute URLs: extract just the path+search portion
+    let normalizedPath = path;
+    if (normalizedPath.startsWith("http://") || normalizedPath.startsWith("https://")) {
+      const parsed = new URL(normalizedPath);
+      normalizedPath = parsed.pathname + parsed.search;
+    }
+    if (!normalizedPath.startsWith("/")) {
+      normalizedPath = `/${normalizedPath}`;
+    }
     const url = `${this.baseUrl}${normalizedPath}`;
 
     const fetchOptions: FetchOptions = {
@@ -75,11 +82,12 @@ export class DispatcharrClient {
       if (statusCode === 404) {
         return { ok: false, error: "not_found", message: String(message) };
       }
-      // Distinguish client errors (4xx) from server/network errors (5xx)
+      // Remaining 4xx client errors
       if (statusCode >= 400 && statusCode < 500) {
         return { ok: false, error: "validation_error", message: String(message) };
       }
-      return { ok: false, error: "network_error", message: String(message) };
+      // 5xx: server responded but with an error (distinct from network_error)
+      return { ok: false, error: "server_error", message: String(message) };
     }
 
     // Generic network / other error

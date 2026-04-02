@@ -35,6 +35,7 @@ export interface PaginatedResponse<T> {
 export type DispatcharrErrorCode =
   | "auth_failure"
   | "network_error"
+  | "server_error"
   | "unexpected_shape"
   | "not_found"
   | "validation_error";

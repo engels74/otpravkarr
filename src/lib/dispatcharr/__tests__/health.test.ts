@@ -98,7 +98,7 @@ describe("checkHealth", () => {
     });
   });
 
-  it("returns not reachable on 500 server error", async () => {
+  it("returns reachable but not authValid on 500 server error", async () => {
     mockOfetch.mockRejectedValueOnce(makeFetchError(500, "Internal Server Error"));
     const endpoints = createHealthEndpoints(createClient());
 
@@ -106,7 +106,7 @@ describe("checkHealth", () => {
 
     expect(result).toEqual({
       ok: true,
-      data: { reachable: false, authValid: false },
+      data: { reachable: true, authValid: false },
     });
   });
 

@@ -62,6 +62,18 @@ describe("DispatcharrClient.request", () => {
     );
   });
 
+  it("strips absolute URL to path when passed as path argument", async () => {
+    mockOfetch.mockResolvedValueOnce({ id: 1 });
+    const client = createClient("https://dispatch.example.com");
+
+    await client.request("GET", "https://other.host.com/api/test/?page=2");
+
+    expect(mockOfetch).toHaveBeenCalledWith(
+      "https://dispatch.example.com/api/test/?page=2",
+      expect.any(Object),
+    );
+  });
+
   it("sends ApiKey authorization header", async () => {
     mockOfetch.mockResolvedValueOnce({ id: 1 });
     const client = createClient("https://dispatch.example.com", "my-api-key");
@@ -170,7 +182,7 @@ describe("DispatcharrClient.request", () => {
     });
   });
 
-  it("maps 500 to network_error", async () => {
+  it("maps 500 to server_error", async () => {
     mockOfetch.mockRejectedValueOnce(makeFetchError(500, "Internal Server Error"));
     const client = createClient();
 
@@ -178,8 +190,21 @@ describe("DispatcharrClient.request", () => {
 
     expect(result).toEqual({
       ok: false,
-      error: "network_error",
+      error: "server_error",
       message: "Internal Server Error",
+    });
+  });
+
+  it("maps 502 to server_error", async () => {
+    mockOfetch.mockRejectedValueOnce(makeFetchError(502, "Bad Gateway"));
+    const client = createClient();
+
+    const result = await client.request("GET", "/api/resource/");
+
+    expect(result).toEqual({
+      ok: false,
+      error: "server_error",
+      message: "Bad Gateway",
     });
   });
 

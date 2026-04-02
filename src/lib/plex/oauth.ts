@@ -1,4 +1,4 @@
-import { MyPlexAccount } from "@ctrl/plex";
+import { MyPlexAccount, Unauthorized } from "@ctrl/plex";
 import type { PlexIdentity } from "./types";
 import { PlexAuthError } from "./types";
 
@@ -42,26 +42,38 @@ export async function completeOAuth(id: string, timeoutSeconds?: number): Promis
   // Remove immediately so concurrent calls cannot reuse the same session
   pending.delete(id);
 
-  const account = await MyPlexAccount.webLoginCheck(
-    entry.webLogin as Parameters<typeof MyPlexAccount.webLoginCheck>[0],
-    { timeoutSeconds: timeoutSeconds ?? 120 },
-  );
+  try {
+    const account = await MyPlexAccount.webLoginCheck(
+      entry.webLogin as Parameters<typeof MyPlexAccount.webLoginCheck>[0],
+      { timeoutSeconds: timeoutSeconds ?? 120 },
+    );
 
-  if (typeof account.authenticationToken !== "string" || !account.authenticationToken) {
-    throw new PlexAuthError("OAuth completed but authenticationToken is missing");
-  }
-  if (typeof account.id !== "number" || account.id <= 0) {
-    throw new PlexAuthError("OAuth completed but account id is missing or invalid");
-  }
+    if (typeof account.authenticationToken !== "string" || !account.authenticationToken) {
+      throw new PlexAuthError("OAuth completed but authenticationToken is missing");
+    }
+    if (typeof account.id !== "number" || account.id <= 0) {
+      throw new PlexAuthError("OAuth completed but account id is missing or invalid");
+    }
 
-  return {
-    id: account.id,
-    uuid: account.uuid ?? "",
-    username: account.username ?? "",
-    email: account.email ?? "",
-    thumb: account.thumb ?? "",
-    authenticationToken: account.authenticationToken,
-  };
+    return {
+      id: account.id,
+      uuid: account.uuid ?? "",
+      username: account.username ?? "",
+      email: account.email ?? "",
+      thumb: account.thumb ?? "",
+      authenticationToken: account.authenticationToken,
+    };
+  } catch (error: unknown) {
+    if (error instanceof PlexAuthError) {
+      throw error;
+    }
+    if (error instanceof Unauthorized) {
+      throw new PlexAuthError("OAuth login check failed: unauthorized");
+    }
+    throw new PlexAuthError(
+      `OAuth login check failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
 }
 
 export function getPendingOAuth(id: string): boolean {

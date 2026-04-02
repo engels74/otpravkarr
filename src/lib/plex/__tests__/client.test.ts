@@ -47,11 +47,27 @@ vi.mock("@ctrl/plex", () => {
     }
   }
 
-  return { PlexServer, MyPlexAccount, Unauthorized };
+  class BadRequest extends Error {
+    override name = "BadRequest";
+    constructor(message = "Bad request") {
+      super(message);
+    }
+  }
+
+  class NotFound extends Error {
+    override name = "NotFound";
+    constructor(message = "Not found") {
+      super(message);
+    }
+  }
+
+  return { PlexServer, MyPlexAccount, Unauthorized, BadRequest, NotFound };
 });
 
 // Import after mocking
-const { PlexServer, MyPlexAccount, Unauthorized } = await import("@ctrl/plex");
+const { PlexServer, MyPlexAccount, Unauthorized, BadRequest, NotFound } = await import(
+  "@ctrl/plex"
+);
 const { validateServerToken, checkServerHealth, getAccount, getServerResources } = await import(
   "../client"
 );
@@ -109,6 +125,28 @@ describe("validateServerToken", () => {
     resetMocks();
     mockServerConnect.mockImplementation(async () => {
       throw new Error("ECONNREFUSED");
+    });
+
+    await expect(validateServerToken("http://localhost:32400", "token")).rejects.toThrow(
+      PlexConnectionError,
+    );
+  });
+
+  it("throws PlexConnectionError on BadRequest", async () => {
+    resetMocks();
+    mockServerConnect.mockImplementation(async () => {
+      throw new BadRequest("Bad request");
+    });
+
+    await expect(validateServerToken("http://localhost:32400", "token")).rejects.toThrow(
+      PlexConnectionError,
+    );
+  });
+
+  it("throws PlexConnectionError on NotFound", async () => {
+    resetMocks();
+    mockServerConnect.mockImplementation(async () => {
+      throw new NotFound("Not found");
     });
 
     await expect(validateServerToken("http://localhost:32400", "token")).rejects.toThrow(

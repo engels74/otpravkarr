@@ -1,4 +1,4 @@
-import { MyPlexAccount, PlexServer, Unauthorized } from "@ctrl/plex";
+import { BadRequest, MyPlexAccount, NotFound, PlexServer, Unauthorized } from "@ctrl/plex";
 
 import type { PlexConnectionStatus, PlexServerInfo } from "./types";
 import { PlexAuthError, PlexConnectionError } from "./types";
@@ -27,6 +27,12 @@ export async function validateServerToken(url: string, token: string): Promise<P
     if (error instanceof Unauthorized) {
       throw new PlexAuthError("Invalid or expired Plex token");
     }
+    if (error instanceof BadRequest) {
+      throw new PlexConnectionError("Bad request: invalid server URL or parameters");
+    }
+    if (error instanceof NotFound) {
+      throw new PlexConnectionError("Not found: server endpoint unavailable");
+    }
     throw new PlexConnectionError(error instanceof Error ? error.message : String(error));
   }
 }
@@ -52,6 +58,9 @@ export async function checkServerHealth(
     if (error instanceof Unauthorized) {
       return "unauthorized";
     }
+    if (error instanceof BadRequest || error instanceof NotFound) {
+      return "unreachable";
+    }
     return "unreachable";
   }
 }
@@ -65,6 +74,12 @@ export async function getAccount(token: string): Promise<MyPlexAccount> {
   } catch (error: unknown) {
     if (error instanceof Unauthorized) {
       throw new PlexAuthError("Invalid or expired Plex token");
+    }
+    if (error instanceof BadRequest) {
+      throw new PlexConnectionError("Bad request: invalid server URL or parameters");
+    }
+    if (error instanceof NotFound) {
+      throw new PlexConnectionError("Not found: server endpoint unavailable");
     }
     throw new PlexConnectionError(error instanceof Error ? error.message : String(error));
   }
@@ -89,6 +104,12 @@ export async function getServerResources(
     }
     if (error instanceof Unauthorized) {
       throw new PlexAuthError("Invalid or expired Plex token");
+    }
+    if (error instanceof BadRequest) {
+      throw new PlexConnectionError("Bad request: invalid server URL or parameters");
+    }
+    if (error instanceof NotFound) {
+      throw new PlexConnectionError("Not found: server endpoint unavailable");
     }
     throw new PlexConnectionError(error instanceof Error ? error.message : String(error));
   }

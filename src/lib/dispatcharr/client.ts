@@ -21,8 +21,16 @@ export class DispatcharrClient {
     // Guard against absolute URLs: extract just the path+search portion
     let normalizedPath = path;
     if (normalizedPath.startsWith("http://") || normalizedPath.startsWith("https://")) {
-      const parsed = new URL(normalizedPath);
-      normalizedPath = parsed.pathname + parsed.search;
+      try {
+        const parsed = new URL(normalizedPath);
+        normalizedPath = parsed.pathname + parsed.search;
+      } catch {
+        return {
+          ok: false,
+          error: "validation_error",
+          message: `Invalid URL path: ${path}`,
+        };
+      }
     }
     if (!normalizedPath.startsWith("/")) {
       normalizedPath = `/${normalizedPath}`;

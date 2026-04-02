@@ -20,7 +20,17 @@ const DEFAULT_CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
 let friendsCache: { friends: PlexFriend[]; fetchedAt: number } | null = null;
 
 export async function fetchFriends(account: MyPlexAccount): Promise<PlexFriend[]> {
-  const response = await account.query({ url: "https://plex.tv/api/v2/friends", method: "get" });
+  let response: unknown;
+  try {
+    response = await account.query({ url: "https://plex.tv/api/v2/friends", method: "get" });
+  } catch (error: unknown) {
+    console.warn(
+      "Failed to fetch Plex friends:",
+      error instanceof Error ? error.message : String(error),
+    );
+    return [];
+  }
+
   const parseResult = PlexFriendsResponseSchema.safeParse(response);
 
   if (!parseResult.success) {

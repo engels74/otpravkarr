@@ -178,6 +178,17 @@ describe("checkServerHealth", () => {
     expect(result).toBe("server_changed");
   });
 
+  it("returns 'unreachable' when machineIdentifier is empty", async () => {
+    resetMocks();
+    mockServerConnect.mockImplementation(async function (this: InstanceType<typeof PlexServer>) {
+      this.machineIdentifier = "";
+      return this;
+    });
+
+    const result = await checkServerHealth("http://localhost:32400", "token", "expected-id");
+    expect(result).toBe("unreachable");
+  });
+
   it("returns 'unauthorized' on Unauthorized error", async () => {
     resetMocks();
     mockServerConnect.mockImplementation(async () => {

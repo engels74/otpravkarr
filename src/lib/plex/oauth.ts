@@ -21,15 +21,27 @@ export async function initiateOAuth(forwardUrl: string): Promise<{ id: string; u
     if (isExpired(entry)) pending.delete(key);
   }
 
-  const webLogin = await MyPlexAccount.getWebLogin(forwardUrl);
+  try {
+    const webLogin = await MyPlexAccount.getWebLogin(forwardUrl);
 
-  if (!webLogin.uri) {
-    throw new PlexAuthError("getWebLogin() returned an invalid response: missing uri");
+    if (!webLogin.uri) {
+      throw new PlexAuthError("getWebLogin() returned an invalid response: missing uri");
+    }
+
+    const id = crypto.randomUUID();
+    pending.set(id, { webLogin, createdAt: Date.now() });
+    return { id, uri: webLogin.uri };
+  } catch (error: unknown) {
+    if (error instanceof PlexAuthError) {
+      throw error;
+    }
+    if (error instanceof Unauthorized) {
+      throw new PlexAuthError("OAuth initiation failed: unauthorized");
+    }
+    throw new PlexAuthError(
+      `OAuth initiation failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
-
-  const id = crypto.randomUUID();
-  pending.set(id, { webLogin, createdAt: Date.now() });
-  return { id, uri: webLogin.uri };
 }
 
 export async function completeOAuth(id: string, timeoutSeconds?: number): Promise<PlexIdentity> {

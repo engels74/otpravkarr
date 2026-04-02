@@ -49,6 +49,10 @@ export async function checkServerHealth(
     const server = new PlexServer(url, token);
     await server.connect();
 
+    if (!server.machineIdentifier) {
+      return "unreachable";
+    }
+
     if (server.machineIdentifier !== expectedMachineId) {
       return "server_changed";
     }
@@ -76,10 +80,10 @@ export async function getAccount(token: string): Promise<MyPlexAccount> {
       throw new PlexAuthError("Invalid or expired Plex token");
     }
     if (error instanceof BadRequest) {
-      throw new PlexConnectionError("Bad request: invalid server URL or parameters");
+      throw new PlexConnectionError("Bad request: invalid account token or parameters");
     }
     if (error instanceof NotFound) {
-      throw new PlexConnectionError("Not found: server endpoint unavailable");
+      throw new PlexConnectionError("Not found: account endpoint unavailable");
     }
     throw new PlexConnectionError(error instanceof Error ? error.message : String(error));
   }
@@ -106,10 +110,10 @@ export async function getServerResources(
       throw new PlexAuthError("Invalid or expired Plex token");
     }
     if (error instanceof BadRequest) {
-      throw new PlexConnectionError("Bad request: invalid server URL or parameters");
+      throw new PlexConnectionError("Bad request: failed to list server resources");
     }
     if (error instanceof NotFound) {
-      throw new PlexConnectionError("Not found: server endpoint unavailable");
+      throw new PlexConnectionError("Not found: resources endpoint unavailable");
     }
     throw new PlexConnectionError(error instanceof Error ? error.message : String(error));
   }

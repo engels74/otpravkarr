@@ -343,6 +343,23 @@ describe("auth guards", () => {
       expect(deleteSpy).toHaveBeenCalledWith(SESSION_COOKIE_NAME, { path: "/" });
     });
 
+    it("throws redirect when user_ref is a partial-numeric string", async () => {
+      mockSession = { ...validUserSession, user_ref: "42abc" };
+      const { event, deleteSpy } = createMockEvent("sess-user-1");
+
+      try {
+        await requireUser(event);
+        expect.unreachable("should have thrown");
+      } catch (e: unknown) {
+        const err = e as { type: string; status: number; location: string };
+        expect(err.type).toBe("redirect");
+        expect(err.status).toBe(303);
+        expect(err.location).toBe("/");
+      }
+
+      expect(deleteSpy).toHaveBeenCalledWith(SESSION_COOKIE_NAME, { path: "/" });
+    });
+
     it("throws redirect when user mapping not found", async () => {
       mockSession = { ...validUserSession };
       mockUser = null;

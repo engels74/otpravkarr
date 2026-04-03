@@ -13,8 +13,8 @@ export function validateOrigin(request: Request, allowedOrigins: string[]): void
     throw error(403, "CSRF validation failed: missing Origin header");
   }
 
-  const normalizedOrigin = origin.replace(/\/+$/, "");
-  const normalizedAllowed = allowedOrigins.map((o) => o.replace(/\/+$/, ""));
+  const normalizedOrigin = origin.replace(/\/+$/, "").toLowerCase();
+  const normalizedAllowed = allowedOrigins.map((o) => o.replace(/\/+$/, "").toLowerCase());
 
   if (!normalizedAllowed.includes(normalizedOrigin)) {
     throw error(403, "CSRF validation failed: origin not allowed");

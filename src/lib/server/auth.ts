@@ -58,6 +58,11 @@ export async function requireUser(event: RequestEvent): Promise<UserMapping> {
     throw redirect(303, "/");
   }
 
+  if (!/^\d+$/.test(session.user_ref)) {
+    event.cookies.delete(SESSION_COOKIE_NAME, { path: "/" });
+    throw redirect(303, "/");
+  }
+
   const userId = Number.parseInt(session.user_ref, 10);
   if (Number.isNaN(userId)) {
     event.cookies.delete(SESSION_COOKIE_NAME, { path: "/" });

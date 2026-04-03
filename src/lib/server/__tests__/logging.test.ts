@@ -1,11 +1,15 @@
 // @vitest-environment node
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import { createRequestLogger } from "$lib/server/logging";
 
 const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 
 afterEach(() => {
   consoleSpy.mockClear();
+});
+
+afterAll(() => {
+  consoleSpy.mockRestore();
 });
 
 function createMockEvent(overrides?: Partial<{ method: string; pathname: string; ip: string }>) {

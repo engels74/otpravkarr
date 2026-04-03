@@ -97,9 +97,9 @@ describe("validateOrigin", () => {
     ).not.toThrow();
   });
 
-  it("performs case-sensitive comparison", () => {
+  it("performs case-insensitive comparison", () => {
     expect(() =>
       validateOrigin(makeRequest("POST", "http://Example.com"), ["http://example.com"]),
-    ).toThrow();
+    ).not.toThrow();
   });
 });

@@ -12,7 +12,22 @@ export interface RequestLogEntry {
 export function createRequestLogger(): Handle {
   return async ({ event, resolve }) => {
     const start = performance.now();
-    const response = await resolve(event);
+    let response: Response;
+    try {
+      response = await resolve(event);
+    } catch (err) {
+      const duration = performance.now() - start;
+      const entry: RequestLogEntry = {
+        timestamp: new Date().toISOString(),
+        method: event.request.method,
+        path: event.url.pathname,
+        status: 500,
+        duration_ms: Math.round(duration * 100) / 100,
+        ip: event.getClientAddress(),
+      };
+      console.log(JSON.stringify(entry));
+      throw err;
+    }
     const duration = performance.now() - start;
 
     const entry: RequestLogEntry = {

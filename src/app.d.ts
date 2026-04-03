@@ -3,7 +3,12 @@
 declare global {
   namespace App {
     // interface Error {}
-    // interface Locals {}
+    interface Locals {
+      requestId: string;
+      session: { id: string; type: 'admin' | 'user'; userRef: string } | null;
+      admin: { id: number; username: string } | null;
+      user: import('$lib/db/types').UserMapping | null;
+    }
     // interface PageData {}
     // interface PageState {}
     // interface Platform {}

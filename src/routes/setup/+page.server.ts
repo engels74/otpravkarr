@@ -60,9 +60,9 @@ async function isSetupClaimed(): Promise<boolean> {
   return claimed === SETUP_CLAIMED_VALUE;
 }
 
-async function hasActiveSetupClaim(cookies: Cookies): Promise<boolean> {
+async function getActiveSetupClaimProof(): Promise<string | null> {
   if (!(await isSetupClaimed())) {
-    return false;
+    return null;
   }
 
   const [expectedProof, claimTimestampRaw] = await Promise.all([
@@ -70,11 +70,20 @@ async function hasActiveSetupClaim(cookies: Cookies): Promise<boolean> {
     getConfig(SETUP_CLAIMED_AT_CONFIG_KEY),
   ]);
   if (!expectedProof || !claimTimestampRaw) {
-    return false;
+    return null;
   }
 
   const claimTimestamp = Number(claimTimestampRaw);
   if (!Number.isFinite(claimTimestamp) || Date.now() >= claimTimestamp + SETUP_CLAIM_TTL_MS) {
+    return null;
+  }
+
+  return expectedProof;
+}
+
+async function hasActiveSetupClaim(cookies: Cookies): Promise<boolean> {
+  const expectedProof = await getActiveSetupClaimProof();
+  if (!expectedProof) {
     return false;
   }
 
@@ -128,6 +137,9 @@ export const actions: Actions = {
     if (await hasActiveSetupClaim(cookies)) {
       await renewSetupClaim(cookies);
       return { success: true };
+    }
+    if (await getActiveSetupClaimProof()) {
+      return fail(409, { error: "setup_claimed" });
     }
 
     const limit = setupLimiter.check(getClientAddress());

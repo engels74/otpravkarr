@@ -317,10 +317,41 @@ describe("setup claim ownership", () => {
     expect(mocks.validateBootstrapToken).not.toHaveBeenCalled();
   });
 
-  it("rejects reclaiming setup when the bootstrap token is invalid and the claim cookie is missing", async () => {
+  it("rejects stealing an active setup claim even with a valid bootstrap token", async () => {
     state.configValues.set(setupClaimedKey, "true");
     state.configValues.set(setupClaimProofKey, "owner-proof");
     state.configValues.set(setupClaimedAtKey, String(Date.now()));
+
+    const { cookies, setCalls } = createCookies();
+    const body = new FormData();
+    body.set("token", "valid-token");
+    const request = new Request("http://localhost/setup", { method: "POST", body });
+
+    const { actions } = await import("./+page.server");
+    const claimInstance = actions.claimInstance;
+    if (!claimInstance) {
+      throw new Error("claimInstance action is undefined");
+    }
+
+    const result = await claimInstance({
+      request,
+      getClientAddress: () => "127.0.0.1",
+      cookies,
+    } as unknown as Parameters<typeof claimInstance>[0]);
+
+    expect(result).toMatchObject({
+      status: 409,
+      data: { error: "setup_claimed" },
+    });
+    expect(mocks.validateBootstrapToken).not.toHaveBeenCalled();
+    expect(state.configValues.get(setupClaimProofKey)).toBe("owner-proof");
+    expect(setCalls).toHaveLength(0);
+  });
+
+  it("rejects reclaiming setup with an invalid bootstrap token after the claim expires", async () => {
+    state.configValues.set(setupClaimedKey, "true");
+    state.configValues.set(setupClaimProofKey, "owner-proof");
+    state.configValues.set(setupClaimedAtKey, String(Date.now() - setupClaimTtlMs - 1));
     state.validateTokenResult = false;
 
     const { cookies, setCalls } = createCookies();
@@ -427,6 +458,7 @@ describe("setup claim ownership", () => {
     } as unknown as Parameters<typeof createAdmin>[0]);
     expect(createAdminResult).toEqual({ success: true });
     expect(state.configValues.get(setupCompletedKey)).toBe("false");
+    state.configValues.set(setupClaimedAtKey, String(Date.now() - setupClaimTtlMs - 1));
 
     const recoveryClaimProof = "33333333-3333-3333-3333-333333333333";
     const randomUuidSpy = vi.spyOn(crypto, "randomUUID").mockReturnValue(recoveryClaimProof);

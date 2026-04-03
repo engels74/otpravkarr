@@ -109,9 +109,6 @@ export const actions: Actions = {
       });
     }
 
-    const hash = await hashAdminPassword(password);
-    insertAdmin(username, hash);
-
     return { success: true };
   },
 
@@ -292,6 +289,7 @@ export const actions: Actions = {
     const syncInterval = String(formData.get("syncInterval") ?? "").trim();
     const defaultProvisioningMode = String(formData.get("defaultProvisioningMode") ?? "").trim();
     const adminUsername = String(formData.get("adminUsername") ?? "").trim();
+    const adminPassword = String(formData.get("adminPassword") ?? "");
 
     const syncMinutes = Number(syncInterval);
     if (!Number.isFinite(syncMinutes) || syncMinutes < 1 || syncMinutes > 1440) {
@@ -308,8 +306,18 @@ export const actions: Actions = {
       });
     }
 
-    if (!adminUsername) {
-      return fail(400, { error: "Admin username is required", field: "adminUsername" });
+    if (!USERNAME_PATTERN.test(adminUsername)) {
+      return fail(400, {
+        error: "Username must be 3-32 characters (letters, numbers, underscore, dash)",
+        field: "adminUsername",
+      });
+    }
+
+    if (adminPassword.length < MIN_PASSWORD_LENGTH) {
+      return fail(400, {
+        error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters`,
+        field: "adminPassword",
+      });
     }
 
     await Promise.all([
@@ -317,8 +325,19 @@ export const actions: Actions = {
       setConfig("default_profile_id", defaultProfileId),
       setConfig("sync_interval_minutes", String(syncMinutes)),
       setConfig("default_provisioning_mode", defaultProvisioningMode),
-      setConfig(SETUP_CLAIMED_CONFIG_KEY, SETUP_UNCLAIMED_VALUE),
     ]);
+
+    const adminPasswordHash = await hashAdminPassword(adminPassword);
+    try {
+      insertAdmin(adminUsername, adminPasswordHash);
+    } catch {
+      return fail(400, {
+        error: "Admin account could not be created",
+        field: "adminUsername",
+      });
+    }
+
+    await setConfig(SETUP_CLAIMED_CONFIG_KEY, SETUP_UNCLAIMED_VALUE);
 
     const sessionId = createSession(adminUsername, "admin", ADMIN_SESSION_TTL);
     cookies.set(SESSION_COOKIE_NAME, sessionId, ADMIN_COOKIE_OPTIONS);

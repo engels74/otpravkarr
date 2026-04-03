@@ -1,6 +1,6 @@
 import type { RequestEvent } from "@sveltejs/kit";
 import { error, redirect } from "@sveltejs/kit";
-import { getAdminByUsername } from "$lib/db/repositories/admin";
+import { adminExists, getAdminByUsername } from "$lib/db/repositories/admin";
 import { getConfig } from "$lib/db/repositories/config";
 import { getSession } from "$lib/db/repositories/sessions";
 import { getUserMappingById } from "$lib/db/repositories/users";
@@ -88,5 +88,16 @@ export async function requireSetupIncomplete(): Promise<void> {
 }
 
 export async function isSetupComplete(): Promise<boolean> {
-  return (await getConfig(SETUP_COMPLETED_CONFIG_KEY)) === SETUP_COMPLETED_VALUE;
+  const setupCompleted = await getConfig(SETUP_COMPLETED_CONFIG_KEY);
+  if (setupCompleted === SETUP_COMPLETED_VALUE) {
+    return true;
+  }
+
+  if (setupCompleted !== null) {
+    return false;
+  }
+
+  // Legacy compatibility: installs created before setup_completed was introduced
+  // should still be treated as complete once an admin account exists.
+  return adminExists();
 }

@@ -44,6 +44,8 @@ let currentOrigin = $state("");
 let plexMode = $state<"token" | "oauth">("token");
 let plexOAuthId = $state("");
 let plexOAuthWaiting = $state(false);
+let plexOAuthPopupBlocked = $state(false);
+let plexOAuthPopup: Window | null = null;
 
 // Password visibility
 let showPassword = $state(false);
@@ -88,6 +90,30 @@ $effect(() => {
     currentOrigin = window.location.origin;
   }
 });
+
+function closePlexOAuthPopup() {
+  if (plexOAuthPopup && !plexOAuthPopup.closed) {
+    plexOAuthPopup.close();
+  }
+  plexOAuthPopup = null;
+}
+
+function preparePlexOAuthPopup() {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  const popup = window.open("about:blank", "otpravkarr-plex-oauth", "popup,width=800,height=600");
+  if (!popup) {
+    plexOAuthPopupBlocked = true;
+    plexOAuthPopup = null;
+    return;
+  }
+
+  plexOAuthPopup = popup;
+  plexOAuthPopupBlocked = false;
+  popup.focus();
+}
 
 // ── Form enhancement ────────────────────────────────────────────
 function normalizeStepErrors(data: Record<string, unknown>): StepErrors {
@@ -140,8 +166,19 @@ function enhanceHandler(nextStep?: number) {
           // OAuth initiate → waiting
           if (d.oauthId && d.oauthUri) {
             plexOAuthId = d.oauthId;
-            plexOAuthWaiting = true;
-            window.open(d.oauthUri, "_blank", "width=800,height=600");
+            if (plexOAuthPopup && !plexOAuthPopup.closed) {
+              plexOAuthPopup.location.href = d.oauthUri;
+              plexOAuthPopup.focus();
+              plexOAuthWaiting = true;
+              plexOAuthPopupBlocked = false;
+            } else {
+              plexOAuthWaiting = false;
+              plexOAuthPopupBlocked = true;
+              stepErrors = {
+                message:
+                  "Your browser blocked the Plex sign-in window. Allow popups for this site and try again.",
+              };
+            }
             return;
           }
           // Plex configured (token or oauth_complete)
@@ -151,6 +188,7 @@ function enhanceHandler(nextStep?: number) {
               machineIdentifier: d.machineIdentifier,
               version: d.version,
             };
+            closePlexOAuthPopup();
             plexOAuthWaiting = false;
             step = 3;
             return;
@@ -181,6 +219,9 @@ function enhanceHandler(nextStep?: number) {
         // Fallback advance
         if (nextStep !== undefined) step = nextStep;
       } else if (result.type === "failure" && result.data) {
+        if (step === 2 && !plexOAuthWaiting) {
+          closePlexOAuthPopup();
+        }
         stepErrors = normalizeStepErrors(result.data as Record<string, unknown>);
       } else if (result.type === "redirect") {
         await update();
@@ -475,6 +516,15 @@ function enhanceHandler(nextStep?: number) {
             </Alert.Root>
           {/if}
 
+          {#if plexOAuthPopupBlocked}
+            <Alert.Root class="mb-4">
+              <Alert.Title>Popup blocked</Alert.Title>
+              <Alert.Description>
+                Allow popups for this site, then click <span class="font-medium">Sign in with Plex</span> again.
+              </Alert.Description>
+            </Alert.Root>
+          {/if}
+
           {#if plexServerInfo}
             <!-- Success state -->
             <div class="rounded-lg border border-green-500/20 bg-green-500/5 p-4 mb-4">
@@ -620,7 +670,7 @@ function enhanceHandler(nextStep?: number) {
                   </form>
                 </div>
               {:else}
-                <form method="POST" action="?/configurePlex" use:enhance={enhanceHandler()}>
+                <form method="POST" action="?/configurePlex" use:enhance={enhanceHandler()} onsubmit={preparePlexOAuthPopup}>
                   <input type="hidden" name="plexMode" value="oauth_initiate" />
                   <div class="grid gap-4">
                     <div class="text-center py-2">
@@ -646,11 +696,19 @@ function enhanceHandler(nextStep?: number) {
             {/if}
 
             <!-- Back button -->
-            <Separator class="my-4" />
-            <Button variant="ghost" onclick={() => (step = 1)} class="w-full text-muted-foreground">
-              <svg class="mr-2 h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6" /></svg>
-              Back
-            </Button>
+          <Separator class="my-4" />
+          <Button
+            variant="ghost"
+            onclick={() => {
+              closePlexOAuthPopup();
+              plexOAuthWaiting = false;
+              step = 1;
+            }}
+            class="w-full text-muted-foreground"
+          >
+            <svg class="mr-2 h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6" /></svg>
+            Back
+          </Button>
           {/if}
         </Card.Content>
       </Card.Root>

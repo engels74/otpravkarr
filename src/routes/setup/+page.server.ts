@@ -1,6 +1,6 @@
 import { type Cookies, fail, redirect } from "@sveltejs/kit";
 import { env } from "$env/dynamic/private";
-import { consumeBootstrapToken } from "$lib/crypto/bootstrap";
+import { clearBootstrapToken, validateBootstrapToken } from "$lib/crypto/bootstrap";
 import { hashAdminPassword } from "$lib/crypto/passwords";
 import { createAdmin as insertAdmin } from "$lib/db/repositories/admin";
 import { appendAuditLog } from "$lib/db/repositories/audit";
@@ -98,7 +98,7 @@ export const actions: Actions = {
       return fail(400, { error: "invalid_token" });
     }
 
-    const valid = consumeBootstrapToken(token);
+    const valid = validateBootstrapToken(token);
     if (!valid) {
       return fail(400, { error: "invalid_token" });
     }
@@ -386,6 +386,7 @@ export const actions: Actions = {
       setConfig(SETUP_CLAIMED_CONFIG_KEY, SETUP_UNCLAIMED_VALUE),
       setConfig(SETUP_CLAIM_PROOF_CONFIG_KEY, "", true),
     ]);
+    clearBootstrapToken();
     cookies.delete(SETUP_CLAIM_COOKIE_NAME, { path: SETUP_CLAIM_COOKIE_OPTIONS.path });
 
     const sessionId = createSession(adminUsername, "admin", ADMIN_SESSION_TTL);

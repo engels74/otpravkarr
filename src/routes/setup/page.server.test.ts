@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({
   configValues: new Map<string, string>(),
-  consumeTokenResult: true,
+  validateTokenResult: true,
   limiterAllowed: true,
   env: {
     ORIGIN: "http://localhost:3000",
@@ -12,17 +12,23 @@ const state = vi.hoisted(() => ({
 }));
 
 const mocks = vi.hoisted(() => ({
-  consumeBootstrapToken: vi.fn((_: string) => state.consumeTokenResult),
+  validateBootstrapToken: vi.fn((_: string) => state.validateTokenResult),
+  clearBootstrapToken: vi.fn(),
   getConfig: vi.fn(async (key: string) => state.configValues.get(key) ?? null),
   setConfig: vi.fn(async (key: string, value: string) => {
     state.configValues.set(key, value);
   }),
   setupLimiterCheck: vi.fn((_: string) => ({ allowed: state.limiterAllowed })),
   requireSetupIncomplete: vi.fn(),
+  hashAdminPassword: vi.fn(async () => "hashed-password"),
+  createAdmin: vi.fn(),
+  appendAuditLog: vi.fn(),
+  createSession: vi.fn(() => "session-id"),
 }));
 
 vi.mock("$lib/crypto/bootstrap", () => ({
-  consumeBootstrapToken: mocks.consumeBootstrapToken,
+  clearBootstrapToken: mocks.clearBootstrapToken,
+  validateBootstrapToken: mocks.validateBootstrapToken,
 }));
 
 vi.mock("$env/dynamic/private", () => ({
@@ -30,15 +36,15 @@ vi.mock("$env/dynamic/private", () => ({
 }));
 
 vi.mock("$lib/crypto/passwords", () => ({
-  hashAdminPassword: vi.fn(async () => "hashed-password"),
+  hashAdminPassword: mocks.hashAdminPassword,
 }));
 
 vi.mock("$lib/db/repositories/admin", () => ({
-  createAdmin: vi.fn(),
+  createAdmin: mocks.createAdmin,
 }));
 
 vi.mock("$lib/db/repositories/audit", () => ({
-  appendAuditLog: vi.fn(),
+  appendAuditLog: mocks.appendAuditLog,
 }));
 
 vi.mock("$lib/db/repositories/config", () => ({
@@ -47,7 +53,7 @@ vi.mock("$lib/db/repositories/config", () => ({
 }));
 
 vi.mock("$lib/db/repositories/sessions", () => ({
-  createSession: vi.fn(() => "session-id"),
+  createSession: mocks.createSession,
 }));
 
 vi.mock("$lib/db/types", () => ({
@@ -148,18 +154,27 @@ function createCookies(initial: Record<string, string> = {}) {
   };
 }
 
+function resetStateAndMocks() {
+  state.configValues.clear();
+  state.validateTokenResult = true;
+  state.limiterAllowed = true;
+  state.env.ORIGIN = "http://localhost:3000";
+
+  mocks.validateBootstrapToken.mockClear();
+  mocks.clearBootstrapToken.mockClear();
+  mocks.getConfig.mockClear();
+  mocks.setConfig.mockClear();
+  mocks.setupLimiterCheck.mockClear();
+  mocks.requireSetupIncomplete.mockClear();
+  mocks.hashAdminPassword.mockClear();
+  mocks.createAdmin.mockClear();
+  mocks.appendAuditLog.mockClear();
+  mocks.createSession.mockClear();
+}
+
 describe("setup claim ownership", () => {
   beforeEach(() => {
-    state.configValues.clear();
-    state.consumeTokenResult = true;
-    state.limiterAllowed = true;
-    state.env.ORIGIN = "http://localhost:3000";
-
-    mocks.consumeBootstrapToken.mockClear();
-    mocks.getConfig.mockClear();
-    mocks.setConfig.mockClear();
-    mocks.setupLimiterCheck.mockClear();
-    mocks.requireSetupIncomplete.mockClear();
+    resetStateAndMocks();
   });
 
   it("marks claimActive on load when claim cookie matches stored proof", async () => {
@@ -231,7 +246,7 @@ describe("setup claim ownership", () => {
     } as unknown as Parameters<typeof claimInstance>[0]);
 
     expect(result).toEqual({ success: true });
-    expect(mocks.consumeBootstrapToken).toHaveBeenCalledWith("valid-token");
+    expect(mocks.validateBootstrapToken).toHaveBeenCalledWith("valid-token");
     expect(state.configValues.get(setupClaimedKey)).toBe("true");
     expect(state.configValues.get(setupClaimProofKey)).toBe(claimProof);
     expect(setCalls).toContainEqual(
@@ -268,7 +283,7 @@ describe("setup claim ownership", () => {
     } as unknown as Parameters<typeof claimInstance>[0]);
 
     expect(result).toEqual({ success: true });
-    expect(mocks.consumeBootstrapToken).toHaveBeenCalledWith("valid-token");
+    expect(mocks.validateBootstrapToken).toHaveBeenCalledWith("valid-token");
     expect(state.configValues.get(setupClaimProofKey)).toBe(rotatedProof);
     expect(setCalls).toContainEqual(
       expect.objectContaining({
@@ -281,12 +296,61 @@ describe("setup claim ownership", () => {
   });
 });
 
-describe("configurePlex oauth initiate origin selection", () => {
+describe("setDefaults", () => {
   beforeEach(() => {
-    state.configValues.clear();
+    resetStateAndMocks();
     state.configValues.set(setupClaimedKey, "true");
     state.configValues.set(setupClaimProofKey, "proof-123");
-    state.env.ORIGIN = "http://localhost:3000";
+  });
+
+  it("clears the bootstrap token after setup completes", async () => {
+    const { cookies, setCalls } = createCookies({ [setupClaimCookie]: "proof-123" });
+    const body = new FormData();
+    body.set("defaultGroupId", "10");
+    body.set("defaultProfileId", "20");
+    body.set("syncInterval", "15");
+    body.set("defaultProvisioningMode", "automatic");
+    body.set("adminUsername", "admin");
+    body.set("adminPassword", "passwordpassword");
+
+    const request = new Request("http://localhost/setup", { method: "POST", body });
+
+    const { actions } = await import("./+page.server");
+    const setDefaults = actions.setDefaults;
+    if (!setDefaults) {
+      throw new Error("setDefaults action is undefined");
+    }
+
+    await expect(
+      setDefaults({
+        request,
+        cookies,
+        getClientAddress: () => "127.0.0.1",
+      } as unknown as Parameters<typeof setDefaults>[0]),
+    ).rejects.toMatchObject({
+      status: 303,
+      location: "/dashboard",
+    });
+
+    expect(mocks.clearBootstrapToken).toHaveBeenCalledOnce();
+    expect(mocks.hashAdminPassword).toHaveBeenCalledWith("passwordpassword");
+    expect(mocks.createAdmin).toHaveBeenCalledWith("admin", "hashed-password");
+    expect(mocks.createSession).toHaveBeenCalledWith("admin", "admin", 3600);
+    expect(mocks.appendAuditLog).toHaveBeenCalledOnce();
+    expect(setCalls).toContainEqual(
+      expect.objectContaining({
+        name: "otpravkarr_session",
+        value: "session-id",
+      }),
+    );
+  });
+});
+
+describe("configurePlex oauth initiate origin selection", () => {
+  beforeEach(() => {
+    resetStateAndMocks();
+    state.configValues.set(setupClaimedKey, "true");
+    state.configValues.set(setupClaimProofKey, "proof-123");
   });
 
   it("uses ORIGIN when configured for OAuth forward URL", async () => {

@@ -5,9 +5,9 @@ declare global {
     // interface Error {}
     interface Locals {
       requestId: string;
-      session: { id: string; type: 'admin' | 'user'; userRef: string } | null;
+      session: { id: string; type: "admin" | "user"; userRef: string } | null;
       admin: { id: number; username: string } | null;
-      user: import('$lib/db/types').UserMapping | null;
+      user: import("$lib/db/types").UserMapping | null;
     }
     // interface PageData {}
     // interface PageState {}

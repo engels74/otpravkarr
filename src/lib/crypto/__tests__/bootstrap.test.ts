@@ -2,10 +2,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   _getActiveTokenForTesting,
   _resetForTesting,
+  clearBootstrapToken,
   consumeBootstrapToken,
   createBootstrapToken,
   generateBootstrapToken,
   isBootstrapTokenExpired,
+  validateBootstrapToken,
 } from "../bootstrap";
 
 afterEach(() => {
@@ -67,6 +69,20 @@ describe("createBootstrapToken", () => {
 
     expect(first).not.toBe(second);
     expect(_getActiveTokenForTesting()?.value).toBe(second);
+  });
+});
+
+describe("validateBootstrapToken", () => {
+  it("returns true for the correct token without consuming it", () => {
+    const token = createBootstrapToken();
+    expect(validateBootstrapToken(token)).toBe(true);
+    expect(_getActiveTokenForTesting()?.value).toBe(token);
+  });
+
+  it("returns false for an incorrect token and keeps the active token", () => {
+    createBootstrapToken();
+    expect(validateBootstrapToken("wrong-token-here")).toBe(false);
+    expect(_getActiveTokenForTesting()).not.toBeNull();
   });
 });
 
@@ -141,5 +157,13 @@ describe("isBootstrapTokenExpired", () => {
     const token = createBootstrapToken();
     consumeBootstrapToken(token);
     expect(isBootstrapTokenExpired()).toBe(true);
+  });
+});
+
+describe("clearBootstrapToken", () => {
+  it("removes the active token", () => {
+    createBootstrapToken();
+    clearBootstrapToken();
+    expect(_getActiveTokenForTesting()).toBeNull();
   });
 });

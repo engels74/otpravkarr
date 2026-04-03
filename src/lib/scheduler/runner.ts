@@ -98,10 +98,17 @@ export class Scheduler {
     if (!this.started) return;
 
     const now = Date.now();
-    const nextScheduledAt = entry.nextScheduledAt ?? now;
-    const nextFireAt = nextScheduledAt + entry.job.interval;
-    const delay = Math.max(0, nextFireAt - now);
+    const lastScheduled = entry.nextScheduledAt ?? now;
+    let nextFireAt = lastScheduled + entry.job.interval;
 
+    // If we've fallen behind, skip ahead to the next future tick
+    // instead of rapidly firing to "catch up"
+    if (nextFireAt <= now) {
+      const missedTicks = Math.ceil((now - nextFireAt) / entry.job.interval);
+      nextFireAt += missedTicks * entry.job.interval;
+    }
+
+    const delay = nextFireAt - now;
     entry.nextScheduledAt = nextFireAt;
     entry.timer = setTimeout(() => this.tick(entry), delay);
   }

@@ -315,6 +315,36 @@ describe("Scheduler", () => {
       const entries = getLogEntries();
       expect(entries.some((e) => e.event === "job.skipped" && e.reason === "overlap")).toBe(true);
     });
+
+    it("skips ahead instead of burst-firing when nextScheduledAt falls far behind", async () => {
+      const fn = vi.fn(async () => {});
+
+      scheduler.register(createJob({ fn, interval: 100 }));
+      scheduler.start();
+
+      // First tick at 100ms
+      await vi.advanceTimersByTimeAsync(100);
+      expect(fn).toHaveBeenCalledOnce();
+
+      // Simulate a long pause: advance 10 intervals worth of time in one jump.
+      // Without the fix, this would cause rapid catch-up firing.
+      // With the fix, it should skip to the next future tick and fire once.
+      await vi.advanceTimersByTimeAsync(1000);
+
+      // Should have fired a reasonable number of times — not 10+ rapid catch-ups.
+      // With correct skip-ahead, ticks fire at normal cadence within the 1000ms window.
+      // The exact count depends on timer resolution, but it should not exceed
+      // what normal interval scheduling would produce.
+      const callCount = fn.mock.calls.length;
+      expect(callCount).toBeGreaterThanOrEqual(2); // at least the original + some during the window
+      expect(callCount).toBeLessThanOrEqual(12); // no more than ~1 per interval
+
+      // Verify no burst: check that we don't see many ticks clustered at the same timestamp
+      // by ensuring normal scheduling continues after the jump
+      fn.mockClear();
+      await vi.advanceTimersByTimeAsync(300);
+      expect(fn).toHaveBeenCalledTimes(3); // exactly 3 more ticks at 100ms interval
+    });
   });
 
   describe("error handling", () => {

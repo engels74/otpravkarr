@@ -50,9 +50,19 @@ export function createHealthJob(defaultIntervalMs = 5 * 60 * 1000): Job {
       const now = new Date().toISOString();
 
       // --- Plex check ---
-      const plexUrl = await getConfig("plex_server_url");
-      const plexToken = await getConfig("plex_admin_token");
-      const plexMachineId = await getConfig("plex_machine_id");
+      let plexUrl: string | null = null;
+      let plexToken: string | null = null;
+      let plexMachineId: string | null = null;
+      try {
+        plexUrl = await getConfig("plex_server_url");
+        plexToken = await getConfig("plex_admin_token");
+        plexMachineId = await getConfig("plex_machine_id");
+      } catch (error) {
+        log("config.error", {
+          check: "plex",
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
 
       if (plexUrl && plexToken && plexMachineId) {
         try {
@@ -94,8 +104,17 @@ export function createHealthJob(defaultIntervalMs = 5 * 60 * 1000): Job {
       }
 
       // --- Dispatcharr check ---
-      const dispatcharrUrl = await getConfig("dispatcharr_url");
-      const dispatcharrApiKey = await getConfig("dispatcharr_api_key");
+      let dispatcharrUrl: string | null = null;
+      let dispatcharrApiKey: string | null = null;
+      try {
+        dispatcharrUrl = await getConfig("dispatcharr_url");
+        dispatcharrApiKey = await getConfig("dispatcharr_api_key");
+      } catch (error) {
+        log("config.error", {
+          check: "dispatcharr",
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
 
       if (dispatcharrUrl && dispatcharrApiKey) {
         try {
@@ -131,6 +150,8 @@ export function createHealthJob(defaultIntervalMs = 5 * 60 * 1000): Job {
               }
             }
           } else {
+            // Defensive: checkHealth() currently always returns ok:true, but this
+            // handles a potential future API change where ok:false is returned.
             currentHealth.dispatcharr = { reachable: false, authValid: false, lastChecked: now };
             log("dispatcharr.error", { error: result.message });
             try {
@@ -180,6 +201,21 @@ export function createHealthJob(defaultIntervalMs = 5 * 60 * 1000): Job {
         } else {
           currentHealth.database = { status: "unhealthy", lastChecked: now };
           log("database.readback_mismatch", { expected: now, got: row?.ts });
+          try {
+            appendAuditLog({
+              action: AuditAction.HEALTH_CHECK_FAILED,
+              detail: {
+                check: "database",
+                error: "readback_mismatch",
+                expected: now,
+                got: row?.ts,
+              },
+            });
+          } catch (auditError) {
+            log("audit.error", {
+              error: auditError instanceof Error ? auditError.message : String(auditError),
+            });
+          }
         }
       } catch (error) {
         currentHealth.database = { status: "unhealthy", lastChecked: now };

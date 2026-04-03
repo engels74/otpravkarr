@@ -24,11 +24,21 @@ export function createSyncJob(defaultIntervalMs = DEFAULT_INTERVAL_MS): Job {
     name: JOB_NAME,
     interval: defaultIntervalMs,
     fn: async () => {
-      const [dispatcharrUrl, apiKey, plexAdminToken] = await Promise.all([
-        getConfig("dispatcharr_url"),
-        getConfig("dispatcharr_api_key"),
-        getConfig("plex_admin_token"),
-      ]);
+      let dispatcharrUrl: string | null = null;
+      let apiKey: string | null = null;
+      let plexAdminToken: string | null = null;
+      try {
+        [dispatcharrUrl, apiKey, plexAdminToken] = await Promise.all([
+          getConfig("dispatcharr_url"),
+          getConfig("dispatcharr_api_key"),
+          getConfig("plex_admin_token"),
+        ]);
+      } catch (error) {
+        log("config.error", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return;
+      }
 
       if (!dispatcharrUrl || !apiKey || !plexAdminToken) {
         log("sync.skipped", {

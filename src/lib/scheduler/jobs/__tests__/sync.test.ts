@@ -164,6 +164,20 @@ describe("sync job fn", () => {
     ]);
   });
 
+  it("getConfig throws: logs config.error and returns early without calling reconcileSync", async () => {
+    mockGetConfig.mockRejectedValue(new Error("DB connection lost"));
+
+    const job = createSyncJob();
+    await expect(job.fn()).resolves.toBeUndefined();
+
+    expect(mockReconcileSync).not.toHaveBeenCalled();
+
+    const logs = getLogEntries();
+    const configErrorLog = logs.find((l) => l.event === "config.error");
+    expect(configErrorLog).toBeDefined();
+    expect(configErrorLog!.error).toBe("DB connection lost");
+  });
+
   it("reconcileSync throws: error caught and logged, no crash", async () => {
     mockConfigWith(FULL_CONFIG);
     mockReconcileSync.mockRejectedValueOnce(new Error("Network failure"));

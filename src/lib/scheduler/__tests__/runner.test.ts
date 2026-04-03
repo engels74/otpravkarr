@@ -83,6 +83,18 @@ describe("Scheduler", () => {
       expect(fn1).not.toHaveBeenCalled();
     });
 
+    it("keeps the existing job when replacement validation fails", async () => {
+      const fn = vi.fn(async () => {});
+
+      scheduler.register(createJob({ fn, interval: 100 }));
+      expect(() => scheduler.register(createJob({ interval: 0 }))).toThrow("invalid interval");
+
+      scheduler.start();
+      await vi.advanceTimersByTimeAsync(100);
+
+      expect(fn).toHaveBeenCalledOnce();
+    });
+
     it("zombie guard: old timer callback does not re-schedule after re-registration", async () => {
       const fn1 = vi.fn(async () => {});
       const fn2 = vi.fn(async () => {});

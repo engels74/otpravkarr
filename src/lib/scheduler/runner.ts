@@ -40,13 +40,6 @@ export class Scheduler {
   private generationCounter = 0;
 
   register(job: Job): void {
-    const existing = this.jobs.get(job.name);
-    if (existing) {
-      if (existing.timer !== null) {
-        clearTimeout(existing.timer);
-      }
-      this.jobs.delete(job.name);
-    }
     if (!Number.isFinite(job.interval) || job.interval <= 0) {
       throw new Error(
         `Job "${job.name}" has invalid interval ${job.interval}ms (must be a finite number > 0)`,
@@ -56,6 +49,14 @@ export class Scheduler {
       throw new Error(
         `Job "${job.name}" has interval ${job.interval}ms exceeding maximum safe timeout (${MAX_SAFE_TIMEOUT}ms)`,
       );
+    }
+
+    const existing = this.jobs.get(job.name);
+    if (existing) {
+      if (existing.timer !== null) {
+        clearTimeout(existing.timer);
+      }
+      this.jobs.delete(job.name);
     }
     const entry: JobEntry = {
       job,

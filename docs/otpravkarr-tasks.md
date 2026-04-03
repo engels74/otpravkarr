@@ -738,41 +738,41 @@ All sensitive data handling depends on this module. It must be built and tested 
 
 ### 10.1 — Setup page server load (`src/routes/setup/+page.server.ts`)
 
-- [ ] `load` function:
-  - [ ] Call `requireSetupIncomplete()` — returns 404 if setup already done
-  - [ ] Check for `?token=` query param
-  - [ ] Return `{ tokenProvided: boolean; tokenFromUrl: string | null }`
-- [ ] Form actions:
-  - [ ] **`claimInstance`**: validate bootstrap token (rate-limited to 5 attempts)
-  - [ ] **`createAdmin`**: validate username/password, hash with argon2id, save to `admin_accounts`
-  - [ ] **`configurePlex`**: accept Plex token or initiate OAuth flow, validate connection, save encrypted token and server info to `config`
-  - [ ] **`configureDispatcharr`**: accept URL + API key, validate via GET `/api/accounts/users/?page=1&page_size=1`, save encrypted key to `config`
-  - [ ] **`configureOrigin`**: save allowed origins to `config`, auto-suggest from current request origin
-  - [ ] **`setDefaults`**: fetch Dispatcharr groups (GET `/api/accounts/groups/`) and profiles (GET `/api/channels/profiles/`), save selections to `config`
+- [x] `load` function:
+  - [x] Call `requireSetupIncomplete()` — returns 404 if setup already done
+  - [x] Check for `?token=` query param
+  - [x] Return `{ tokenProvided: boolean; tokenFromUrl: string | null }`
+- [x] Form actions:
+  - [x] **`claimInstance`**: validate bootstrap token (rate-limited to 5 attempts)
+  - [x] **`createAdmin`**: validate username/password, hash with argon2id, save to `admin_accounts`
+  - [x] **`configurePlex`**: accept Plex token or initiate OAuth flow, validate connection, save encrypted token and server info to `config`
+  - [x] **`configureDispatcharr`**: accept URL + API key, validate via GET `/api/accounts/users/?page=1&page_size=1`, save encrypted key to `config`
+  - [x] **`configureOrigin`**: save allowed origins to `config`, auto-suggest from current request origin
+  - [x] **`setDefaults`**: fetch Dispatcharr groups (GET `/api/accounts/groups/`) and profiles (GET `/api/channels/profiles/`), save selections to `config`
 
 ### 10.2 — Setup page UI (`src/routes/setup/+page.svelte`)
 
-- [ ] Multi-step wizard component using Svelte 5 runes:
-  - [ ] `let step = $state(0)` — tracks current step (0-5)
-  - [ ] Each step rendered conditionally with `{#if step === N}` blocks
-- [ ] **Step 0 — Claim Instance**: token input field (pre-filled from URL param), submit button
-- [ ] **Step 1 — Create Admin**: username + password + confirm password fields, validation
-- [ ] **Step 2 — Plex Connection**: two paths — paste token or "Sign in with Plex" OAuth button
-  - [ ] OAuth path: redirect to Plex login URI, poll with `webLoginCheck`
-  - [ ] Token path: input field, validate on submit
-  - [ ] Show server info on success (friendly name, machine identifier)
-- [ ] **Step 3 — Dispatcharr Connection**: URL + API key fields, validate on submit
-  - [ ] Show connection status, handle "Dispatcharr not initialized" case with guidance
-  - [ ] Run XC surface discovery probe and show results
-- [ ] **Step 4 — Origin/CSRF**: input for allowed origins, pre-filled with current origin
-- [ ] **Step 5 — Defaults**: dropdowns for default group, default profile, sync interval, provisioning mode
-- [ ] On completion:
-  - [ ] Invalidate bootstrap token
-  - [ ] Create admin session
-  - [ ] Redirect to `/dashboard`
-  - [ ] Append audit log `setup.completed`
-- [ ] Use shadcn-svelte components: `Card`, `Button`, `Input`, `Label`, `Alert`, `Badge`, `Separator`
-- [ ] Use SvelteKit form actions with `use:enhance` for progressive enhancement
+- [x] Multi-step wizard component using Svelte 5 runes:
+  - [x] `let step = $state(0)` — tracks current step (0-5)
+  - [x] Each step rendered conditionally with `{#if step === N}` blocks
+- [x] **Step 0 — Claim Instance**: token input field (pre-filled from URL param), submit button
+- [x] **Step 1 — Create Admin**: username + password + confirm password fields, validation
+- [x] **Step 2 — Plex Connection**: two paths — paste token or "Sign in with Plex" OAuth button
+  - [x] OAuth path: redirect to Plex login URI, poll with `webLoginCheck`
+  - [x] Token path: input field, validate on submit
+  - [x] Show server info on success (friendly name, machine identifier)
+- [x] **Step 3 — Dispatcharr Connection**: URL + API key fields, validate on submit
+  - [x] Show connection status, handle "Dispatcharr not initialized" case with guidance
+  - [x] Run XC surface discovery probe and show results
+- [x] **Step 4 — Origin/CSRF**: input for allowed origins, pre-filled with current origin
+- [x] **Step 5 — Defaults**: dropdowns for default group, default profile, sync interval, provisioning mode
+- [x] On completion:
+  - [x] Invalidate bootstrap token
+  - [x] Create admin session
+  - [x] Redirect to `/dashboard`
+  - [x] Append audit log `setup.completed`
+- [x] Use shadcn-svelte components: `Card`, `Button`, `Input`, `Label`, `Alert`, `Badge`, `Separator`
+- [x] Use SvelteKit form actions with `use:enhance` for progressive enhancement
 
 ---
 

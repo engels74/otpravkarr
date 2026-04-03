@@ -1,4 +1,5 @@
 import { type Cookies, fail, redirect } from "@sveltejs/kit";
+import { env } from "$env/dynamic/private";
 import { consumeBootstrapToken } from "$lib/crypto/bootstrap";
 import { hashAdminPassword } from "$lib/crypto/passwords";
 import { createAdmin as insertAdmin } from "$lib/db/repositories/admin";
@@ -182,7 +183,10 @@ export const actions: Actions = {
       }
 
       if (plexMode === "oauth_initiate") {
-        const forwardUrl = `${url.origin}/setup`;
+        const configuredOrigin = env.ORIGIN?.trim();
+        const forwardOrigin =
+          configuredOrigin && configuredOrigin.length > 0 ? configuredOrigin : url.origin;
+        const forwardUrl = `${forwardOrigin.replace(/\/$/, "")}/setup`;
         const result = await initiateOAuth(forwardUrl);
 
         return {

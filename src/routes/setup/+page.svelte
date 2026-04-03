@@ -17,13 +17,16 @@ type SetupPageData = {
   tokenFromUrl: string | null;
 };
 
+type StepErrors = Record<string, string>;
+const ERROR_CODE_PATTERN = /^[a-z0-9_]+$/;
+
 let { data }: { data: SetupPageData } = $props();
 const initialStep = untrack(() => (data.claimActive ? 1 : 0));
 
 // ── Wizard state ────────────────────────────────────────────────
 let step = $state(initialStep);
 let submitting = $state(false);
-let stepErrors = $state<Record<string, string>>({});
+let stepErrors = $state<StepErrors>({});
 
 // ── Step data ───────────────────────────────────────────────────
 let adminUsername = $state("");
@@ -87,6 +90,30 @@ $effect(() => {
 });
 
 // ── Form enhancement ────────────────────────────────────────────
+function normalizeStepErrors(data: Record<string, unknown>): StepErrors {
+  const normalized: StepErrors = {};
+
+  for (const [key, value] of Object.entries(data)) {
+    if (typeof value === "string") {
+      normalized[key] = value;
+    }
+  }
+
+  const error = typeof data.error === "string" ? data.error : undefined;
+  const field = typeof data.field === "string" ? data.field : undefined;
+
+  if (error) {
+    if (!ERROR_CODE_PATTERN.test(error)) {
+      normalized.message ??= error;
+    }
+    if (field) {
+      normalized[field] = error;
+    }
+  }
+
+  return normalized;
+}
+
 function enhanceHandler(nextStep?: number) {
   return () => {
     submitting = true;
@@ -154,7 +181,7 @@ function enhanceHandler(nextStep?: number) {
         // Fallback advance
         if (nextStep !== undefined) step = nextStep;
       } else if (result.type === "failure" && result.data) {
-        stepErrors = result.data as Record<string, string>;
+        stepErrors = normalizeStepErrors(result.data as Record<string, unknown>);
       } else if (result.type === "redirect") {
         await update();
       }
@@ -238,7 +265,7 @@ function enhanceHandler(nextStep?: number) {
           </Card.Description>
         </Card.Header>
         <Card.Content>
-          {#if hasError}
+          {#if hasError && stepErrors.error !== 'rate_limited'}
             <Alert.Root variant="destructive" class="mb-4">
               <Alert.Title>Verification failed</Alert.Title>
               <Alert.Description>

@@ -6,6 +6,9 @@ const state = vi.hoisted(() => ({
   configValues: new Map<string, string>(),
   consumeTokenResult: true,
   limiterAllowed: true,
+  env: {
+    ORIGIN: "http://localhost:3000",
+  },
 }));
 
 const mocks = vi.hoisted(() => ({
@@ -20,6 +23,10 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("$lib/crypto/bootstrap", () => ({
   consumeBootstrapToken: mocks.consumeBootstrapToken,
+}));
+
+vi.mock("$env/dynamic/private", () => ({
+  env: state.env,
 }));
 
 vi.mock("$lib/crypto/passwords", () => ({
@@ -146,6 +153,7 @@ describe("setup claim ownership", () => {
     state.configValues.clear();
     state.consumeTokenResult = true;
     state.limiterAllowed = true;
+    state.env.ORIGIN = "http://localhost:3000";
 
     mocks.consumeBootstrapToken.mockClear();
     mocks.getConfig.mockClear();
@@ -270,5 +278,77 @@ describe("setup claim ownership", () => {
     );
 
     randomUuidSpy.mockRestore();
+  });
+});
+
+describe("configurePlex oauth initiate origin selection", () => {
+  beforeEach(() => {
+    state.configValues.clear();
+    state.configValues.set(setupClaimedKey, "true");
+    state.configValues.set(setupClaimProofKey, "proof-123");
+    state.env.ORIGIN = "http://localhost:3000";
+  });
+
+  it("uses ORIGIN when configured for OAuth forward URL", async () => {
+    state.env.ORIGIN = "https://public.example.com";
+    const { cookies } = createCookies({ [setupClaimCookie]: "proof-123" });
+
+    const body = new FormData();
+    body.set("plexMode", "oauth_initiate");
+    const request = new Request("http://127.0.0.1:3000/setup", { method: "POST", body });
+
+    const oauth = await import("$lib/plex/oauth");
+    vi.mocked(oauth.initiateOAuth).mockResolvedValue({
+      id: "oauth-id",
+      uri: "https://app.plex.tv/auth",
+    });
+
+    const { actions } = await import("./+page.server");
+    const configurePlex = actions.configurePlex;
+    if (!configurePlex) {
+      throw new Error("configurePlex action is undefined");
+    }
+
+    const result = await configurePlex({
+      request,
+      url: new URL("http://127.0.0.1:3000/setup"),
+      cookies,
+    } as unknown as Parameters<typeof configurePlex>[0]);
+
+    expect(result).toMatchObject({
+      success: true,
+      oauthId: "oauth-id",
+      oauthUri: "https://app.plex.tv/auth",
+    });
+    expect(oauth.initiateOAuth).toHaveBeenCalledWith("https://public.example.com/setup");
+  });
+
+  it("falls back to request origin when ORIGIN is unset", async () => {
+    state.env.ORIGIN = "";
+    const { cookies } = createCookies({ [setupClaimCookie]: "proof-123" });
+
+    const body = new FormData();
+    body.set("plexMode", "oauth_initiate");
+    const request = new Request("http://127.0.0.1:3000/setup", { method: "POST", body });
+
+    const oauth = await import("$lib/plex/oauth");
+    vi.mocked(oauth.initiateOAuth).mockResolvedValue({
+      id: "oauth-id",
+      uri: "https://app.plex.tv/auth",
+    });
+
+    const { actions } = await import("./+page.server");
+    const configurePlex = actions.configurePlex;
+    if (!configurePlex) {
+      throw new Error("configurePlex action is undefined");
+    }
+
+    await configurePlex({
+      request,
+      url: new URL("http://127.0.0.1:3000/setup"),
+      cookies,
+    } as unknown as Parameters<typeof configurePlex>[0]);
+
+    expect(oauth.initiateOAuth).toHaveBeenCalledWith("http://127.0.0.1:3000/setup");
   });
 });

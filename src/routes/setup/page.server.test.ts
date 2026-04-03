@@ -129,6 +129,7 @@ const setupClaimProofKey = "setup_claim_proof";
 const setupClaimedAtKey = "setup_claimed_at";
 const setupClaimCookie = "otpravkarr_setup_claim";
 const setupClaimTtlMs = 10 * 60 * 1000;
+const postSetupRedirectLocation = "/dashboard";
 const setupPrerequisiteConfig = {
   plex_server_url: "http://plex.local",
   plex_admin_token: "plex-admin-token",
@@ -444,7 +445,7 @@ describe("setDefaults", () => {
       } as unknown as Parameters<typeof setDefaults>[0]),
     ).rejects.toMatchObject({
       status: 303,
-      location: "/dashboard",
+      location: postSetupRedirectLocation,
     });
 
     expect(mocks.clearBootstrapToken).toHaveBeenCalledOnce();

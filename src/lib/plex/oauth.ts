@@ -9,9 +9,19 @@ interface PendingLogin {
   createdAt: number;
 }
 
+interface CompletedLogin {
+  identity: PlexIdentity;
+  createdAt: number;
+}
+
 const pending = new Map<string, PendingLogin>();
+const completed = new Map<string, CompletedLogin>();
 
 function isExpired(entry: PendingLogin): boolean {
+  return Date.now() - entry.createdAt > EXPIRY_MS;
+}
+
+function isCompletedExpired(entry: CompletedLogin): boolean {
   return Date.now() - entry.createdAt > EXPIRY_MS;
 }
 
@@ -19,6 +29,9 @@ export async function initiateOAuth(forwardUrl: string): Promise<{ id: string; u
   // Opportunistic cleanup of expired sessions to bound memory growth
   for (const [key, entry] of pending) {
     if (isExpired(entry)) pending.delete(key);
+  }
+  for (const [key, entry] of completed) {
+    if (isCompletedExpired(entry)) completed.delete(key);
   }
 
   try {
@@ -45,14 +58,21 @@ export async function initiateOAuth(forwardUrl: string): Promise<{ id: string; u
 }
 
 export async function completeOAuth(id: string, timeoutSeconds?: number): Promise<PlexIdentity> {
+  const cached = completed.get(id);
+  if (cached) {
+    if (isCompletedExpired(cached)) {
+      completed.delete(id);
+    } else {
+      return cached.identity;
+    }
+  }
+
   const entry = pending.get(id);
   if (!entry || isExpired(entry)) {
     pending.delete(id);
+    completed.delete(id);
     throw new PlexAuthError("OAuth session not found or expired");
   }
-
-  // Remove immediately so concurrent calls cannot reuse the same session
-  pending.delete(id);
 
   try {
     const account = await MyPlexAccount.webLoginCheck(
@@ -67,7 +87,7 @@ export async function completeOAuth(id: string, timeoutSeconds?: number): Promis
       throw new PlexAuthError("OAuth completed but account id is missing or invalid");
     }
 
-    return {
+    const identity = {
       id: account.id,
       uuid: account.uuid ?? "",
       username: account.username ?? "",
@@ -75,6 +95,11 @@ export async function completeOAuth(id: string, timeoutSeconds?: number): Promis
       thumb: account.thumb ?? "",
       authenticationToken: account.authenticationToken,
     };
+
+    pending.delete(id);
+    completed.set(id, { identity, createdAt: Date.now() });
+
+    return identity;
   } catch (error: unknown) {
     if (error instanceof PlexAuthError) {
       throw error;
@@ -89,10 +114,16 @@ export async function completeOAuth(id: string, timeoutSeconds?: number): Promis
 }
 
 export function getPendingOAuth(id: string): boolean {
+  const cached = completed.get(id);
+  if (cached && isCompletedExpired(cached)) {
+    completed.delete(id);
+  }
+
   const entry = pending.get(id);
   if (!entry) return false;
   if (isExpired(entry)) {
     pending.delete(id);
+    completed.delete(id);
     return false;
   }
   return true;
@@ -100,12 +131,18 @@ export function getPendingOAuth(id: string): boolean {
 
 export function removePendingOAuth(id: string): void {
   pending.delete(id);
+  completed.delete(id);
 }
 
 export function cleanExpiredOAuth(): void {
   pending.forEach((entry, id) => {
     if (isExpired(entry)) {
       pending.delete(id);
+    }
+  });
+  completed.forEach((entry, id) => {
+    if (isCompletedExpired(entry)) {
+      completed.delete(id);
     }
   });
 }

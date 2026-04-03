@@ -32,6 +32,7 @@ const SETUP_CLAIMED_AT_CONFIG_KEY = "setup_claimed_at";
 const SETUP_CLAIMED_VALUE = "true";
 const SETUP_UNCLAIMED_VALUE = "false";
 const SETUP_CLAIM_COOKIE_NAME = "otpravkarr_setup_claim";
+const POST_SETUP_REDIRECT_PATH = "/dashboard";
 // Keep claim TTL shorter than bootstrap token TTL (15m) so expired claims can be reclaimed.
 const SETUP_CLAIM_TTL_SECONDS = 10 * 60;
 const SETUP_CLAIM_TTL_MS = SETUP_CLAIM_TTL_SECONDS * 1000;
@@ -443,6 +444,6 @@ export const actions: Actions = {
       ipAddress: getClientAddress(),
     });
 
-    redirect(303, "/dashboard");
+    redirect(303, POST_SETUP_REDIRECT_PATH);
   },
 };

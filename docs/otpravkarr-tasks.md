@@ -325,6 +325,7 @@ All sensitive data handling depends on this module. It must be built and tested 
     USER_DISABLED: 'user.disabled',
     USER_CREDENTIALS_ROTATED: 'user.credentials_rotated',
     SYNC_COMPLETED: 'sync.completed',
+    SYNC_FAILED: 'sync.failed',
     CONFIG_CHANGED: 'config.changed',
     HEALTH_CHECK_FAILED: 'health.check_failed',
   } as const;
@@ -636,48 +637,48 @@ All sensitive data handling depends on this module. It must be built and tested 
 
 ### 8.1 — Job runner (`src/lib/scheduler/runner.ts`)
 
-- [ ] Define `Job` type: `{ name: string; interval: number; fn: () => Promise<void> }`
-- [ ] Implement `Scheduler` class:
-  - [ ] `register(job: Job): void` — add job to registry
-  - [ ] `start(): void` — begin all intervals
-  - [ ] `stop(): void` — clear all intervals
-  - [ ] `setInterval`-based with drift correction
-  - [ ] Overlap guard: if a job's `fn` is still running when next tick fires, skip
-  - [ ] Track last-run timestamp and duration per job
-- [ ] Export singleton `scheduler` instance
+- [x] Define `Job` type: `{ name: string; interval: number; fn: () => Promise<void> }`
+- [x] Implement `Scheduler` class:
+  - [x] `register(job: Job): void` — add job to registry
+  - [x] `start(): void` — begin all intervals
+  - [x] `stop(): void` — clear all intervals
+  - [x] Recursive `setTimeout`-based with drift correction
+  - [x] Overlap guard: if a job's `fn` is still running when next tick fires, skip
+  - [x] Track last-run timestamp and duration per job
+- [x] Export singleton `scheduler` instance
 - [ ] Start scheduler from `hooks.server.ts` on first request or server init
-- [ ] Write unit tests
+- [x] Write unit tests
 
 ### 8.2 — Sync job (`src/lib/scheduler/jobs/sync.ts`)
 
-- [ ] Import `reconcileSync` from `lib/bridge/lifecycle`
-- [ ] Export job definition: `{ name: 'plex-dispatcharr-sync', interval: configuredSyncInterval, fn: runSync }`
-- [ ] `runSync()`:
-  - [ ] Call `reconcileSync()`
-  - [ ] Log report to console and audit log
-  - [ ] On error: log error, append to audit log, do not crash
-- [ ] Default interval: 15 minutes (configurable via `config` table)
+- [x] Import `reconcileSync` from `lib/bridge/lifecycle`
+- [x] Export job definition: `{ name: 'plex-dispatcharr-sync', interval: configuredSyncInterval, fn: runSync }`
+- [x] `runSync()`:
+  - [x] Call `reconcileSync()`
+  - [x] Log report to console and audit log
+  - [x] On error: log error, append to audit log, do not crash
+- [x] Default interval: 15 minutes (configurable via `sync_interval_minutes` in config table)
 
 ### 8.3 — Health check job (`src/lib/scheduler/jobs/health.ts`)
 
-- [ ] Check Plex health via `lib/plex/client.checkServerHealth()`
-- [ ] Check Dispatcharr health via `lib/dispatcharr/endpoints/health.checkHealth()`
-- [ ] Check SQLite health via write-read cycle
-- [ ] Store results in module-level reactive state (accessible from admin dashboard)
-- [ ] On failure: append audit log entry `health.check_failed`
-- [ ] Default interval: 5 minutes
+- [x] Check Plex health via `lib/plex/client.checkServerHealth()`
+- [x] Check Dispatcharr health via `lib/dispatcharr/endpoints/health.checkHealth()`
+- [x] Check SQLite health via write-read cycle
+- [x] Store results in module-level reactive state (accessible from admin dashboard)
+- [x] On failure: append audit log entry `health.check_failed`
+- [x] Default interval: 5 minutes (hardcoded constructor default; does not yet read from config table)
 
 ### 8.4 — Session cleanup job (`src/lib/scheduler/jobs/cleanup.ts`)
 
-- [ ] Call `deleteExpiredSessions()` from session repository
-- [ ] Default interval: 30 minutes
-- [ ] Log count of deleted sessions
+- [x] Call `deleteExpiredSessions()` from session repository
+- [x] Default interval: 30 minutes (hardcoded constructor default)
+- [x] Log count of deleted sessions
 
 ### 8.5 — Audit log rotation job (`src/lib/scheduler/jobs/audit-rotation.ts`)
 
-- [ ] Delete audit log entries older than configured max age (default: 90 days)
-- [ ] Default interval: 24 hours
-- [ ] Log count of rotated entries
+- [x] Delete audit log entries older than configured max age (default: 90 days, reads `audit_retention_days` from config table)
+- [x] Default interval: 24 hours (hardcoded constructor default)
+- [x] Log count of rotated entries
 
 ---
 
@@ -1154,7 +1155,7 @@ The phases above are ordered by dependency. The recommended implementation seque
 | `default_profile_id` | No | Default channel profile ID (nullable) |
 | `default_provisioning_mode` | No | `automatic` or `self_managed` |
 | `sync_interval_minutes` | No | Sync job interval (default: 15) |
-| `health_interval_minutes` | No | Health check interval (default: 5) |
+| `health_interval_minutes` | No | Health check interval (default: 5) — planned but not yet read by health job |
 | `allowed_origins` | No | JSON array of allowed CSRF origins |
 | `xc_url_template` | No | Configurable XC URL template |
 | `admin_session_ttl_seconds` | No | Admin session TTL (default: 3600) |

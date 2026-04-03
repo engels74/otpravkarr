@@ -12,7 +12,7 @@ const state = vi.hoisted(() => ({
 }));
 
 const mocks = vi.hoisted(() => ({
-  consumeBootstrapToken: vi.fn((_: string) => state.validateTokenResult),
+  validateBootstrapToken: vi.fn((_: string) => state.validateTokenResult),
   clearBootstrapToken: vi.fn(),
   getConfig: vi.fn(async (key: string) => state.configValues.get(key) ?? null),
   setConfig: vi.fn(async (key: string, value: string) => {
@@ -29,7 +29,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("$lib/crypto/bootstrap", () => ({
   clearBootstrapToken: mocks.clearBootstrapToken,
-  consumeBootstrapToken: mocks.consumeBootstrapToken,
+  validateBootstrapToken: mocks.validateBootstrapToken,
 }));
 
 vi.mock("$env/dynamic/private", () => ({
@@ -182,7 +182,7 @@ function resetStateAndMocks() {
   state.limiterAllowed = true;
   state.env.ORIGIN = "http://localhost:3000";
 
-  mocks.consumeBootstrapToken.mockClear();
+  mocks.validateBootstrapToken.mockClear();
   mocks.clearBootstrapToken.mockClear();
   mocks.getConfig.mockClear();
   mocks.setConfig.mockClear();
@@ -271,7 +271,7 @@ describe("setup claim ownership", () => {
     } as unknown as Parameters<typeof claimInstance>[0]);
 
     expect(result).toEqual({ success: true });
-    expect(mocks.consumeBootstrapToken).toHaveBeenCalledWith("valid-token");
+    expect(mocks.validateBootstrapToken).toHaveBeenCalledWith("valid-token");
     expect(state.configValues.get(setupClaimedKey)).toBe("true");
     expect(state.configValues.get(setupClaimProofKey)).toBe(claimProof);
     expect(Number(state.configValues.get(setupClaimedAtKey))).toBeGreaterThan(0);
@@ -314,10 +314,10 @@ describe("setup claim ownership", () => {
         value: "proof-123",
       }),
     );
-    expect(mocks.consumeBootstrapToken).not.toHaveBeenCalled();
+    expect(mocks.validateBootstrapToken).not.toHaveBeenCalled();
   });
 
-  it("rejects reclaiming setup with a consumed bootstrap token when the claim cookie is missing", async () => {
+  it("rejects reclaiming setup when the bootstrap token is invalid and the claim cookie is missing", async () => {
     state.configValues.set(setupClaimedKey, "true");
     state.configValues.set(setupClaimProofKey, "owner-proof");
     state.configValues.set(setupClaimedAtKey, String(Date.now()));
@@ -344,51 +344,123 @@ describe("setup claim ownership", () => {
       status: 400,
       data: { error: "invalid_token" },
     });
-    expect(mocks.consumeBootstrapToken).toHaveBeenCalledWith("valid-token");
+    expect(mocks.validateBootstrapToken).toHaveBeenCalledWith("valid-token");
     expect(state.configValues.get(setupClaimProofKey)).toBe("owner-proof");
     expect(setCalls).toHaveLength(0);
   });
 
-  it("rejects reclaiming setup with a consumed bootstrap token after the claim expires", async () => {
+  it("allows reclaiming setup after the claim expires when the bootstrap token is still valid", async () => {
+    const claimProof = "22222222-2222-2222-2222-222222222222";
+    const randomUuidSpy = vi.spyOn(crypto, "randomUUID").mockReturnValue(claimProof);
+    try {
+      state.configValues.set(setupClaimedKey, "true");
+      state.configValues.set(setupClaimProofKey, "owner-proof");
+      const staleClaimedAt = Date.now() - setupClaimTtlMs - 1;
+      state.configValues.set(setupClaimedAtKey, String(staleClaimedAt));
+      const { cookies, setCalls } = createCookies({ [setupClaimCookie]: "owner-proof" });
+
+      const body = new FormData();
+      body.set("token", "valid-token");
+      const request = new Request("http://localhost/setup", { method: "POST", body });
+
+      const { load, actions } = await import("./+page.server");
+      const loadResult = await load({
+        url: new URL("http://localhost/setup"),
+        cookies,
+      } as unknown as Parameters<typeof load>[0]);
+      expect(loadResult).toMatchObject({
+        claimActive: false,
+      });
+
+      const claimInstance = actions.claimInstance;
+      if (!claimInstance) {
+        throw new Error("claimInstance action is undefined");
+      }
+
+      const result = await claimInstance({
+        request,
+        getClientAddress: () => "127.0.0.1",
+        cookies,
+      } as unknown as Parameters<typeof claimInstance>[0]);
+
+      expect(result).toEqual({ success: true });
+      expect(mocks.validateBootstrapToken).toHaveBeenCalledWith("valid-token");
+      expect(state.configValues.get(setupClaimProofKey)).toBe(claimProof);
+      expect(Number(state.configValues.get(setupClaimedAtKey))).toBeGreaterThan(staleClaimedAt);
+      expect(setCalls).toContainEqual(
+        expect.objectContaining({
+          name: setupClaimCookie,
+          value: claimProof,
+        }),
+      );
+    } finally {
+      randomUuidSpy.mockRestore();
+    }
+  });
+
+  it("allows recovery after admin creation when setup is interrupted", async () => {
     state.configValues.set(setupClaimedKey, "true");
     state.configValues.set(setupClaimProofKey, "owner-proof");
-    const staleClaimedAt = Date.now() - setupClaimTtlMs - 1;
-    state.configValues.set(setupClaimedAtKey, String(staleClaimedAt));
-    state.validateTokenResult = false;
-    const { cookies, setCalls } = createCookies({ [setupClaimCookie]: "owner-proof" });
+    state.configValues.set(setupClaimedAtKey, String(Date.now()));
 
-    const body = new FormData();
-    body.set("token", "valid-token");
-    const request = new Request("http://localhost/setup", { method: "POST", body });
-
-    const { load, actions } = await import("./+page.server");
-    const loadResult = await load({
-      url: new URL("http://localhost/setup"),
-      cookies,
-    } as unknown as Parameters<typeof load>[0]);
-    expect(loadResult).toMatchObject({
-      claimActive: false,
-    });
-
+    const { actions } = await import("./+page.server");
+    const createAdmin = actions.createAdmin;
     const claimInstance = actions.claimInstance;
-    if (!claimInstance) {
-      throw new Error("claimInstance action is undefined");
+    const configureOrigin = actions.configureOrigin;
+    if (!createAdmin || !claimInstance || !configureOrigin) {
+      throw new Error("required setup actions are undefined");
     }
 
-    const result = await claimInstance({
-      request,
-      getClientAddress: () => "127.0.0.1",
-      cookies,
-    } as unknown as Parameters<typeof claimInstance>[0]);
-
-    expect(result).toMatchObject({
-      status: 400,
-      data: { error: "invalid_token" },
+    const { cookies: ownerCookies } = createCookies({ [setupClaimCookie]: "owner-proof" });
+    const createAdminBody = new FormData();
+    createAdminBody.set("username", "admin");
+    createAdminBody.set("password", "passwordpassword");
+    createAdminBody.set("confirmPassword", "passwordpassword");
+    const createAdminRequest = new Request("http://localhost/setup", {
+      method: "POST",
+      body: createAdminBody,
     });
-    expect(mocks.consumeBootstrapToken).toHaveBeenCalledWith("valid-token");
-    expect(state.configValues.get(setupClaimProofKey)).toBe("owner-proof");
-    expect(state.configValues.get(setupClaimedAtKey)).toBe(String(staleClaimedAt));
-    expect(setCalls).toHaveLength(0);
+
+    const createAdminResult = await createAdmin({
+      request: createAdminRequest,
+      cookies: ownerCookies,
+    } as unknown as Parameters<typeof createAdmin>[0]);
+    expect(createAdminResult).toEqual({ success: true });
+    expect(state.configValues.get(setupCompletedKey)).toBe("false");
+
+    const recoveryClaimProof = "33333333-3333-3333-3333-333333333333";
+    const randomUuidSpy = vi.spyOn(crypto, "randomUUID").mockReturnValue(recoveryClaimProof);
+    try {
+      const { cookies: recoveredCookies } = createCookies();
+
+      const claimBody = new FormData();
+      claimBody.set("token", "valid-token");
+      const claimRequest = new Request("http://localhost/setup", {
+        method: "POST",
+        body: claimBody,
+      });
+      const claimResult = await claimInstance({
+        request: claimRequest,
+        getClientAddress: () => "127.0.0.1",
+        cookies: recoveredCookies,
+      } as unknown as Parameters<typeof claimInstance>[0]);
+      expect(claimResult).toEqual({ success: true });
+      expect(state.configValues.get(setupClaimProofKey)).toBe(recoveryClaimProof);
+
+      const configureOriginBody = new FormData();
+      configureOriginBody.set("allowedOrigins", "http://localhost:3000");
+      const configureOriginRequest = new Request("http://localhost/setup", {
+        method: "POST",
+        body: configureOriginBody,
+      });
+      const configureOriginResult = await configureOrigin({
+        request: configureOriginRequest,
+        cookies: recoveredCookies,
+      } as unknown as Parameters<typeof configureOrigin>[0]);
+      expect(configureOriginResult).toEqual({ success: true });
+    } finally {
+      randomUuidSpy.mockRestore();
+    }
   });
 
   it("keeps an active installer claim valid across setup steps by renewing ownership TTL", async () => {

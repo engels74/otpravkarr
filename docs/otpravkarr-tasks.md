@@ -195,7 +195,7 @@ All sensitive data handling depends on this module. It must be built and tested 
 - [x] Enable foreign keys: `db.exec('PRAGMA foreign_keys=ON')`
 - [x] Export singleton `db` instance
 - [x] Implement `initializeDatabase()` function that runs migrations
-- [ ] Call `initializeDatabase()` from SvelteKit server startup (via `hooks.server.ts` init)
+- [x] Call `initializeDatabase()` from SvelteKit server startup (via `hooks.server.ts` init)
 
 ### 2.2 — Migration system (`src/lib/db/migrations/`)
 
@@ -646,7 +646,7 @@ All sensitive data handling depends on this module. It must be built and tested 
   - [x] Overlap guard: if a job's `fn` is still running when next tick fires, skip
   - [x] Track last-run timestamp and duration per job
 - [x] Export singleton `scheduler` instance
-- [ ] Start scheduler from `hooks.server.ts` on first request or server init
+- [x] Start scheduler from `hooks.server.ts` on first request or server init
 - [x] Write unit tests
 
 ### 8.2 — Sync job (`src/lib/scheduler/jobs/sync.ts`)
@@ -686,19 +686,19 @@ All sensitive data handling depends on this module. It must be built and tested 
 
 ### 9.1 — Main handle hook
 
-- [ ] Implement `handle: Handle` function composing all middleware concerns:
+- [x] Implement `handle: Handle` function composing all middleware concerns:
   1. **Setup gate:** if `!isSetupComplete()` and path is not `/setup` or static asset → `redirect(303, '/setup')`
   2. **Request logging:** log method, path, IP
   3. **CSRF validation:** on POST/PUT/PATCH/DELETE, call `validateOrigin()` with configured allowed origins (skip if setup incomplete)
   4. **Session resolution:** read session cookie, look up session in DB, attach to `event.locals`:
-     - [ ] `event.locals.session` — session data or null
-     - [ ] `event.locals.admin` — admin account or null (if admin session)
-     - [ ] `event.locals.user` — user mapping or null (if user session)
+     - [x] `event.locals.session` — session data or null
+     - [x] `event.locals.admin` — admin account or null (if admin session)
+     - [x] `event.locals.user` — user mapping or null (if user session)
   5. **Resolve:** `return resolve(event)`
 
 ### 9.2 — SvelteKit `App.Locals` declaration
 
-- [ ] Declare in `src/app.d.ts`:
+- [x] Declare in `src/app.d.ts`:
   ```ts
   declare global {
     namespace App {
@@ -714,9 +714,9 @@ All sensitive data handling depends on this module. It must be built and tested 
 
 ### 9.3 — Database and scheduler initialization
 
-- [ ] Initialize database connection and run migrations on server startup
-- [ ] Start scheduler on server startup
-- [ ] If no admin exists → generate bootstrap token, print to stdout:
+- [x] Initialize database connection and run migrations on server startup
+- [x] Start scheduler on server startup
+- [x] If no admin exists → generate bootstrap token, print to stdout:
   ```
   ========================================
   OTPRAVKARR FIRST-RUN SETUP
@@ -729,8 +729,8 @@ All sensitive data handling depends on this module. It must be built and tested 
 
 ### 9.4 — Client hooks (`src/hooks.client.ts`)
 
-- [ ] Import `uno.css` (Safari-safe UnoCSS loading)
-- [ ] Any client-only initialization
+- [x] Import `uno.css` (Safari-safe UnoCSS loading)
+- [x] Any client-only initialization
 
 ---
 

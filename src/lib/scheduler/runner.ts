@@ -17,6 +17,7 @@ interface JobEntry {
   lastRunAt: number | null;
   lastDurationMs: number | null;
   nextScheduledAt: number | null;
+  generation: number;
 }
 
 function log(event: string, job: string, extra?: Record<string, unknown>): void {
@@ -36,11 +37,9 @@ const MAX_SAFE_TIMEOUT = 2_147_483_647;
 export class Scheduler {
   private jobs = new Map<string, JobEntry>();
   private started = false;
+  private generationCounter = 0;
 
   register(job: Job): void {
-    if (this.jobs.has(job.name)) {
-      throw new Error(`Job "${job.name}" is already registered`);
-    }
     if (!Number.isFinite(job.interval) || job.interval <= 0) {
       throw new Error(
         `Job "${job.name}" has invalid interval ${job.interval}ms (must be a finite number > 0)`,
@@ -51,6 +50,14 @@ export class Scheduler {
         `Job "${job.name}" has interval ${job.interval}ms exceeding maximum safe timeout (${MAX_SAFE_TIMEOUT}ms)`,
       );
     }
+
+    const existing = this.jobs.get(job.name);
+    if (existing) {
+      if (existing.timer !== null) {
+        clearTimeout(existing.timer);
+      }
+      this.jobs.delete(job.name);
+    }
     const entry: JobEntry = {
       job,
       timer: null,
@@ -58,6 +65,7 @@ export class Scheduler {
       lastRunAt: null,
       lastDurationMs: null,
       nextScheduledAt: null,
+      generation: ++this.generationCounter,
     };
     this.jobs.set(job.name, entry);
     log("job.registered", job.name, { interval: job.interval });
@@ -125,6 +133,12 @@ export class Scheduler {
 
   private async tick(entry: JobEntry): Promise<void> {
     if (!this.started) return;
+
+    // Guard against zombie callbacks: if this entry was replaced by a new
+    // registration, the map will hold a different generation. Bail out so
+    // the stale timer chain dies.
+    const current = this.jobs.get(entry.job.name);
+    if (!current || current.generation !== entry.generation) return;
 
     if (entry.running) {
       log("job.skipped", entry.job.name, { reason: "overlap" });

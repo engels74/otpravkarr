@@ -35,7 +35,11 @@ function printBootstrapBanner(): void {
     return;
   }
   const token = createBootstrapToken();
-  const origin = env.ORIGIN || `http://${env.HOST || "localhost"}:${env.PORT || "3000"}`;
+  let host = env.HOST || "localhost";
+  if (host === "0.0.0.0" || host === "::" || host === "0:0:0:0:0:0:0:0") {
+    host = "localhost";
+  }
+  const origin = env.ORIGIN || `http://${host}:${env.PORT || "3000"}`;
   const setupUrl = `${origin}/setup?token=${token}`;
   console.log("========================================");
   console.log("OTPRAVKARR FIRST-RUN SETUP");
@@ -91,7 +95,8 @@ const setupGate: Handle = async ({ event, resolve }) => {
     !event.url.pathname.startsWith("/setup") &&
     event.url.pathname !== "/api/health" &&
     !event.url.pathname.startsWith("/_app/") &&
-    event.url.pathname !== "/favicon.ico"
+    event.url.pathname !== "/favicon.ico" &&
+    event.url.pathname !== "/robots.txt"
   ) {
     throw redirect(303, "/setup");
   }
@@ -139,7 +144,12 @@ const csrfValidator: Handle = async ({ event, resolve }) => {
     isSetupComplete() &&
     (method === "POST" || method === "PUT" || method === "PATCH" || method === "DELETE")
   ) {
-    const originsConfig = await getConfig("allowed_origins");
+    let originsConfig: string | null = null;
+    try {
+      originsConfig = await getConfig("allowed_origins");
+    } catch {
+      // DB or decryption error — fall through to fail-closed behavior
+    }
     let parsedOrigins: string[] = [];
     if (originsConfig) {
       try {

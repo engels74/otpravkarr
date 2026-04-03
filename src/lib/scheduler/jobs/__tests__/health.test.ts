@@ -1,6 +1,6 @@
 // @vitest-environment node
 
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -66,6 +66,10 @@ const { createHealthJob, getHealthStatus, resetHealthState } = await import("../
 // ---------------------------------------------------------------------------
 
 const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+afterAll(() => {
+  consoleSpy.mockRestore();
+});
 
 function configMap(
   overrides: Record<string, string | null> = {},

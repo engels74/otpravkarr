@@ -18,22 +18,21 @@ import { validateOrigin } from "$lib/server/csrf";
 import { validateEnv } from "$lib/server/env";
 import { createRequestLogger } from "$lib/server/logging";
 
-// Validate required environment variables on server startup
-validateEnv();
+let runtimeInitialization: Promise<void> | null = null;
 
-// Initialize database and run pending migrations
-await initializeDatabase();
+async function registerSchedulerJobs(): Promise<void> {
+  const syncJob = await createSyncJob();
+  scheduler.register(syncJob);
+  scheduler.register(createHealthJob());
+  scheduler.register(createCleanupJob());
+  scheduler.register(createAuditRotationJob());
+  scheduler.start();
+}
 
-// Register scheduler jobs
-const syncJob = await createSyncJob();
-scheduler.register(syncJob);
-scheduler.register(createHealthJob());
-scheduler.register(createCleanupJob());
-scheduler.register(createAuditRotationJob());
-scheduler.start();
-
-// Print bootstrap token banner if no admin exists
-if (!adminExists()) {
+function printBootstrapBanner(): void {
+  if (adminExists()) {
+    return;
+  }
   const token = createBootstrapToken();
   const origin = env.ORIGIN || `http://${env.HOST || "localhost"}:${env.PORT || "3000"}`;
   const setupUrl = `${origin}/setup?token=${token}`;
@@ -43,15 +42,43 @@ if (!adminExists()) {
   console.log(`Bootstrap token: ${token}`);
   console.log(`Setup URL: ${setupUrl}`);
   console.log("This token expires in 15 minutes.");
+  console.log("Use this setup link against this same running instance only.");
+  console.log("Restarting the app or switching to another worker invalidates this token.");
   console.log("========================================");
+}
+
+async function ensureRuntimeInitialized(): Promise<void> {
+  if (!runtimeInitialization) {
+    runtimeInitialization = (async () => {
+      validateEnv();
+      await initializeDatabase();
+      await registerSchedulerJobs();
+      printBootstrapBanner();
+    })();
+  }
+
+  try {
+    await runtimeInitialization;
+  } catch (error) {
+    runtimeInitialization = null;
+    throw error;
+  }
 }
 
 // ---------------------------------------------------------------------------
 // Handle middleware
 // ---------------------------------------------------------------------------
 
-const requestIdInit: Handle = async ({ event, resolve }) => {
+const localsInit: Handle = async ({ event, resolve }) => {
   event.locals.requestId = crypto.randomUUID();
+  event.locals.session = null;
+  event.locals.admin = null;
+  event.locals.user = null;
+  return resolve(event);
+};
+
+const runtimeInit: Handle = async ({ event, resolve }) => {
+  await ensureRuntimeInitialized();
   return resolve(event);
 };
 
@@ -71,17 +98,11 @@ const setupGate: Handle = async ({ event, resolve }) => {
 const sessionResolver: Handle = async ({ event, resolve }) => {
   const sessionId = event.cookies.get(SESSION_COOKIE_NAME);
   if (!sessionId) {
-    event.locals.session = null;
-    event.locals.admin = null;
-    event.locals.user = null;
     return resolve(event);
   }
 
   const session = getSession(sessionId);
   if (!session) {
-    event.locals.session = null;
-    event.locals.admin = null;
-    event.locals.user = null;
     return resolve(event);
   }
 
@@ -147,7 +168,8 @@ const requestLogger = createRequestLogger();
 
 export const handle = sequence(
   requestLogger,
-  requestIdInit,
+  localsInit,
+  runtimeInit,
   setupGate,
   sessionResolver,
   csrfValidator,

@@ -21,7 +21,14 @@ const currentHealth: HealthStatus = {
 };
 
 export function getHealthStatus(): HealthStatus {
-  return currentHealth;
+  return structuredClone(currentHealth);
+}
+
+/** @internal — for testing only */
+export function resetHealthState(): void {
+  currentHealth.plex = { status: "unreachable", lastChecked: null };
+  currentHealth.dispatcharr = { reachable: false, authValid: false, lastChecked: null };
+  currentHealth.database = { status: "unhealthy", lastChecked: null };
 }
 
 function log(event: string, extra?: Record<string, unknown>): void {
@@ -54,22 +61,36 @@ export function createHealthJob(defaultIntervalMs = 5 * 60 * 1000): Job {
 
           if (status !== "healthy") {
             log("plex.unhealthy", { status });
-            appendAuditLog({
-              action: AuditAction.HEALTH_CHECK_FAILED,
-              detail: { check: "plex", status },
-            });
+            try {
+              appendAuditLog({
+                action: AuditAction.HEALTH_CHECK_FAILED,
+                detail: { check: "plex", status },
+              });
+            } catch (auditError) {
+              log("audit.error", {
+                error: auditError instanceof Error ? auditError.message : String(auditError),
+              });
+            }
           }
         } catch (error) {
           currentHealth.plex = { status: "unreachable", lastChecked: now };
           log("plex.error", { error: error instanceof Error ? error.message : String(error) });
-          appendAuditLog({
-            action: AuditAction.HEALTH_CHECK_FAILED,
-            detail: {
-              check: "plex",
-              error: error instanceof Error ? error.message : String(error),
-            },
-          });
+          try {
+            appendAuditLog({
+              action: AuditAction.HEALTH_CHECK_FAILED,
+              detail: {
+                check: "plex",
+                error: error instanceof Error ? error.message : String(error),
+              },
+            });
+          } catch (auditError) {
+            log("audit.error", {
+              error: auditError instanceof Error ? auditError.message : String(auditError),
+            });
+          }
         }
+      } else {
+        currentHealth.plex = { status: "unreachable", lastChecked: null };
       }
 
       // --- Dispatcharr check ---
@@ -94,36 +115,56 @@ export function createHealthJob(defaultIntervalMs = 5 * 60 * 1000): Job {
                 reachable: result.data.reachable,
                 authValid: result.data.authValid,
               });
-              appendAuditLog({
-                action: AuditAction.HEALTH_CHECK_FAILED,
-                detail: {
-                  check: "dispatcharr",
-                  reachable: result.data.reachable,
-                  authValid: result.data.authValid,
-                },
-              });
+              try {
+                appendAuditLog({
+                  action: AuditAction.HEALTH_CHECK_FAILED,
+                  detail: {
+                    check: "dispatcharr",
+                    reachable: result.data.reachable,
+                    authValid: result.data.authValid,
+                  },
+                });
+              } catch (auditError) {
+                log("audit.error", {
+                  error: auditError instanceof Error ? auditError.message : String(auditError),
+                });
+              }
             }
           } else {
             currentHealth.dispatcharr = { reachable: false, authValid: false, lastChecked: now };
             log("dispatcharr.error", { error: result.message });
-            appendAuditLog({
-              action: AuditAction.HEALTH_CHECK_FAILED,
-              detail: { check: "dispatcharr", error: result.message },
-            });
+            try {
+              appendAuditLog({
+                action: AuditAction.HEALTH_CHECK_FAILED,
+                detail: { check: "dispatcharr", error: result.message },
+              });
+            } catch (auditError) {
+              log("audit.error", {
+                error: auditError instanceof Error ? auditError.message : String(auditError),
+              });
+            }
           }
         } catch (error) {
           currentHealth.dispatcharr = { reachable: false, authValid: false, lastChecked: now };
           log("dispatcharr.error", {
             error: error instanceof Error ? error.message : String(error),
           });
-          appendAuditLog({
-            action: AuditAction.HEALTH_CHECK_FAILED,
-            detail: {
-              check: "dispatcharr",
-              error: error instanceof Error ? error.message : String(error),
-            },
-          });
+          try {
+            appendAuditLog({
+              action: AuditAction.HEALTH_CHECK_FAILED,
+              detail: {
+                check: "dispatcharr",
+                error: error instanceof Error ? error.message : String(error),
+              },
+            });
+          } catch (auditError) {
+            log("audit.error", {
+              error: auditError instanceof Error ? auditError.message : String(auditError),
+            });
+          }
         }
+      } else {
+        currentHealth.dispatcharr = { reachable: false, authValid: false, lastChecked: null };
       }
 
       // --- SQLite check ---
@@ -133,13 +174,19 @@ export function createHealthJob(defaultIntervalMs = 5 * 60 * 1000): Job {
       } catch (error) {
         currentHealth.database = { status: "unhealthy", lastChecked: now };
         log("database.error", { error: error instanceof Error ? error.message : String(error) });
-        appendAuditLog({
-          action: AuditAction.HEALTH_CHECK_FAILED,
-          detail: {
-            check: "database",
-            error: error instanceof Error ? error.message : String(error),
-          },
-        });
+        try {
+          appendAuditLog({
+            action: AuditAction.HEALTH_CHECK_FAILED,
+            detail: {
+              check: "database",
+              error: error instanceof Error ? error.message : String(error),
+            },
+          });
+        } catch (auditError) {
+          log("audit.error", {
+            error: auditError instanceof Error ? auditError.message : String(auditError),
+          });
+        }
       }
     },
   };

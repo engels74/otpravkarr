@@ -46,7 +46,7 @@ vi.mock("$lib/db/types", () => ({
 }));
 
 // Import after mocking
-const { createHealthJob, getHealthStatus } = await import("../health");
+const { createHealthJob, getHealthStatus, resetHealthState } = await import("../health");
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -83,7 +83,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  // Reset health state between tests by running with all nulls
+  // Reset health state between tests
+  resetHealthState();
   mockGetConfig.mockImplementation(async () => null);
   mockPrepareGet.mockReturnValue({ "1": 1 });
 });

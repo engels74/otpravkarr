@@ -191,7 +191,7 @@ describe("auth guards", () => {
   // -----------------------------------------------------------------------
 
   describe("requireAdmin", () => {
-    it("throws redirect(303, '/login') when no cookie", async () => {
+    it("throws redirect(303, '/') when no cookie", async () => {
       const { event } = createMockEvent(undefined);
 
       try {
@@ -201,7 +201,7 @@ describe("auth guards", () => {
         const err = e as { type: string; status: number; location: string };
         expect(err.type).toBe("redirect");
         expect(err.status).toBe(303);
-        expect(err.location).toBe("/login");
+        expect(err.location).toBe("/");
       }
     });
 
@@ -216,7 +216,7 @@ describe("auth guards", () => {
         const err = e as { type: string; status: number; location: string };
         expect(err.type).toBe("redirect");
         expect(err.status).toBe(303);
-        expect(err.location).toBe("/login");
+        expect(err.location).toBe("/");
       }
 
       expect(deleteSpy).toHaveBeenCalledWith(SESSION_COOKIE_NAME, { path: "/" });
@@ -233,7 +233,7 @@ describe("auth guards", () => {
         const err = e as { type: string; status: number; location: string };
         expect(err.type).toBe("redirect");
         expect(err.status).toBe(303);
-        expect(err.location).toBe("/login");
+        expect(err.location).toBe("/");
       }
 
       expect(deleteSpy).toHaveBeenCalledWith(SESSION_COOKIE_NAME, { path: "/" });
@@ -251,7 +251,7 @@ describe("auth guards", () => {
         const err = e as { type: string; status: number; location: string };
         expect(err.type).toBe("redirect");
         expect(err.status).toBe(303);
-        expect(err.location).toBe("/login");
+        expect(err.location).toBe("/");
       }
 
       expect(deleteSpy).toHaveBeenCalledWith(SESSION_COOKIE_NAME, { path: "/" });

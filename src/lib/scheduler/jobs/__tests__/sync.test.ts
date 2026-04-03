@@ -77,15 +77,45 @@ const FULL_CONFIG: Record<string, string> = {
 };
 
 describe("createSyncJob", () => {
-  it("returns a Job with correct name and default interval", () => {
-    const job = createSyncJob();
+  it("returns a Job with correct name and default interval", async () => {
+    const job = await createSyncJob();
     expect(job.name).toBe("plex-dispatcharr-sync");
     expect(job.interval).toBe(15 * 60 * 1000);
   });
 
-  it("accepts a custom interval", () => {
-    const job = createSyncJob(60_000);
+  it("accepts a custom interval", async () => {
+    const job = await createSyncJob(60_000);
     expect(job.interval).toBe(60_000);
+  });
+
+  it("reads sync_interval_minutes from config when available", async () => {
+    mockGetConfig.mockImplementation((key: string) =>
+      key === "sync_interval_minutes" ? Promise.resolve("10") : Promise.resolve(null),
+    );
+    const job = await createSyncJob();
+    expect(job.interval).toBe(10 * 60 * 1000);
+  });
+
+  it("ignores invalid sync_interval_minutes values", async () => {
+    mockGetConfig.mockImplementation((key: string) =>
+      key === "sync_interval_minutes" ? Promise.resolve("not-a-number") : Promise.resolve(null),
+    );
+    const job = await createSyncJob();
+    expect(job.interval).toBe(15 * 60 * 1000);
+  });
+
+  it("ignores non-positive sync_interval_minutes", async () => {
+    mockGetConfig.mockImplementation((key: string) =>
+      key === "sync_interval_minutes" ? Promise.resolve("0") : Promise.resolve(null),
+    );
+    const job = await createSyncJob();
+    expect(job.interval).toBe(15 * 60 * 1000);
+  });
+
+  it("falls back to default when config read fails", async () => {
+    mockGetConfig.mockRejectedValue(new Error("DB error"));
+    const job = await createSyncJob();
+    expect(job.interval).toBe(15 * 60 * 1000);
   });
 });
 
@@ -102,7 +132,7 @@ describe("sync job fn", () => {
     };
     mockReconcileSync.mockResolvedValueOnce(report);
 
-    const job = createSyncJob();
+    const job = await createSyncJob();
     await job.fn();
 
     expect(mockGetConfig).toHaveBeenCalledWith("dispatcharr_url");
@@ -134,7 +164,7 @@ describe("sync job fn", () => {
       // api key and plex token missing
     });
 
-    const job = createSyncJob();
+    const job = await createSyncJob();
     await job.fn();
 
     expect(mockReconcileSync).not.toHaveBeenCalled();
@@ -149,7 +179,7 @@ describe("sync job fn", () => {
   it("missing all config keys: includes all in missing array", async () => {
     mockGetConfig.mockResolvedValue(null);
 
-    const job = createSyncJob();
+    const job = await createSyncJob();
     await job.fn();
 
     expect(mockReconcileSync).not.toHaveBeenCalled();
@@ -167,7 +197,7 @@ describe("sync job fn", () => {
   it("getConfig throws: logs config.error and returns early without calling reconcileSync", async () => {
     mockGetConfig.mockRejectedValue(new Error("DB connection lost"));
 
-    const job = createSyncJob();
+    const job = await createSyncJob();
     await expect(job.fn()).resolves.toBeUndefined();
 
     expect(mockReconcileSync).not.toHaveBeenCalled();
@@ -182,7 +212,7 @@ describe("sync job fn", () => {
     mockConfigWith(FULL_CONFIG);
     mockReconcileSync.mockRejectedValueOnce(new Error("Network failure"));
 
-    const job = createSyncJob();
+    const job = await createSyncJob();
     // Should not throw
     await expect(job.fn()).resolves.toBeUndefined();
 
@@ -202,7 +232,7 @@ describe("sync job fn", () => {
     mockConfigWith(FULL_CONFIG);
     mockReconcileSync.mockRejectedValueOnce("string error");
 
-    const job = createSyncJob();
+    const job = await createSyncJob();
     await expect(job.fn()).resolves.toBeUndefined();
 
     const logs = getLogEntries();

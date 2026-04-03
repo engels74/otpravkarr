@@ -41,15 +41,21 @@ export class Scheduler {
     if (job.interval <= 0) {
       throw new Error(`Job "${job.name}" has invalid interval ${job.interval}ms (must be > 0)`);
     }
-    this.jobs.set(job.name, {
+    const entry: JobEntry = {
       job,
       timer: null,
       running: false,
       lastRunAt: null,
       lastDurationMs: null,
       nextScheduledAt: null,
-    });
+    };
+    this.jobs.set(job.name, entry);
     log("job.registered", job.name, { interval: job.interval });
+
+    // If scheduler is already running, schedule immediately
+    if (this.started) {
+      this.scheduleTick(entry);
+    }
   }
 
   start(): void {

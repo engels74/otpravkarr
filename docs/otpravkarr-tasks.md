@@ -325,6 +325,7 @@ All sensitive data handling depends on this module. It must be built and tested 
     USER_DISABLED: 'user.disabled',
     USER_CREDENTIALS_ROTATED: 'user.credentials_rotated',
     SYNC_COMPLETED: 'sync.completed',
+    SYNC_FAILED: 'sync.failed',
     CONFIG_CHANGED: 'config.changed',
     HEALTH_CHECK_FAILED: 'health.check_failed',
   } as const;
@@ -641,7 +642,7 @@ All sensitive data handling depends on this module. It must be built and tested 
   - [x] `register(job: Job): void` — add job to registry
   - [x] `start(): void` — begin all intervals
   - [x] `stop(): void` — clear all intervals
-  - [x] `setInterval`-based with drift correction
+  - [x] Recursive `setTimeout`-based with drift correction
   - [x] Overlap guard: if a job's `fn` is still running when next tick fires, skip
   - [x] Track last-run timestamp and duration per job
 - [x] Export singleton `scheduler` instance

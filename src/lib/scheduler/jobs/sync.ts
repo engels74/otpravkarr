@@ -19,10 +19,24 @@ function log(event: string, extra?: Record<string, unknown>): void {
   );
 }
 
-export function createSyncJob(defaultIntervalMs = DEFAULT_INTERVAL_MS): Job {
+export async function createSyncJob(defaultIntervalMs = DEFAULT_INTERVAL_MS): Promise<Job> {
+  // Try to read configured interval from config table; fall back to default
+  let intervalMs = defaultIntervalMs;
+  try {
+    const configuredMinutes = await getConfig("sync_interval_minutes");
+    if (configuredMinutes) {
+      const parsed = Number(configuredMinutes);
+      if (Number.isFinite(parsed) && parsed > 0) {
+        intervalMs = parsed * 60 * 1000;
+      }
+    }
+  } catch {
+    // Config read failed; use default interval
+  }
+
   return {
     name: JOB_NAME,
-    interval: defaultIntervalMs,
+    interval: intervalMs,
     fn: async () => {
       let dispatcharrUrl: string | null = null;
       let apiKey: string | null = null;

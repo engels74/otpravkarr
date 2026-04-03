@@ -86,6 +86,19 @@ describe("Scheduler", () => {
         scheduler.register({ name: "bad", interval: -1000, fn: async () => {} }),
       ).toThrow("invalid interval");
     });
+
+    it("schedules a job registered after start()", async () => {
+      scheduler.start();
+
+      const fn = vi.fn(async () => {});
+      scheduler.register(createJob({ fn, interval: 500 }));
+
+      await vi.advanceTimersByTimeAsync(500);
+      expect(fn).toHaveBeenCalledOnce();
+
+      await vi.advanceTimersByTimeAsync(500);
+      expect(fn).toHaveBeenCalledTimes(2);
+    });
   });
 
   describe("start / stop lifecycle", () => {

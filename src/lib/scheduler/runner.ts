@@ -38,8 +38,12 @@ export class Scheduler {
   private started = false;
 
   register(job: Job): void {
-    if (this.jobs.has(job.name)) {
-      throw new Error(`Job "${job.name}" is already registered`);
+    const existing = this.jobs.get(job.name);
+    if (existing) {
+      if (existing.timer !== null) {
+        clearTimeout(existing.timer);
+      }
+      this.jobs.delete(job.name);
     }
     if (!Number.isFinite(job.interval) || job.interval <= 0) {
       throw new Error(

@@ -70,9 +70,14 @@ describe("Scheduler", () => {
       expect(reg!.interval).toBe(1000);
     });
 
-    it("throws on duplicate job name", () => {
-      scheduler.register(createJob());
-      expect(() => scheduler.register(createJob())).toThrow('Job "test-job" is already registered');
+    it("replaces existing job on duplicate name (idempotent)", () => {
+      const fn1 = vi.fn(async () => {});
+      const fn2 = vi.fn(async () => {});
+      scheduler.register(createJob({ fn: fn1 }));
+      scheduler.register(createJob({ fn: fn2 }));
+
+      const status = scheduler.getJobStatus("test-job");
+      expect(status).toBeDefined();
     });
 
     it("throws when registering a job with zero interval", () => {

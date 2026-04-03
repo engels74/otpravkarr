@@ -28,10 +28,21 @@ const USERNAME_PATTERN = /^[a-zA-Z0-9_-]{3,32}$/;
 const MIN_PASSWORD_LENGTH = 12;
 const SETUP_CLAIMED_CONFIG_KEY = "setup_claimed";
 const SETUP_CLAIM_PROOF_CONFIG_KEY = "setup_claim_proof";
+const SETUP_CLAIMED_AT_CONFIG_KEY = "setup_claimed_at";
 const SETUP_CLAIMED_VALUE = "true";
 const SETUP_UNCLAIMED_VALUE = "false";
 const SETUP_CLAIM_COOKIE_NAME = "otpravkarr_setup_claim";
-const SETUP_CLAIM_TTL_SECONDS = 30 * 60;
+// Keep claim TTL shorter than bootstrap token TTL (15m) so expired claims can be reclaimed.
+const SETUP_CLAIM_TTL_SECONDS = 10 * 60;
+const SETUP_CLAIM_TTL_MS = SETUP_CLAIM_TTL_SECONDS * 1000;
+const SETUP_PREREQUISITE_KEYS = [
+  "plex_server_url",
+  "plex_admin_token",
+  "plex_machine_id",
+  "dispatcharr_url",
+  "dispatcharr_api_key",
+  "allowed_origins",
+] as const;
 const SETUP_CLAIM_COOKIE_OPTIONS = {
   path: "/setup",
   httpOnly: true,
@@ -50,8 +61,16 @@ async function hasActiveSetupClaim(cookies: Cookies): Promise<boolean> {
     return false;
   }
 
-  const expectedProof = await getConfig(SETUP_CLAIM_PROOF_CONFIG_KEY);
-  if (!expectedProof) {
+  const [expectedProof, claimTimestampRaw] = await Promise.all([
+    getConfig(SETUP_CLAIM_PROOF_CONFIG_KEY),
+    getConfig(SETUP_CLAIMED_AT_CONFIG_KEY),
+  ]);
+  if (!expectedProof || !claimTimestampRaw) {
+    return false;
+  }
+
+  const claimTimestamp = Number(claimTimestampRaw);
+  if (!Number.isFinite(claimTimestamp) || Date.now() >= claimTimestamp + SETUP_CLAIM_TTL_MS) {
     return false;
   }
 
@@ -65,6 +84,15 @@ async function requireSetupClaimedAction(cookies: Cookies) {
   }
 
   return fail(403, { error: "setup_not_claimed" });
+}
+
+async function getMissingSetupPrerequisites(): Promise<string[]> {
+  const values = await Promise.all(SETUP_PREREQUISITE_KEYS.map((key) => getConfig(key)));
+
+  return SETUP_PREREQUISITE_KEYS.filter((_, index) => {
+    const value = values[index];
+    return value === undefined || value === null || value.trim().length === 0;
+  });
 }
 
 export const load: PageServerLoad = async ({ url, cookies }) => {
@@ -107,6 +135,7 @@ export const actions: Actions = {
     await Promise.all([
       setConfig(SETUP_CLAIMED_CONFIG_KEY, SETUP_CLAIMED_VALUE),
       setConfig(SETUP_CLAIM_PROOF_CONFIG_KEY, claimProof, true),
+      setConfig(SETUP_CLAIMED_AT_CONFIG_KEY, String(Date.now())),
     ]);
     cookies.set(SETUP_CLAIM_COOKIE_NAME, claimProof, SETUP_CLAIM_COOKIE_OPTIONS);
 
@@ -328,6 +357,15 @@ export const actions: Actions = {
       return claimError;
     }
 
+    const missingPrerequisites = await getMissingSetupPrerequisites();
+    if (missingPrerequisites.length > 0) {
+      return fail(400, {
+        error: "Complete Plex, Dispatcharr, and origin setup before finishing setup",
+        field: "defaults",
+        missingPrerequisites,
+      });
+    }
+
     const formData = await request.formData();
     const defaultGroupId = String(formData.get("defaultGroupId") ?? "").trim();
     const defaultProfileId = String(formData.get("defaultProfileId") ?? "").trim();
@@ -385,6 +423,7 @@ export const actions: Actions = {
     await Promise.all([
       setConfig(SETUP_CLAIMED_CONFIG_KEY, SETUP_UNCLAIMED_VALUE),
       setConfig(SETUP_CLAIM_PROOF_CONFIG_KEY, "", true),
+      setConfig(SETUP_CLAIMED_AT_CONFIG_KEY, ""),
     ]);
     clearBootstrapToken();
     cookies.delete(SETUP_CLAIM_COOKIE_NAME, { path: SETUP_CLAIM_COOKIE_OPTIONS.path });

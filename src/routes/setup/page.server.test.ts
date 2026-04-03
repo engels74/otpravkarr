@@ -126,7 +126,17 @@ vi.mock("$lib/url/discover", () => ({
 
 const setupClaimedKey = "setup_claimed";
 const setupClaimProofKey = "setup_claim_proof";
+const setupClaimedAtKey = "setup_claimed_at";
 const setupClaimCookie = "otpravkarr_setup_claim";
+const setupClaimTtlMs = 10 * 60 * 1000;
+const setupPrerequisiteConfig = {
+  plex_server_url: "http://plex.local",
+  plex_admin_token: "plex-admin-token",
+  plex_machine_id: "plex-machine-id",
+  dispatcharr_url: "http://dispatcharr.local",
+  dispatcharr_api_key: "dispatcharr-api-key",
+  allowed_origins: JSON.stringify(["http://localhost:3000"]),
+} as const;
 
 type CookieSetCall = {
   name: string;
@@ -180,6 +190,7 @@ describe("setup claim ownership", () => {
   it("marks claimActive on load when claim cookie matches stored proof", async () => {
     state.configValues.set(setupClaimedKey, "true");
     state.configValues.set(setupClaimProofKey, "proof-123");
+    state.configValues.set(setupClaimedAtKey, String(Date.now()));
     const { cookies } = createCookies({ [setupClaimCookie]: "proof-123" });
 
     const { load } = await import("./+page.server");
@@ -198,6 +209,7 @@ describe("setup claim ownership", () => {
   it("blocks setup actions when instance is claimed by a different requester", async () => {
     state.configValues.set(setupClaimedKey, "true");
     state.configValues.set(setupClaimProofKey, "owner-proof");
+    state.configValues.set(setupClaimedAtKey, String(Date.now()));
     const { cookies } = createCookies();
 
     const body = new FormData();
@@ -249,6 +261,7 @@ describe("setup claim ownership", () => {
     expect(mocks.validateBootstrapToken).toHaveBeenCalledWith("valid-token");
     expect(state.configValues.get(setupClaimedKey)).toBe("true");
     expect(state.configValues.get(setupClaimProofKey)).toBe(claimProof);
+    expect(Number(state.configValues.get(setupClaimedAtKey))).toBeGreaterThan(0);
     expect(setCalls).toContainEqual(
       expect.objectContaining({
         name: setupClaimCookie,
@@ -262,6 +275,7 @@ describe("setup claim ownership", () => {
   it("allows reclaiming setup when prior claim proof cookie is missing", async () => {
     state.configValues.set(setupClaimedKey, "true");
     state.configValues.set(setupClaimProofKey, "owner-proof");
+    state.configValues.set(setupClaimedAtKey, String(Date.now()));
     const rotatedProof = "22222222-2222-2222-2222-222222222222";
     const randomUuidSpy = vi.spyOn(crypto, "randomUUID").mockReturnValue(rotatedProof);
 
@@ -294,6 +308,54 @@ describe("setup claim ownership", () => {
 
     randomUuidSpy.mockRestore();
   });
+
+  it("allows reclaiming setup when prior claim has expired server-side", async () => {
+    state.configValues.set(setupClaimedKey, "true");
+    state.configValues.set(setupClaimProofKey, "owner-proof");
+    const staleClaimedAt = Date.now() - setupClaimTtlMs - 1;
+    state.configValues.set(setupClaimedAtKey, String(staleClaimedAt));
+
+    const rotatedProof = "33333333-3333-3333-3333-333333333333";
+    const randomUuidSpy = vi.spyOn(crypto, "randomUUID").mockReturnValue(rotatedProof);
+    const { cookies, setCalls } = createCookies({ [setupClaimCookie]: "owner-proof" });
+
+    const body = new FormData();
+    body.set("token", "valid-token");
+    const request = new Request("http://localhost/setup", { method: "POST", body });
+
+    const { load, actions } = await import("./+page.server");
+    const loadResult = await load({
+      url: new URL("http://localhost/setup"),
+      cookies,
+    } as unknown as Parameters<typeof load>[0]);
+    expect(loadResult).toMatchObject({
+      claimActive: false,
+    });
+
+    const claimInstance = actions.claimInstance;
+    if (!claimInstance) {
+      throw new Error("claimInstance action is undefined");
+    }
+
+    const result = await claimInstance({
+      request,
+      getClientAddress: () => "127.0.0.1",
+      cookies,
+    } as unknown as Parameters<typeof claimInstance>[0]);
+
+    expect(result).toEqual({ success: true });
+    expect(mocks.validateBootstrapToken).toHaveBeenCalledWith("valid-token");
+    expect(state.configValues.get(setupClaimProofKey)).toBe(rotatedProof);
+    expect(Number(state.configValues.get(setupClaimedAtKey))).toBeGreaterThan(staleClaimedAt);
+    expect(setCalls).toContainEqual(
+      expect.objectContaining({
+        name: setupClaimCookie,
+        value: rotatedProof,
+      }),
+    );
+
+    randomUuidSpy.mockRestore();
+  });
 });
 
 describe("setDefaults", () => {
@@ -301,9 +363,62 @@ describe("setDefaults", () => {
     resetStateAndMocks();
     state.configValues.set(setupClaimedKey, "true");
     state.configValues.set(setupClaimProofKey, "proof-123");
+    state.configValues.set(setupClaimedAtKey, String(Date.now()));
+  });
+
+  it("rejects setup completion when required prior steps are missing", async () => {
+    const { cookies } = createCookies({ [setupClaimCookie]: "proof-123" });
+    const body = new FormData();
+    body.set("defaultGroupId", "10");
+    body.set("defaultProfileId", "20");
+    body.set("syncInterval", "15");
+    body.set("defaultProvisioningMode", "automatic");
+    body.set("adminUsername", "admin");
+    body.set("adminPassword", "passwordpassword");
+
+    const request = new Request("http://localhost/setup", { method: "POST", body });
+
+    const { actions } = await import("./+page.server");
+    const setDefaults = actions.setDefaults;
+    if (!setDefaults) {
+      throw new Error("setDefaults action is undefined");
+    }
+
+    const result = await setDefaults({
+      request,
+      cookies,
+      getClientAddress: () => "127.0.0.1",
+    } as unknown as Parameters<typeof setDefaults>[0]);
+
+    expect(result).toMatchObject({
+      status: 400,
+      data: {
+        error: "Complete Plex, Dispatcharr, and origin setup before finishing setup",
+        field: "defaults",
+      },
+    });
+    expect(result).toMatchObject({
+      data: {
+        missingPrerequisites: expect.arrayContaining([
+          "plex_server_url",
+          "plex_admin_token",
+          "plex_machine_id",
+          "dispatcharr_url",
+          "dispatcharr_api_key",
+          "allowed_origins",
+        ]),
+      },
+    });
+    expect(mocks.hashAdminPassword).not.toHaveBeenCalled();
+    expect(mocks.createAdmin).not.toHaveBeenCalled();
+    expect(mocks.clearBootstrapToken).not.toHaveBeenCalled();
   });
 
   it("clears the bootstrap token after setup completes", async () => {
+    for (const [key, value] of Object.entries(setupPrerequisiteConfig)) {
+      state.configValues.set(key, value);
+    }
+
     const { cookies, setCalls } = createCookies({ [setupClaimCookie]: "proof-123" });
     const body = new FormData();
     body.set("defaultGroupId", "10");
@@ -337,6 +452,7 @@ describe("setDefaults", () => {
     expect(mocks.createAdmin).toHaveBeenCalledWith("admin", "hashed-password");
     expect(mocks.createSession).toHaveBeenCalledWith("admin", "admin", 3600);
     expect(mocks.appendAuditLog).toHaveBeenCalledOnce();
+    expect(state.configValues.get(setupClaimedAtKey)).toBe("");
     expect(setCalls).toContainEqual(
       expect.objectContaining({
         name: "otpravkarr_session",
@@ -351,6 +467,7 @@ describe("configurePlex oauth initiate origin selection", () => {
     resetStateAndMocks();
     state.configValues.set(setupClaimedKey, "true");
     state.configValues.set(setupClaimProofKey, "proof-123");
+    state.configValues.set(setupClaimedAtKey, String(Date.now()));
   });
 
   it("uses ORIGIN when configured for OAuth forward URL", async () => {

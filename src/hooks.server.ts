@@ -5,7 +5,7 @@ import { building } from "$app/environment";
 import { env } from "$env/dynamic/private";
 import { createBootstrapToken } from "$lib/crypto/bootstrap";
 import { initializeDatabase } from "$lib/db/connection";
-import { adminExists, getAdminByUsername } from "$lib/db/repositories/admin";
+import { getAdminByUsername } from "$lib/db/repositories/admin";
 import { getConfig } from "$lib/db/repositories/config";
 import { getSession } from "$lib/db/repositories/sessions";
 import { getUserMappingById } from "$lib/db/repositories/users";
@@ -30,8 +30,10 @@ async function registerSchedulerJobs(): Promise<void> {
   scheduler.start();
 }
 
-function printBootstrapBanner(): void {
-  if (adminExists()) {
+async function printBootstrapBanner(): Promise<void> {
+  // Setup can be incomplete even when an admin account already exists
+  // (e.g. interrupted multi-step setup), so gate on setup completion instead.
+  if (await isSetupComplete()) {
     return;
   }
   const token = createBootstrapToken();
@@ -59,7 +61,7 @@ async function ensureRuntimeInitialized(): Promise<void> {
       await initializeDatabase();
       if (!building) {
         await registerSchedulerJobs();
-        printBootstrapBanner();
+        await printBootstrapBanner();
       }
     })();
   }

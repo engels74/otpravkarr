@@ -153,11 +153,12 @@ export function createHealthJob(defaultIntervalMs = 5 * 60 * 1000): Job {
             // Defensive: checkHealth() currently always returns ok:true, but this
             // handles a potential future API change where ok:false is returned.
             currentHealth.dispatcharr = { reachable: false, authValid: false, lastChecked: now };
-            log("dispatcharr.error", { error: result.message });
+            const errorDetail = result.message || result.error || "Unknown error";
+            log("dispatcharr.error", { error: errorDetail });
             try {
               appendAuditLog({
                 action: AuditAction.HEALTH_CHECK_FAILED,
-                detail: { check: "dispatcharr", error: result.message },
+                detail: { check: "dispatcharr", error: errorDetail },
               });
             } catch (auditError) {
               log("audit.error", {

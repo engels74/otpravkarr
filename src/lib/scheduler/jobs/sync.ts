@@ -30,8 +30,12 @@ export async function createSyncJob(defaultIntervalMs = DEFAULT_INTERVAL_MS): Pr
         intervalMs = parsed * 60 * 1000;
       }
     }
-  } catch {
-    // Config read failed; use default interval
+  } catch (error) {
+    log("config.warn", {
+      key: "sync_interval_minutes",
+      error: error instanceof Error ? error.message : String(error),
+      fallback: defaultIntervalMs,
+    });
   }
 
   return {

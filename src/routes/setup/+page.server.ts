@@ -1,6 +1,6 @@
 import { type Cookies, fail, redirect } from "@sveltejs/kit";
 import { env } from "$env/dynamic/private";
-import { clearBootstrapToken, validateBootstrapToken } from "$lib/crypto/bootstrap";
+import { clearBootstrapToken, consumeBootstrapToken } from "$lib/crypto/bootstrap";
 import { hashAdminPassword } from "$lib/crypto/passwords";
 import { createAdmin as insertAdmin } from "$lib/db/repositories/admin";
 import { appendAuditLog } from "$lib/db/repositories/audit";
@@ -127,7 +127,7 @@ export const actions: Actions = {
       return fail(400, { error: "invalid_token" });
     }
 
-    const valid = validateBootstrapToken(token);
+    const valid = consumeBootstrapToken(token);
     if (!valid) {
       return fail(400, { error: "invalid_token" });
     }

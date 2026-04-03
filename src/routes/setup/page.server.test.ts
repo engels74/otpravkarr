@@ -12,7 +12,7 @@ const state = vi.hoisted(() => ({
 }));
 
 const mocks = vi.hoisted(() => ({
-  validateBootstrapToken: vi.fn((_: string) => state.validateTokenResult),
+  consumeBootstrapToken: vi.fn((_: string) => state.validateTokenResult),
   clearBootstrapToken: vi.fn(),
   getConfig: vi.fn(async (key: string) => state.configValues.get(key) ?? null),
   setConfig: vi.fn(async (key: string, value: string) => {
@@ -28,7 +28,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("$lib/crypto/bootstrap", () => ({
   clearBootstrapToken: mocks.clearBootstrapToken,
-  validateBootstrapToken: mocks.validateBootstrapToken,
+  consumeBootstrapToken: mocks.consumeBootstrapToken,
 }));
 
 vi.mock("$env/dynamic/private", () => ({
@@ -92,7 +92,14 @@ vi.mock("$lib/plex/client", () => ({
 }));
 
 vi.mock("$lib/plex/oauth", () => ({
-  completeOAuth: vi.fn(),
+  completeOAuth: vi.fn(async () => ({
+    id: 1,
+    uuid: "plex-uuid",
+    username: "plex-user",
+    email: "plex@example.com",
+    thumb: "",
+    authenticationToken: "plex-auth-token",
+  })),
   initiateOAuth: vi.fn(),
 }));
 
@@ -171,7 +178,7 @@ function resetStateAndMocks() {
   state.limiterAllowed = true;
   state.env.ORIGIN = "http://localhost:3000";
 
-  mocks.validateBootstrapToken.mockClear();
+  mocks.consumeBootstrapToken.mockClear();
   mocks.clearBootstrapToken.mockClear();
   mocks.getConfig.mockClear();
   mocks.setConfig.mockClear();
@@ -259,7 +266,7 @@ describe("setup claim ownership", () => {
     } as unknown as Parameters<typeof claimInstance>[0]);
 
     expect(result).toEqual({ success: true });
-    expect(mocks.validateBootstrapToken).toHaveBeenCalledWith("valid-token");
+    expect(mocks.consumeBootstrapToken).toHaveBeenCalledWith("valid-token");
     expect(state.configValues.get(setupClaimedKey)).toBe("true");
     expect(state.configValues.get(setupClaimProofKey)).toBe(claimProof);
     expect(Number(state.configValues.get(setupClaimedAtKey))).toBeGreaterThan(0);
@@ -273,12 +280,11 @@ describe("setup claim ownership", () => {
     randomUuidSpy.mockRestore();
   });
 
-  it("allows reclaiming setup when prior claim proof cookie is missing", async () => {
+  it("rejects reclaiming setup with a consumed bootstrap token when the claim cookie is missing", async () => {
     state.configValues.set(setupClaimedKey, "true");
     state.configValues.set(setupClaimProofKey, "owner-proof");
     state.configValues.set(setupClaimedAtKey, String(Date.now()));
-    const rotatedProof = "22222222-2222-2222-2222-222222222222";
-    const randomUuidSpy = vi.spyOn(crypto, "randomUUID").mockReturnValue(rotatedProof);
+    state.validateTokenResult = false;
 
     const { cookies, setCalls } = createCookies();
     const body = new FormData();
@@ -297,27 +303,21 @@ describe("setup claim ownership", () => {
       cookies,
     } as unknown as Parameters<typeof claimInstance>[0]);
 
-    expect(result).toEqual({ success: true });
-    expect(mocks.validateBootstrapToken).toHaveBeenCalledWith("valid-token");
-    expect(state.configValues.get(setupClaimProofKey)).toBe(rotatedProof);
-    expect(setCalls).toContainEqual(
-      expect.objectContaining({
-        name: setupClaimCookie,
-        value: rotatedProof,
-      }),
-    );
-
-    randomUuidSpy.mockRestore();
+    expect(result).toMatchObject({
+      status: 400,
+      data: { error: "invalid_token" },
+    });
+    expect(mocks.consumeBootstrapToken).toHaveBeenCalledWith("valid-token");
+    expect(state.configValues.get(setupClaimProofKey)).toBe("owner-proof");
+    expect(setCalls).toHaveLength(0);
   });
 
-  it("allows reclaiming setup when prior claim has expired server-side", async () => {
+  it("rejects reclaiming setup with a consumed bootstrap token after the claim expires", async () => {
     state.configValues.set(setupClaimedKey, "true");
     state.configValues.set(setupClaimProofKey, "owner-proof");
     const staleClaimedAt = Date.now() - setupClaimTtlMs - 1;
     state.configValues.set(setupClaimedAtKey, String(staleClaimedAt));
-
-    const rotatedProof = "33333333-3333-3333-3333-333333333333";
-    const randomUuidSpy = vi.spyOn(crypto, "randomUUID").mockReturnValue(rotatedProof);
+    state.validateTokenResult = false;
     const { cookies, setCalls } = createCookies({ [setupClaimCookie]: "owner-proof" });
 
     const body = new FormData();
@@ -344,18 +344,14 @@ describe("setup claim ownership", () => {
       cookies,
     } as unknown as Parameters<typeof claimInstance>[0]);
 
-    expect(result).toEqual({ success: true });
-    expect(mocks.validateBootstrapToken).toHaveBeenCalledWith("valid-token");
-    expect(state.configValues.get(setupClaimProofKey)).toBe(rotatedProof);
-    expect(Number(state.configValues.get(setupClaimedAtKey))).toBeGreaterThan(staleClaimedAt);
-    expect(setCalls).toContainEqual(
-      expect.objectContaining({
-        name: setupClaimCookie,
-        value: rotatedProof,
-      }),
-    );
-
-    randomUuidSpy.mockRestore();
+    expect(result).toMatchObject({
+      status: 400,
+      data: { error: "invalid_token" },
+    });
+    expect(mocks.consumeBootstrapToken).toHaveBeenCalledWith("valid-token");
+    expect(state.configValues.get(setupClaimProofKey)).toBe("owner-proof");
+    expect(state.configValues.get(setupClaimedAtKey)).toBe(String(staleClaimedAt));
+    expect(setCalls).toHaveLength(0);
   });
 });
 
@@ -532,5 +528,83 @@ describe("configurePlex oauth initiate origin selection", () => {
     } as unknown as Parameters<typeof configurePlex>[0]);
 
     expect(oauth.initiateOAuth).toHaveBeenCalledWith("http://127.0.0.1:3000/setup");
+  });
+});
+
+describe("configurePlex oauth completion retries", () => {
+  beforeEach(() => {
+    resetStateAndMocks();
+    state.configValues.set(setupClaimedKey, "true");
+    state.configValues.set(setupClaimProofKey, "proof-123");
+    state.configValues.set(setupClaimedAtKey, String(Date.now()));
+  });
+
+  it("allows retrying oauth completion after Plex server validation fails once", async () => {
+    const { cookies } = createCookies({ [setupClaimCookie]: "proof-123" });
+    const oauth = await import("$lib/plex/oauth");
+    const plexClient = await import("$lib/plex/client");
+    const plexTypes = await import("$lib/plex/types");
+
+    vi.mocked(oauth.completeOAuth).mockResolvedValue({
+      id: 1,
+      uuid: "plex-uuid",
+      username: "plex-user",
+      email: "plex@example.com",
+      thumb: "",
+      authenticationToken: "plex-auth-token",
+    });
+    vi.mocked(plexClient.validateServerToken)
+      .mockRejectedValueOnce(new plexTypes.PlexConnectionError("temporary validation failure"))
+      .mockResolvedValueOnce({
+        friendlyName: "Plex",
+        machineIdentifier: "mid",
+        version: "1.0",
+      });
+
+    const body = new FormData();
+    body.set("plexMode", "oauth_complete");
+    body.set("oauthId", "oauth-id");
+    body.set("plexServerUrl", "http://plex.local");
+
+    const request = new Request("http://localhost/setup", { method: "POST", body });
+
+    const { actions } = await import("./+page.server");
+    const configurePlex = actions.configurePlex;
+    if (!configurePlex) {
+      throw new Error("configurePlex action is undefined");
+    }
+
+    const firstResult = await configurePlex({
+      request,
+      url: new URL("http://localhost/setup"),
+      cookies,
+    } as unknown as Parameters<typeof configurePlex>[0]);
+
+    expect(firstResult).toMatchObject({
+      status: 400,
+      data: { error: "temporary validation failure" },
+    });
+
+    const retryBody = new FormData();
+    retryBody.set("plexMode", "oauth_complete");
+    retryBody.set("oauthId", "oauth-id");
+    retryBody.set("plexServerUrl", "http://plex.local");
+
+    const retryRequest = new Request("http://localhost/setup", { method: "POST", body: retryBody });
+
+    const retryResult = await configurePlex({
+      request: retryRequest,
+      url: new URL("http://localhost/setup"),
+      cookies,
+    } as unknown as Parameters<typeof configurePlex>[0]);
+
+    expect(retryResult).toMatchObject({
+      success: true,
+      friendlyName: "Plex",
+      machineIdentifier: "mid",
+      version: "1.0",
+    });
+    expect(oauth.completeOAuth).toHaveBeenCalledTimes(2);
+    expect(plexClient.validateServerToken).toHaveBeenCalledTimes(2);
   });
 });

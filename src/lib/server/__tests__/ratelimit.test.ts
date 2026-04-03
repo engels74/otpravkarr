@@ -112,6 +112,23 @@ describe("createRateLimiter", () => {
     expect(limiter.check("ip-1").allowed).toBe(true);
     expect(limiter.check("ip-2").allowed).toBe(true);
   });
+
+  it("evicts expired keys when store exceeds threshold", () => {
+    vi.setSystemTime(1000);
+    const limiter = createRateLimiter({ windowMs: 60_000, maxRequests: 1 });
+
+    // Fill store above eviction threshold (1000 keys)
+    for (let i = 0; i < 1001; i++) {
+      limiter.check(`ip-${i}`);
+    }
+
+    // Advance time past the window so all entries expire
+    vi.advanceTimersByTime(60_001);
+
+    // Next check should trigger eviction and work normally
+    const result = limiter.check("new-ip");
+    expect(result.allowed).toBe(true);
+  });
 });
 
 describe("pre-configured limiters", () => {

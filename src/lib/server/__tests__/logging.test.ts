@@ -1,6 +1,17 @@
 // @vitest-environment node
+
+import { error, redirect } from "@sveltejs/kit";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import { createRequestLogger } from "$lib/server/logging";
+
+/** Capture the object thrown by a SvelteKit control function (redirect / error). */
+function capture(fn: () => never): unknown {
+  try {
+    fn();
+  } catch (e) {
+    return e;
+  }
+}
 
 const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 
@@ -127,6 +138,51 @@ describe("createRequestLogger", () => {
       event: createMockEvent(),
       resolve: async () => new Response(null, { status: 500 }),
     });
+
+    const entry = JSON.parse(consoleSpy.mock.calls[0]![0] as string);
+    expect(entry.status).toBe(500);
+  });
+
+  it("logs actual status from SvelteKit redirect exceptions", async () => {
+    const handler = createRequestLogger();
+    await expect(
+      handler({
+        event: createMockEvent(),
+        resolve: async () => {
+          throw capture(() => redirect(303, "/login"));
+        },
+      }),
+    ).rejects.toThrow();
+
+    const entry = JSON.parse(consoleSpy.mock.calls[0]![0] as string);
+    expect(entry.status).toBe(303);
+  });
+
+  it("logs actual status from SvelteKit HttpError exceptions", async () => {
+    const handler = createRequestLogger();
+    await expect(
+      handler({
+        event: createMockEvent(),
+        resolve: async () => {
+          throw capture(() => error(403, "Forbidden"));
+        },
+      }),
+    ).rejects.toThrow();
+
+    const entry = JSON.parse(consoleSpy.mock.calls[0]![0] as string);
+    expect(entry.status).toBe(403);
+  });
+
+  it("logs 500 for unknown error types", async () => {
+    const handler = createRequestLogger();
+    await expect(
+      handler({
+        event: createMockEvent(),
+        resolve: async () => {
+          throw new Error("unexpected");
+        },
+      }),
+    ).rejects.toThrow();
 
     const entry = JSON.parse(consoleSpy.mock.calls[0]![0] as string);
     expect(entry.status).toBe(500);

@@ -18,10 +18,24 @@ export interface RateLimiter {
 export function createRateLimiter(config: RateLimiterConfig): RateLimiter {
   const { windowMs, maxRequests } = config;
   const store = new Map<string, number[]>();
+  const EVICTION_THRESHOLD = 1000;
+
+  function evictExpired(now: number): void {
+    const windowStart = now - windowMs;
+    for (const [k, timestamps] of store) {
+      if (timestamps.every((t) => t <= windowStart)) {
+        store.delete(k);
+      }
+    }
+  }
 
   function check(key: string): RateLimitResult {
     const now = Date.now();
     const windowStart = now - windowMs;
+
+    if (store.size > EVICTION_THRESHOLD) {
+      evictExpired(now);
+    }
 
     let timestamps = store.get(key) ?? [];
     timestamps = timestamps.filter((t) => t > windowStart);

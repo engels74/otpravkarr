@@ -98,8 +98,9 @@ const setupGate: Handle = async ({ event, resolve }) => {
     return resolve(event);
   }
 
+  const setupComplete = await isSetupComplete();
   if (
-    !isSetupComplete() &&
+    !setupComplete &&
     !event.url.pathname.startsWith("/setup") &&
     event.url.pathname !== "/api/health" &&
     !event.url.pathname.startsWith("/_app/") &&
@@ -158,7 +159,7 @@ const csrfValidator: Handle = async ({ event, resolve }) => {
 
   const method = event.request.method;
   if (
-    isSetupComplete() &&
+    (await isSetupComplete()) &&
     (method === "POST" || method === "PUT" || method === "PATCH" || method === "DELETE")
   ) {
     let originsConfig: string | null = null;

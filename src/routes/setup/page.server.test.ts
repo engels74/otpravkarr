@@ -120,6 +120,7 @@ vi.mock("$lib/server/auth", () => ({
   },
   ADMIN_SESSION_TTL: 3600,
   requireSetupIncomplete: mocks.requireSetupIncomplete,
+  SETUP_COMPLETED_CONFIG_KEY: "setup_completed",
   SESSION_COOKIE_NAME: "otpravkarr_session",
 }));
 
@@ -136,6 +137,7 @@ vi.mock("$lib/url/discover", () => ({
 const setupClaimedKey = "setup_claimed";
 const setupClaimProofKey = "setup_claim_proof";
 const setupClaimedAtKey = "setup_claimed_at";
+const setupCompletedKey = "setup_completed";
 const setupClaimCookie = "otpravkarr_setup_claim";
 const setupClaimTtlMs = 10 * 60 * 1000;
 const postSetupRedirectLocation = "/dashboard";
@@ -283,6 +285,38 @@ describe("setup claim ownership", () => {
     randomUuidSpy.mockRestore();
   });
 
+  it("refreshes the existing claimant TTL for the active installer", async () => {
+    state.configValues.set(setupClaimedKey, "true");
+    state.configValues.set(setupClaimProofKey, "proof-123");
+    const staleClaimedAt = Date.now() - 1_000;
+    state.configValues.set(setupClaimedAtKey, String(staleClaimedAt));
+    const { cookies, setCalls } = createCookies({ [setupClaimCookie]: "proof-123" });
+
+    const request = new Request("http://localhost/setup", { method: "POST", body: new FormData() });
+
+    const { actions } = await import("./+page.server");
+    const claimInstance = actions.claimInstance;
+    if (!claimInstance) {
+      throw new Error("claimInstance action is undefined");
+    }
+
+    const result = await claimInstance({
+      request,
+      getClientAddress: () => "127.0.0.1",
+      cookies,
+    } as unknown as Parameters<typeof claimInstance>[0]);
+
+    expect(result).toEqual({ success: true });
+    expect(Number(state.configValues.get(setupClaimedAtKey))).toBeGreaterThan(staleClaimedAt);
+    expect(setCalls).toContainEqual(
+      expect.objectContaining({
+        name: setupClaimCookie,
+        value: "proof-123",
+      }),
+    );
+    expect(mocks.consumeBootstrapToken).not.toHaveBeenCalled();
+  });
+
   it("rejects reclaiming setup with a consumed bootstrap token when the claim cookie is missing", async () => {
     state.configValues.set(setupClaimedKey, "true");
     state.configValues.set(setupClaimProofKey, "owner-proof");
@@ -356,6 +390,61 @@ describe("setup claim ownership", () => {
     expect(state.configValues.get(setupClaimedAtKey)).toBe(String(staleClaimedAt));
     expect(setCalls).toHaveLength(0);
   });
+
+  it("keeps an active installer claim valid across setup steps by renewing ownership TTL", async () => {
+    const nowSpy = vi.spyOn(Date, "now");
+    try {
+      const firstActionAt = 1_700_000_000_000;
+      const initialClaimedAt = firstActionAt - setupClaimTtlMs + 1_000;
+
+      state.configValues.set(setupClaimedKey, "true");
+      state.configValues.set(setupClaimProofKey, "owner-proof");
+      state.configValues.set(setupClaimedAtKey, String(initialClaimedAt));
+      const { cookies } = createCookies({ [setupClaimCookie]: "owner-proof" });
+
+      const { actions } = await import("./+page.server");
+      const createAdmin = actions.createAdmin;
+      const configureOrigin = actions.configureOrigin;
+      if (!createAdmin || !configureOrigin) {
+        throw new Error("required setup actions are undefined");
+      }
+
+      const createAdminBody = new FormData();
+      createAdminBody.set("username", "admin");
+      createAdminBody.set("password", "passwordpassword");
+      createAdminBody.set("confirmPassword", "passwordpassword");
+      const createAdminRequest = new Request("http://localhost/setup", {
+        method: "POST",
+        body: createAdminBody,
+      });
+
+      nowSpy.mockReturnValue(firstActionAt);
+      const createAdminResult = await createAdmin({
+        request: createAdminRequest,
+        cookies,
+      } as unknown as Parameters<typeof createAdmin>[0]);
+      expect(createAdminResult).toEqual({ success: true });
+
+      const secondActionAt = firstActionAt + 2_000;
+      const configureOriginBody = new FormData();
+      configureOriginBody.set("allowedOrigins", "http://localhost:3000");
+      const configureOriginRequest = new Request("http://localhost/setup", {
+        method: "POST",
+        body: configureOriginBody,
+      });
+
+      nowSpy.mockReturnValue(secondActionAt);
+      const configureOriginResult = await configureOrigin({
+        request: configureOriginRequest,
+        cookies,
+      } as unknown as Parameters<typeof configureOrigin>[0]);
+      expect(configureOriginResult).toEqual({ success: true });
+
+      expect(Number(state.configValues.get(setupClaimedAtKey))).toBe(secondActionAt);
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
 });
 
 describe("createAdmin", () => {
@@ -367,7 +456,9 @@ describe("createAdmin", () => {
   });
 
   it("persists the admin account and stores username in config", async () => {
-    const { cookies } = createCookies({ [setupClaimCookie]: "proof-123" });
+    const staleClaimedAt = Date.now() - 1_000;
+    state.configValues.set(setupClaimedAtKey, String(staleClaimedAt));
+    const { cookies, setCalls } = createCookies({ [setupClaimCookie]: "proof-123" });
     const body = new FormData();
     body.set("username", "admin");
     body.set("password", "passwordpassword");
@@ -390,6 +481,14 @@ describe("createAdmin", () => {
     expect(mocks.hashAdminPassword).toHaveBeenCalledWith("passwordpassword");
     expect(mocks.createAdmin).toHaveBeenCalledWith("admin", "hashed-password");
     expect(state.configValues.get("admin_username")).toBe("admin");
+    expect(state.configValues.get(setupCompletedKey)).toBe("false");
+    expect(Number(state.configValues.get(setupClaimedAtKey))).toBeGreaterThan(staleClaimedAt);
+    expect(setCalls).toContainEqual(
+      expect.objectContaining({
+        name: setupClaimCookie,
+        value: "proof-123",
+      }),
+    );
   });
 
   it("returns error when admin account creation fails", async () => {
@@ -515,6 +614,7 @@ describe("setDefaults", () => {
     expect(mocks.createAdmin).not.toHaveBeenCalled();
     expect(mocks.createSession).toHaveBeenCalledWith("admin", "admin", 3600);
     expect(mocks.appendAuditLog).toHaveBeenCalledOnce();
+    expect(state.configValues.get(setupCompletedKey)).toBe("true");
     expect(state.configValues.get(setupClaimedAtKey)).toBe("");
     expect(setCalls).toContainEqual(
       expect.objectContaining({

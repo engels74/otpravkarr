@@ -1,6 +1,7 @@
 import type { RequestEvent } from "@sveltejs/kit";
 import { error, redirect } from "@sveltejs/kit";
-import { adminExists, getAdminByUsername } from "$lib/db/repositories/admin";
+import { getAdminByUsername } from "$lib/db/repositories/admin";
+import { getConfig } from "$lib/db/repositories/config";
 import { getSession } from "$lib/db/repositories/sessions";
 import { getUserMappingById } from "$lib/db/repositories/users";
 import type { AdminAccount, UserMapping } from "$lib/db/types";
@@ -8,6 +9,8 @@ import type { AdminAccount, UserMapping } from "$lib/db/types";
 export const SESSION_COOKIE_NAME = "otpravkarr_session";
 export const ADMIN_SESSION_TTL = 3600;
 export const USER_SESSION_TTL = 14400;
+export const SETUP_COMPLETED_CONFIG_KEY = "setup_completed";
+const SETUP_COMPLETED_VALUE = "true";
 
 export const ADMIN_COOKIE_OPTIONS = {
   path: "/",
@@ -78,12 +81,12 @@ export async function requireUser(event: RequestEvent): Promise<UserMapping> {
   return user;
 }
 
-export function requireSetupIncomplete(): void {
-  if (adminExists()) {
+export async function requireSetupIncomplete(): Promise<void> {
+  if (await isSetupComplete()) {
     throw error(404);
   }
 }
 
-export function isSetupComplete(): boolean {
-  return adminExists();
+export async function isSetupComplete(): Promise<boolean> {
+  return (await getConfig(SETUP_COMPLETED_CONFIG_KEY)) === SETUP_COMPLETED_VALUE;
 }

@@ -9,7 +9,7 @@ import type { AdminAccount, Session, UserMapping } from "$lib/db/types";
 let mockSession: Session | null = null;
 let mockAdmin: AdminAccount | null = null;
 let mockUser: UserMapping | null = null;
-let mockAdminExists = false;
+let mockSetupCompleted: string | null = null;
 
 // ---------------------------------------------------------------------------
 // Mock SvelteKit — redirect and error throw objects we can catch
@@ -34,7 +34,10 @@ vi.mock("$lib/db/repositories/sessions", () => ({
 
 vi.mock("$lib/db/repositories/admin", () => ({
   getAdminByUsername: (username: string) => mockAdmin,
-  adminExists: () => mockAdminExists,
+}));
+
+vi.mock("$lib/db/repositories/config", () => ({
+  getConfig: async (key: string) => (key === "setup_completed" ? mockSetupCompleted : null),
 }));
 
 vi.mock("$lib/db/repositories/users", () => ({
@@ -131,14 +134,14 @@ describe("auth guards", () => {
     mockSession = null;
     mockAdmin = null;
     mockUser = null;
-    mockAdminExists = false;
+    mockSetupCompleted = null;
   });
 
   afterEach(() => {
     mockSession = null;
     mockAdmin = null;
     mockUser = null;
-    mockAdminExists = false;
+    mockSetupCompleted = null;
   });
 
   // -----------------------------------------------------------------------
@@ -406,22 +409,23 @@ describe("auth guards", () => {
   // -----------------------------------------------------------------------
 
   describe("requireSetupIncomplete", () => {
-    it("does not throw when adminExists returns false", () => {
-      mockAdminExists = false;
-      expect(() => requireSetupIncomplete()).not.toThrow();
+    it("does not throw when setup_completed is false", async () => {
+      mockSetupCompleted = "false";
+      await expect(requireSetupIncomplete()).resolves.toBeUndefined();
     });
 
-    it("throws error(404) when adminExists returns true", () => {
-      mockAdminExists = true;
+    it("throws error(404) when setup_completed is true", async () => {
+      mockSetupCompleted = "true";
 
-      try {
-        requireSetupIncomplete();
-        expect.unreachable("should have thrown");
-      } catch (e: unknown) {
-        const err = e as { type: string; status: number };
-        expect(err.type).toBe("error");
-        expect(err.status).toBe(404);
-      }
+      await expect(requireSetupIncomplete()).rejects.toMatchObject({
+        type: "error",
+        status: 404,
+      });
+    });
+
+    it("does not throw when setup_completed is unset", async () => {
+      mockSetupCompleted = null;
+      await expect(requireSetupIncomplete()).resolves.toBeUndefined();
     });
   });
 
@@ -430,14 +434,19 @@ describe("auth guards", () => {
   // -----------------------------------------------------------------------
 
   describe("isSetupComplete", () => {
-    it("returns false when adminExists returns false", () => {
-      mockAdminExists = false;
-      expect(isSetupComplete()).toBe(false);
+    it("returns false when setup_completed is false", async () => {
+      mockSetupCompleted = "false";
+      await expect(isSetupComplete()).resolves.toBe(false);
     });
 
-    it("returns true when adminExists returns true", () => {
-      mockAdminExists = true;
-      expect(isSetupComplete()).toBe(true);
+    it("returns true when setup_completed is true", async () => {
+      mockSetupCompleted = "true";
+      await expect(isSetupComplete()).resolves.toBe(true);
+    });
+
+    it("returns false when setup_completed is unset", async () => {
+      mockSetupCompleted = null;
+      await expect(isSetupComplete()).resolves.toBe(false);
     });
   });
 });

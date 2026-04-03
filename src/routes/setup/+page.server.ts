@@ -19,6 +19,7 @@ import {
   ADMIN_SESSION_TTL,
   requireSetupIncomplete,
   SESSION_COOKIE_NAME,
+  SETUP_COMPLETED_CONFIG_KEY,
 } from "$lib/server/auth";
 import { setupLimiter } from "$lib/server/ratelimit";
 import { probeXcSurface } from "$lib/url/discover";
@@ -31,6 +32,8 @@ const SETUP_CLAIM_PROOF_CONFIG_KEY = "setup_claim_proof";
 const SETUP_CLAIMED_AT_CONFIG_KEY = "setup_claimed_at";
 const SETUP_CLAIMED_VALUE = "true";
 const SETUP_UNCLAIMED_VALUE = "false";
+const SETUP_COMPLETED_VALUE = "true";
+const SETUP_INCOMPLETE_VALUE = "false";
 const SETUP_CLAIM_COOKIE_NAME = "otpravkarr_setup_claim";
 const POST_SETUP_REDIRECT_PATH = "/dashboard";
 // Keep claim TTL shorter than bootstrap token TTL (15m) so expired claims can be reclaimed.
@@ -81,10 +84,21 @@ async function hasActiveSetupClaim(cookies: Cookies): Promise<boolean> {
 
 async function requireSetupClaimedAction(cookies: Cookies) {
   if (await hasActiveSetupClaim(cookies)) {
+    await renewSetupClaim(cookies);
     return null;
   }
 
   return fail(403, { error: "setup_not_claimed" });
+}
+
+async function renewSetupClaim(cookies: Cookies): Promise<void> {
+  const claimProof = cookies.get(SETUP_CLAIM_COOKIE_NAME);
+  if (!claimProof) {
+    return;
+  }
+
+  await setConfig(SETUP_CLAIMED_AT_CONFIG_KEY, String(Date.now()));
+  cookies.set(SETUP_CLAIM_COOKIE_NAME, claimProof, SETUP_CLAIM_COOKIE_OPTIONS);
 }
 
 async function getMissingSetupPrerequisites(): Promise<string[]> {
@@ -97,7 +111,7 @@ async function getMissingSetupPrerequisites(): Promise<string[]> {
 }
 
 export const load: PageServerLoad = async ({ url, cookies }) => {
-  requireSetupIncomplete();
+  await requireSetupIncomplete();
 
   const tokenFromUrl = url.searchParams.get("token");
   const claimActive = await hasActiveSetupClaim(cookies);
@@ -112,6 +126,7 @@ export const load: PageServerLoad = async ({ url, cookies }) => {
 export const actions: Actions = {
   claimInstance: async ({ request, getClientAddress, cookies }) => {
     if (await hasActiveSetupClaim(cookies)) {
+      await renewSetupClaim(cookies);
       return { success: true };
     }
 
@@ -185,7 +200,10 @@ export const actions: Actions = {
       });
     }
 
-    await setConfig("admin_username", username);
+    await Promise.all([
+      setConfig("admin_username", username),
+      setConfig(SETUP_COMPLETED_CONFIG_KEY, SETUP_INCOMPLETE_VALUE),
+    ]);
 
     return { success: true };
   },
@@ -215,7 +233,6 @@ export const actions: Actions = {
           setConfig("plex_admin_token", plexToken, true),
           setConfig("plex_machine_id", serverInfo.machineIdentifier),
         ]);
-
         return {
           success: true,
           friendlyName: serverInfo.friendlyName,
@@ -230,7 +247,6 @@ export const actions: Actions = {
           configuredOrigin && configuredOrigin.length > 0 ? configuredOrigin : url.origin;
         const forwardUrl = `${forwardOrigin.replace(/\/$/, "")}/setup`;
         const result = await initiateOAuth(forwardUrl);
-
         return {
           success: true,
           oauthId: result.id,
@@ -258,7 +274,6 @@ export const actions: Actions = {
           setConfig("plex_admin_token", identity.authenticationToken, true),
           setConfig("plex_machine_id", serverInfo.machineIdentifier),
         ]);
-
         return {
           success: true,
           friendlyName: serverInfo.friendlyName,
@@ -413,6 +428,7 @@ export const actions: Actions = {
       setConfig("default_profile_id", defaultProfileId),
       setConfig("sync_interval_minutes", String(syncMinutes)),
       setConfig("default_provisioning_mode", defaultProvisioningMode),
+      setConfig(SETUP_COMPLETED_CONFIG_KEY, SETUP_COMPLETED_VALUE),
     ]);
 
     await Promise.all([

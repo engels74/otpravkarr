@@ -298,6 +298,29 @@ describe("user mappings repository", () => {
     });
   });
 
+  describe("getUserMappingById", () => {
+    it("returns null when no mapping exists", () => {
+      const result = usersModule.getUserMappingById(99999);
+      expect(result).toBeNull();
+    });
+
+    it("returns the matching mapping by primary key", () => {
+      const created = usersModule.createUserMapping(createTestMapping({ plex_account_id: 500 }));
+
+      const result = usersModule.getUserMappingById(created.id);
+      expect(result).not.toBeNull();
+      expect(result?.id).toBe(created.id);
+      expect(result?.plex_account_id).toBe(500);
+    });
+
+    it("does not return non-matching mappings", () => {
+      usersModule.createUserMapping(createTestMapping({ plex_account_id: 500 }));
+
+      const result = usersModule.getUserMappingById(99999);
+      expect(result).toBeNull();
+    });
+  });
+
   describe("getAllUserMappings", () => {
     it("returns all mappings when no filter is provided", () => {
       usersModule.createUserMapping(

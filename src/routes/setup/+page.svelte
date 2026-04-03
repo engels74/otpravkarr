@@ -1,4 +1,5 @@
 <script lang="ts">
+import { untrack } from "svelte";
 import { enhance } from "$app/forms";
 import * as Alert from "$lib/components/ui/alert";
 import { Badge } from "$lib/components/ui/badge";
@@ -10,10 +11,17 @@ import * as Select from "$lib/components/ui/select";
 import { Separator } from "$lib/components/ui/separator";
 import { cn } from "$lib/utils";
 
-let { data } = $props();
+type SetupPageData = {
+  claimActive: boolean;
+  tokenProvided: boolean;
+  tokenFromUrl: string | null;
+};
+
+let { data }: { data: SetupPageData } = $props();
+const initialStep = untrack(() => (data.claimActive ? 1 : 0));
 
 // ── Wizard state ────────────────────────────────────────────────
-let step = $state(0);
+let step = $state(initialStep);
 let submitting = $state(false);
 let stepErrors = $state<Record<string, string>>({});
 

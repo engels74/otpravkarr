@@ -1,4 +1,4 @@
-import { fail, redirect } from "@sveltejs/kit";
+import { type Cookies, fail, redirect } from "@sveltejs/kit";
 import { consumeBootstrapToken } from "$lib/crypto/bootstrap";
 import { hashAdminPassword } from "$lib/crypto/passwords";
 import { createAdmin as insertAdmin } from "$lib/db/repositories/admin";
@@ -26,35 +26,65 @@ import type { Actions, PageServerLoad } from "./$types";
 const USERNAME_PATTERN = /^[a-zA-Z0-9_-]{3,32}$/;
 const MIN_PASSWORD_LENGTH = 12;
 const SETUP_CLAIMED_CONFIG_KEY = "setup_claimed";
+const SETUP_CLAIM_PROOF_CONFIG_KEY = "setup_claim_proof";
 const SETUP_CLAIMED_VALUE = "true";
 const SETUP_UNCLAIMED_VALUE = "false";
+const SETUP_CLAIM_COOKIE_NAME = "otpravkarr_setup_claim";
+const SETUP_CLAIM_TTL_SECONDS = 30 * 60;
+const SETUP_CLAIM_COOKIE_OPTIONS = {
+  path: "/setup",
+  httpOnly: true,
+  secure: true,
+  sameSite: "strict" as const,
+  maxAge: SETUP_CLAIM_TTL_SECONDS,
+};
 
 async function isSetupClaimed(): Promise<boolean> {
   const claimed = await getConfig(SETUP_CLAIMED_CONFIG_KEY);
   return claimed === SETUP_CLAIMED_VALUE;
 }
 
-async function requireSetupClaimedAction() {
-  if (await isSetupClaimed()) {
+async function hasActiveSetupClaim(cookies: Cookies): Promise<boolean> {
+  if (!(await isSetupClaimed())) {
+    return false;
+  }
+
+  const expectedProof = await getConfig(SETUP_CLAIM_PROOF_CONFIG_KEY);
+  if (!expectedProof) {
+    return false;
+  }
+
+  const claimProof = cookies.get(SETUP_CLAIM_COOKIE_NAME);
+  return claimProof !== undefined && claimProof === expectedProof;
+}
+
+async function requireSetupClaimedAction(cookies: Cookies) {
+  if (await hasActiveSetupClaim(cookies)) {
     return null;
   }
 
   return fail(403, { error: "setup_not_claimed" });
 }
 
-export const load: PageServerLoad = async ({ url }) => {
+export const load: PageServerLoad = async ({ url, cookies }) => {
   requireSetupIncomplete();
 
   const tokenFromUrl = url.searchParams.get("token");
+  const claimActive = await hasActiveSetupClaim(cookies);
 
   return {
     tokenProvided: tokenFromUrl !== null,
     tokenFromUrl,
+    claimActive,
   };
 };
 
 export const actions: Actions = {
-  claimInstance: async ({ request, getClientAddress }) => {
+  claimInstance: async ({ request, getClientAddress, cookies }) => {
+    if (await hasActiveSetupClaim(cookies)) {
+      return { success: true };
+    }
+
     const limit = setupLimiter.check(getClientAddress());
     if (!limit.allowed) {
       return fail(429, { error: "rate_limited" });
@@ -72,13 +102,18 @@ export const actions: Actions = {
       return fail(400, { error: "invalid_token" });
     }
 
-    await setConfig(SETUP_CLAIMED_CONFIG_KEY, SETUP_CLAIMED_VALUE);
+    const claimProof = crypto.randomUUID();
+    await Promise.all([
+      setConfig(SETUP_CLAIMED_CONFIG_KEY, SETUP_CLAIMED_VALUE),
+      setConfig(SETUP_CLAIM_PROOF_CONFIG_KEY, claimProof, true),
+    ]);
+    cookies.set(SETUP_CLAIM_COOKIE_NAME, claimProof, SETUP_CLAIM_COOKIE_OPTIONS);
 
     return { success: true };
   },
 
-  createAdmin: async ({ request }) => {
-    const claimError = await requireSetupClaimedAction();
+  createAdmin: async ({ request, cookies }) => {
+    const claimError = await requireSetupClaimedAction(cookies);
     if (claimError) {
       return claimError;
     }
@@ -112,8 +147,8 @@ export const actions: Actions = {
     return { success: true };
   },
 
-  configurePlex: async ({ request, url }) => {
-    const claimError = await requireSetupClaimedAction();
+  configurePlex: async ({ request, url, cookies }) => {
+    const claimError = await requireSetupClaimedAction(cookies);
     if (claimError) {
       return claimError;
     }
@@ -198,8 +233,8 @@ export const actions: Actions = {
     }
   },
 
-  configureDispatcharr: async ({ request }) => {
-    const claimError = await requireSetupClaimedAction();
+  configureDispatcharr: async ({ request, cookies }) => {
+    const claimError = await requireSetupClaimedAction(cookies);
     if (claimError) {
       return claimError;
     }
@@ -250,8 +285,8 @@ export const actions: Actions = {
     return { success: true, groups, profiles, xcProbe };
   },
 
-  configureOrigin: async ({ request }) => {
-    const claimError = await requireSetupClaimedAction();
+  configureOrigin: async ({ request, cookies }) => {
+    const claimError = await requireSetupClaimedAction(cookies);
     if (claimError) {
       return claimError;
     }
@@ -264,21 +299,27 @@ export const actions: Actions = {
       .map((o) => o.trim())
       .filter((o) => o.length > 0);
 
+    const normalizedOrigins: string[] = [];
+
     for (const origin of origins) {
       try {
-        new URL(origin);
+        const parsedOrigin = new URL(origin).origin;
+        if (parsedOrigin === "null") {
+          return fail(400, { error: `Invalid origin: ${origin}` });
+        }
+        normalizedOrigins.push(parsedOrigin);
       } catch {
         return fail(400, { error: `Invalid origin: ${origin}` });
       }
     }
 
-    await setConfig("allowed_origins", JSON.stringify(origins));
+    await setConfig("allowed_origins", JSON.stringify(normalizedOrigins));
 
     return { success: true };
   },
 
   setDefaults: async ({ request, cookies, getClientAddress }) => {
-    const claimError = await requireSetupClaimedAction();
+    const claimError = await requireSetupClaimedAction(cookies);
     if (claimError) {
       return claimError;
     }
@@ -337,7 +378,11 @@ export const actions: Actions = {
       });
     }
 
-    await setConfig(SETUP_CLAIMED_CONFIG_KEY, SETUP_UNCLAIMED_VALUE);
+    await Promise.all([
+      setConfig(SETUP_CLAIMED_CONFIG_KEY, SETUP_UNCLAIMED_VALUE),
+      setConfig(SETUP_CLAIM_PROOF_CONFIG_KEY, "", true),
+    ]);
+    cookies.delete(SETUP_CLAIM_COOKIE_NAME, { path: SETUP_CLAIM_COOKIE_OPTIONS.path });
 
     const sessionId = createSession(adminUsername, "admin", ADMIN_SESSION_TTL);
     cookies.set(SESSION_COOKIE_NAME, sessionId, ADMIN_COOKIE_OPTIONS);

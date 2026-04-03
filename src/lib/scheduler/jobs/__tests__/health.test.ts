@@ -35,10 +35,23 @@ vi.mock("$lib/db/repositories/audit", () => ({
   appendAuditLog: (entry: unknown) => mockAppendAuditLog(entry),
 }));
 
-const mockPrepareGet = vi.fn().mockReturnValue({ "1": 1 });
-const mockPrepare = vi.fn().mockReturnValue({ get: mockPrepareGet });
+const mockExec = vi.fn();
+let lastInsertedTs: string | undefined;
+const mockPrepareRun = vi.fn().mockImplementation((...args: unknown[]) => {
+  lastInsertedTs = args[0] as string;
+});
+const mockPrepareGet = vi.fn().mockImplementation(() => {
+  return { ts: lastInsertedTs };
+});
+const mockPrepare = vi.fn().mockImplementation((sql: string) => {
+  if (sql.startsWith("INSERT OR REPLACE")) {
+    return { run: mockPrepareRun };
+  }
+  // SELECT ts ...
+  return { get: mockPrepareGet };
+});
 vi.mock("$lib/db/connection", () => ({
-  getDb: () => ({ prepare: mockPrepare }),
+  getDb: () => ({ exec: mockExec, prepare: mockPrepare }),
 }));
 
 vi.mock("$lib/db/types", () => ({
@@ -77,8 +90,15 @@ beforeEach(() => {
   mockCheckHealth.mockReset();
   mockGetConfig.mockReset();
   mockAppendAuditLog.mockReset();
+  mockExec.mockClear();
   mockPrepare.mockClear();
-  mockPrepareGet.mockClear().mockReturnValue({ "1": 1 });
+  mockPrepareRun.mockClear().mockImplementation((...args: unknown[]) => {
+    lastInsertedTs = args[0] as string;
+  });
+  mockPrepareGet.mockClear().mockImplementation(() => {
+    return { ts: lastInsertedTs };
+  });
+  lastInsertedTs = undefined;
   consoleSpy.mockClear();
 });
 
@@ -86,7 +106,7 @@ afterEach(() => {
   // Reset health state between tests
   resetHealthState();
   mockGetConfig.mockImplementation(async () => null);
-  mockPrepareGet.mockReturnValue({ "1": 1 });
+  lastInsertedTs = undefined;
 });
 
 describe("createHealthJob", () => {

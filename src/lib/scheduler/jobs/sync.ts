@@ -1,5 +1,7 @@
 import { reconcileSync } from "$lib/bridge/lifecycle";
+import { appendAuditLog } from "$lib/db/repositories/audit";
 import { getConfig } from "$lib/db/repositories/config";
+import { AuditAction } from "$lib/db/types";
 import { DispatcharrClient } from "$lib/dispatcharr/client";
 import type { Job } from "$lib/scheduler/runner";
 
@@ -44,10 +46,30 @@ export function createSyncJob(defaultIntervalMs = DEFAULT_INTERVAL_MS): Job {
         const client = new DispatcharrClient(dispatcharrUrl, apiKey);
         const report = await reconcileSync(client, plexAdminToken);
         log("sync.completed", { report });
+        try {
+          appendAuditLog({
+            action: AuditAction.SYNC_COMPLETED,
+            detail: { report },
+          });
+        } catch (auditError) {
+          log("audit.error", {
+            error: auditError instanceof Error ? auditError.message : String(auditError),
+          });
+        }
       } catch (error) {
         log("sync.error", {
           error: error instanceof Error ? error.message : String(error),
         });
+        try {
+          appendAuditLog({
+            action: AuditAction.SYNC_FAILED,
+            detail: { error: error instanceof Error ? error.message : String(error) },
+          });
+        } catch (auditError) {
+          log("audit.error", {
+            error: auditError instanceof Error ? auditError.message : String(auditError),
+          });
+        }
       }
     },
   };

@@ -38,6 +38,9 @@ export class Scheduler {
     if (this.jobs.has(job.name)) {
       throw new Error(`Job "${job.name}" is already registered`);
     }
+    if (job.interval <= 0) {
+      throw new Error(`Job "${job.name}" has invalid interval ${job.interval}ms (must be > 0)`);
+    }
     this.jobs.set(job.name, {
       job,
       timer: null,

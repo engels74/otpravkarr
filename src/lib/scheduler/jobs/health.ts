@@ -169,8 +169,18 @@ export function createHealthJob(defaultIntervalMs = 5 * 60 * 1000): Job {
 
       // --- SQLite check ---
       try {
-        getDb().prepare("SELECT 1").get();
-        currentHealth.database = { status: "healthy", lastChecked: now };
+        const db = getDb();
+        db.exec("CREATE TABLE IF NOT EXISTS _health_check (id INTEGER PRIMARY KEY, ts TEXT)");
+        db.prepare("INSERT OR REPLACE INTO _health_check (id, ts) VALUES (1, ?)").run(now);
+        const row = db.prepare("SELECT ts FROM _health_check WHERE id = 1").get() as
+          | { ts: string }
+          | undefined;
+        if (row?.ts === now) {
+          currentHealth.database = { status: "healthy", lastChecked: now };
+        } else {
+          currentHealth.database = { status: "unhealthy", lastChecked: now };
+          log("database.readback_mismatch", { expected: now, got: row?.ts });
+        }
       } catch (error) {
         currentHealth.database = { status: "unhealthy", lastChecked: now };
         log("database.error", { error: error instanceof Error ? error.message : String(error) });

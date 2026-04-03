@@ -74,6 +74,18 @@ describe("Scheduler", () => {
       scheduler.register(createJob());
       expect(() => scheduler.register(createJob())).toThrow('Job "test-job" is already registered');
     });
+
+    it("throws when registering a job with zero interval", () => {
+      expect(() => scheduler.register({ name: "bad", interval: 0, fn: async () => {} })).toThrow(
+        "invalid interval",
+      );
+    });
+
+    it("throws when registering a job with negative interval", () => {
+      expect(() =>
+        scheduler.register({ name: "bad", interval: -1000, fn: async () => {} }),
+      ).toThrow("invalid interval");
+    });
   });
 
   describe("start / stop lifecycle", () => {

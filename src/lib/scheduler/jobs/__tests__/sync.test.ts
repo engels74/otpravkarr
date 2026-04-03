@@ -16,6 +16,18 @@ vi.mock("$lib/bridge/lifecycle", () => ({
   reconcileSync: (...args: unknown[]) => mockReconcileSync(...args),
 }));
 
+const mockAppendAuditLog = vi.fn();
+vi.mock("$lib/db/repositories/audit", () => ({
+  appendAuditLog: (entry: unknown) => mockAppendAuditLog(entry),
+}));
+
+vi.mock("$lib/db/types", () => ({
+  AuditAction: {
+    SYNC_COMPLETED: "sync.completed",
+    SYNC_FAILED: "sync.failed",
+  },
+}));
+
 // DispatcharrClient is used with `new` — mock it as a class that captures constructor args.
 // The factory must be self-contained (no top-level variable references due to hoisting).
 vi.mock("$lib/dispatcharr/client", () => ({
@@ -109,6 +121,11 @@ describe("sync job fn", () => {
     expect(completedLog).toBeDefined();
     expect(completedLog!.job).toBe("plex-dispatcharr-sync");
     expect(completedLog!.report).toEqual(report);
+
+    expect(mockAppendAuditLog).toHaveBeenCalledWith({
+      action: "sync.completed",
+      detail: { report },
+    });
   });
 
   it("missing config: logs warning and returns early without calling reconcileSync", async () => {
@@ -160,6 +177,11 @@ describe("sync job fn", () => {
     expect(errorLog).toBeDefined();
     expect(errorLog!.job).toBe("plex-dispatcharr-sync");
     expect(errorLog!.error).toBe("Network failure");
+
+    expect(mockAppendAuditLog).toHaveBeenCalledWith({
+      action: "sync.failed",
+      detail: { error: "Network failure" },
+    });
   });
 
   it("reconcileSync throws non-Error: error stringified and logged", async () => {

@@ -1,6 +1,7 @@
 import type { Handle } from "@sveltejs/kit";
 import { redirect } from "@sveltejs/kit";
 import { sequence } from "@sveltejs/kit/hooks";
+import { building } from "$app/environment";
 import { env } from "$env/dynamic/private";
 import { createBootstrapToken } from "$lib/crypto/bootstrap";
 import { initializeDatabase } from "$lib/db/connection";
@@ -52,8 +53,10 @@ async function ensureRuntimeInitialized(): Promise<void> {
     runtimeInitialization = (async () => {
       validateEnv();
       await initializeDatabase();
-      await registerSchedulerJobs();
-      printBootstrapBanner();
+      if (!building) {
+        await registerSchedulerJobs();
+        printBootstrapBanner();
+      }
     })();
   }
 

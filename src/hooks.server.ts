@@ -91,7 +91,7 @@ const setupGate: Handle = async ({ event, resolve }) => {
     !event.url.pathname.startsWith("/setup") &&
     event.url.pathname !== "/api/health" &&
     !event.url.pathname.startsWith("/_app/") &&
-    !event.url.pathname.startsWith("/favicon")
+    event.url.pathname !== "/favicon.ico"
   ) {
     throw redirect(303, "/setup");
   }

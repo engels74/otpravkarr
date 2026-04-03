@@ -143,6 +143,7 @@ const sessionResolver: Handle = async ({ event, resolve }) => {
     event.locals.user = Number.isNaN(userId) ? null : getUserMappingById(userId);
     event.locals.admin = null;
   } else {
+    event.locals.session = null;
     event.locals.admin = null;
     event.locals.user = null;
   }

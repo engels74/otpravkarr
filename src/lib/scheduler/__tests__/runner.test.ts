@@ -36,6 +36,7 @@ function getLogEntries(): Array<Record<string, unknown>> {
 }
 
 function expectDefined<T>(value: T | null | undefined): NonNullable<T> {
+  expect(value).not.toBeNull();
   expect(value).toBeDefined();
   return value as NonNullable<T>;
 }
@@ -51,6 +52,16 @@ describe("Scheduler", () => {
   afterEach(() => {
     scheduler.stop();
     vi.useRealTimers();
+  });
+
+  describe("expectDefined", () => {
+    it("rejects null values", () => {
+      expect(() => expectDefined(null)).toThrowError(/not to be null/);
+    });
+
+    it("rejects undefined values", () => {
+      expect(() => expectDefined(undefined)).toThrowError(/to be defined/);
+    });
   });
 
   describe("register", () => {

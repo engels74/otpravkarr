@@ -657,7 +657,7 @@ All sensitive data handling depends on this module. It must be built and tested 
   - [x] Call `reconcileSync()`
   - [x] Log report to console and audit log
   - [x] On error: log error, append to audit log, do not crash
-- [x] Default interval: 15 minutes (configurable via `config` table)
+- [x] Default interval: 15 minutes (configurable via `sync_interval_minutes` in config table)
 
 ### 8.3 — Health check job (`src/lib/scheduler/jobs/health.ts`)
 
@@ -666,18 +666,18 @@ All sensitive data handling depends on this module. It must be built and tested 
 - [x] Check SQLite health via write-read cycle
 - [x] Store results in module-level reactive state (accessible from admin dashboard)
 - [x] On failure: append audit log entry `health.check_failed`
-- [x] Default interval: 5 minutes
+- [x] Default interval: 5 minutes (hardcoded constructor default; does not yet read from config table)
 
 ### 8.4 — Session cleanup job (`src/lib/scheduler/jobs/cleanup.ts`)
 
 - [x] Call `deleteExpiredSessions()` from session repository
-- [x] Default interval: 30 minutes
+- [x] Default interval: 30 minutes (hardcoded constructor default)
 - [x] Log count of deleted sessions
 
 ### 8.5 — Audit log rotation job (`src/lib/scheduler/jobs/audit-rotation.ts`)
 
-- [x] Delete audit log entries older than configured max age (default: 90 days)
-- [x] Default interval: 24 hours
+- [x] Delete audit log entries older than configured max age (default: 90 days, reads `audit_retention_days` from config table)
+- [x] Default interval: 24 hours (hardcoded constructor default)
 - [x] Log count of rotated entries
 
 ---
@@ -1155,7 +1155,7 @@ The phases above are ordered by dependency. The recommended implementation seque
 | `default_profile_id` | No | Default channel profile ID (nullable) |
 | `default_provisioning_mode` | No | `automatic` or `self_managed` |
 | `sync_interval_minutes` | No | Sync job interval (default: 15) |
-| `health_interval_minutes` | No | Health check interval (default: 5) |
+| `health_interval_minutes` | No | Health check interval (default: 5) — planned but not yet read by health job |
 | `allowed_origins` | No | JSON array of allowed CSRF origins |
 | `xc_url_template` | No | Configurable XC URL template |
 | `admin_session_ttl_seconds` | No | Admin session TTL (default: 3600) |

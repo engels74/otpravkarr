@@ -30,6 +30,9 @@ function log(event: string, job: string, extra?: Record<string, unknown>): void 
   );
 }
 
+/** Maximum safe setTimeout delay (2^31 - 1 ms ≈ 24.85 days). Larger values are clamped to 0 by JS runtimes. */
+const MAX_SAFE_TIMEOUT = 2_147_483_647;
+
 export class Scheduler {
   private jobs = new Map<string, JobEntry>();
   private started = false;
@@ -38,8 +41,15 @@ export class Scheduler {
     if (this.jobs.has(job.name)) {
       throw new Error(`Job "${job.name}" is already registered`);
     }
-    if (job.interval <= 0) {
-      throw new Error(`Job "${job.name}" has invalid interval ${job.interval}ms (must be > 0)`);
+    if (!Number.isFinite(job.interval) || job.interval <= 0) {
+      throw new Error(
+        `Job "${job.name}" has invalid interval ${job.interval}ms (must be a finite number > 0)`,
+      );
+    }
+    if (job.interval > MAX_SAFE_TIMEOUT) {
+      throw new Error(
+        `Job "${job.name}" has interval ${job.interval}ms exceeding maximum safe timeout (${MAX_SAFE_TIMEOUT}ms)`,
+      );
     }
     const entry: JobEntry = {
       job,
@@ -108,7 +118,7 @@ export class Scheduler {
       nextFireAt += missedTicks * entry.job.interval;
     }
 
-    const delay = nextFireAt - now;
+    const delay = Math.min(nextFireAt - now, MAX_SAFE_TIMEOUT);
     entry.nextScheduledAt = nextFireAt;
     entry.timer = setTimeout(() => this.tick(entry), delay);
   }

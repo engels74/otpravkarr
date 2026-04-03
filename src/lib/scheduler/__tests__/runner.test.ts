@@ -87,6 +87,30 @@ describe("Scheduler", () => {
       ).toThrow("invalid interval");
     });
 
+    it("throws when registering a job with NaN interval", () => {
+      expect(() => scheduler.register({ name: "bad", interval: NaN, fn: async () => {} })).toThrow(
+        "invalid interval",
+      );
+    });
+
+    it("throws when registering a job with Infinity interval", () => {
+      expect(() =>
+        scheduler.register({ name: "bad", interval: Infinity, fn: async () => {} }),
+      ).toThrow("invalid interval");
+    });
+
+    it("throws when registering a job with -Infinity interval", () => {
+      expect(() =>
+        scheduler.register({ name: "bad", interval: -Infinity, fn: async () => {} }),
+      ).toThrow("invalid interval");
+    });
+
+    it("throws when registering a job with interval exceeding MAX_SAFE_TIMEOUT", () => {
+      expect(() =>
+        scheduler.register({ name: "bad", interval: 2_147_483_648, fn: async () => {} }),
+      ).toThrow("exceeding maximum safe timeout");
+    });
+
     it("schedules a job registered after start()", async () => {
       scheduler.start();
 
@@ -322,28 +346,35 @@ describe("Scheduler", () => {
       scheduler.register(createJob({ fn, interval: 100 }));
       scheduler.start();
 
-      // First tick at 100ms
+      // First tick at 100ms — establishes nextScheduledAt
       await vi.advanceTimersByTimeAsync(100);
       expect(fn).toHaveBeenCalledOnce();
 
-      // Simulate a long pause: advance 10 intervals worth of time in one jump.
-      // Without the fix, this would cause rapid catch-up firing.
-      // With the fix, it should skip to the next future tick and fire once.
-      await vi.advanceTimersByTimeAsync(1000);
+      // Simulate stalled event loop: jump Date.now() forward by 10 seconds
+      // WITHOUT firing intermediate timers. This makes nextScheduledAt (≈200ms)
+      // fall far behind now (≈10100ms), which is exactly the condition the
+      // skip-ahead logic in scheduleTick() is designed to handle.
+      const baseTime = Date.now();
+      vi.setSystemTime(baseTime + 10_000);
 
-      // Should have fired a reasonable number of times — not 10+ rapid catch-ups.
-      // With correct skip-ahead, ticks fire at normal cadence within the 1000ms window.
-      // The exact count depends on timer resolution, but it should not exceed
-      // what normal interval scheduling would produce.
-      const callCount = fn.mock.calls.length;
-      expect(callCount).toBeGreaterThanOrEqual(2); // at least the original + some during the window
-      expect(callCount).toBeLessThanOrEqual(12); // no more than ~1 per interval
+      // Now advance fake timers just enough to fire the single pending timer
+      // (which was scheduled ~100ms from the first tick). When its callback
+      // runs, scheduleTick sees nextScheduledAt far in the past and must
+      // skip ahead rather than burst-firing.
+      await vi.advanceTimersByTimeAsync(100);
 
-      // Verify no burst: check that we don't see many ticks clustered at the same timestamp
-      // by ensuring normal scheduling continues after the jump
+      // With skip-ahead: only 2 calls total (the initial tick + 1 after the gap).
+      // Without skip-ahead: scheduleTick would repeatedly schedule 0ms timeouts
+      // trying to "catch up" ~100 missed intervals, causing many rapid calls.
+      expect(fn).toHaveBeenCalledTimes(2);
+
+      // Verify normal cadence resumes (not bursting) after the skip.
+      // Allow ±1 tolerance for timer alignment after the clock jump.
       fn.mockClear();
       await vi.advanceTimersByTimeAsync(300);
-      expect(fn).toHaveBeenCalledTimes(3); // exactly 3 more ticks at 100ms interval
+      const resumedCalls = fn.mock.calls.length;
+      expect(resumedCalls).toBeGreaterThanOrEqual(2);
+      expect(resumedCalls).toBeLessThanOrEqual(4);
     });
   });
 

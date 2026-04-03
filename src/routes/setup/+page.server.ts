@@ -3,7 +3,7 @@ import { consumeBootstrapToken } from "$lib/crypto/bootstrap";
 import { hashAdminPassword } from "$lib/crypto/passwords";
 import { createAdmin as insertAdmin } from "$lib/db/repositories/admin";
 import { appendAuditLog } from "$lib/db/repositories/audit";
-import { setConfig } from "$lib/db/repositories/config";
+import { getConfig, setConfig } from "$lib/db/repositories/config";
 import { createSession } from "$lib/db/repositories/sessions";
 import { AuditAction } from "$lib/db/types";
 import { DispatcharrClient } from "$lib/dispatcharr/client";
@@ -25,6 +25,22 @@ import type { Actions, PageServerLoad } from "./$types";
 
 const USERNAME_PATTERN = /^[a-zA-Z0-9_-]{3,32}$/;
 const MIN_PASSWORD_LENGTH = 12;
+const SETUP_CLAIMED_CONFIG_KEY = "setup_claimed";
+const SETUP_CLAIMED_VALUE = "true";
+const SETUP_UNCLAIMED_VALUE = "false";
+
+async function isSetupClaimed(): Promise<boolean> {
+  const claimed = await getConfig(SETUP_CLAIMED_CONFIG_KEY);
+  return claimed === SETUP_CLAIMED_VALUE;
+}
+
+async function requireSetupClaimedAction() {
+  if (await isSetupClaimed()) {
+    return null;
+  }
+
+  return fail(403, { error: "setup_not_claimed" });
+}
 
 export const load: PageServerLoad = async ({ url }) => {
   requireSetupIncomplete();
@@ -56,10 +72,17 @@ export const actions: Actions = {
       return fail(400, { error: "invalid_token" });
     }
 
+    await setConfig(SETUP_CLAIMED_CONFIG_KEY, SETUP_CLAIMED_VALUE);
+
     return { success: true };
   },
 
   createAdmin: async ({ request }) => {
+    const claimError = await requireSetupClaimedAction();
+    if (claimError) {
+      return claimError;
+    }
+
     const formData = await request.formData();
     const username = String(formData.get("username") ?? "").trim();
     const password = String(formData.get("password") ?? "");
@@ -93,6 +116,11 @@ export const actions: Actions = {
   },
 
   configurePlex: async ({ request, url }) => {
+    const claimError = await requireSetupClaimedAction();
+    if (claimError) {
+      return claimError;
+    }
+
     const formData = await request.formData();
     const plexMode = String(formData.get("plexMode") ?? "");
 
@@ -174,6 +202,11 @@ export const actions: Actions = {
   },
 
   configureDispatcharr: async ({ request }) => {
+    const claimError = await requireSetupClaimedAction();
+    if (claimError) {
+      return claimError;
+    }
+
     const formData = await request.formData();
     const dispatcharrUrl = String(formData.get("dispatcharrUrl") ?? "").trim();
     const dispatcharrApiKey = String(formData.get("dispatcharrApiKey") ?? "").trim();
@@ -221,6 +254,11 @@ export const actions: Actions = {
   },
 
   configureOrigin: async ({ request }) => {
+    const claimError = await requireSetupClaimedAction();
+    if (claimError) {
+      return claimError;
+    }
+
     const formData = await request.formData();
     const rawOrigins = String(formData.get("allowedOrigins") ?? "");
 
@@ -243,6 +281,11 @@ export const actions: Actions = {
   },
 
   setDefaults: async ({ request, cookies, getClientAddress }) => {
+    const claimError = await requireSetupClaimedAction();
+    if (claimError) {
+      return claimError;
+    }
+
     const formData = await request.formData();
     const defaultGroupId = String(formData.get("defaultGroupId") ?? "").trim();
     const defaultProfileId = String(formData.get("defaultProfileId") ?? "").trim();
@@ -274,6 +317,7 @@ export const actions: Actions = {
       setConfig("default_profile_id", defaultProfileId),
       setConfig("sync_interval_minutes", String(syncMinutes)),
       setConfig("default_provisioning_mode", defaultProvisioningMode),
+      setConfig(SETUP_CLAIMED_CONFIG_KEY, SETUP_UNCLAIMED_VALUE),
     ]);
 
     const sessionId = createSession(adminUsername, "admin", ADMIN_SESSION_TTL);

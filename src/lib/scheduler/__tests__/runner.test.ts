@@ -35,6 +35,11 @@ function getLogEntries(): Array<Record<string, unknown>> {
     .filter((e): e is Record<string, unknown> => e !== null);
 }
 
+function expectDefined<T>(value: T | null | undefined): NonNullable<T> {
+  expect(value).toBeDefined();
+  return value as NonNullable<T>;
+}
+
 describe("Scheduler", () => {
   let scheduler: Scheduler;
 
@@ -53,21 +58,19 @@ describe("Scheduler", () => {
       const job = createJob();
       scheduler.register(job);
 
-      const status = scheduler.getJobStatus("test-job");
-      expect(status).toBeDefined();
-      expect(status!.lastRunAt).toBeNull();
-      expect(status!.lastDurationMs).toBeNull();
-      expect(status!.running).toBe(false);
+      const status = expectDefined(scheduler.getJobStatus("test-job"));
+      expect(status.lastRunAt).toBeNull();
+      expect(status.lastDurationMs).toBeNull();
+      expect(status.running).toBe(false);
     });
 
     it("logs a registration event", () => {
       scheduler.register(createJob());
 
       const entries = getLogEntries();
-      const reg = entries.find((e) => e.event === "job.registered");
-      expect(reg).toBeDefined();
-      expect(reg!.job).toBe("test-job");
-      expect(reg!.interval).toBe(1000);
+      const reg = expectDefined(entries.find((e) => e.event === "job.registered"));
+      expect(reg.job).toBe("test-job");
+      expect(reg.interval).toBe(1000);
     });
 
     it("replaces existing job on duplicate name (idempotent)", async () => {
@@ -98,26 +101,49 @@ describe("Scheduler", () => {
     it("zombie guard: old timer callback does not re-schedule after re-registration", async () => {
       const fn1 = vi.fn(async () => {});
       const fn2 = vi.fn(async () => {});
+      const scheduledCallbacks: Array<() => Promise<void>> = [];
+      const originalSetTimeout = globalThis.setTimeout.bind(globalThis);
+      const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout").mockImplementation(((
+        handler: TimerHandler,
+        timeout?: number,
+        ...args: unknown[]
+      ) => {
+        if (typeof handler === "function") {
+          scheduledCallbacks.push(handler as () => Promise<void>);
+        }
 
-      scheduler.register(createJob({ fn: fn1, interval: 100 }));
-      scheduler.start();
+        return originalSetTimeout(handler, timeout, ...args);
+      }) as typeof setTimeout);
 
-      // First tick fires at 100ms
-      await vi.advanceTimersByTimeAsync(100);
-      expect(fn1).toHaveBeenCalledOnce();
+      try {
+        scheduler.register(createJob({ fn: fn1, interval: 100 }));
+        scheduler.start();
 
-      // Re-register with a new function — old timer for 200ms is already
-      // scheduled via the closure over the old entry.
-      scheduler.register(createJob({ fn: fn2, interval: 100 }));
+        // First tick fires at 100ms and schedules the old entry's next callback.
+        await vi.advanceTimersByTimeAsync(100);
+        expect(fn1).toHaveBeenCalledOnce();
+        expect(scheduledCallbacks).toHaveLength(2);
 
-      // Advance past where the old timer would fire (200ms) and into
-      // the new job's first tick (also ~200ms from registration).
-      await vi.advanceTimersByTimeAsync(200);
+        const staleCallback = expectDefined(scheduledCallbacks[1]);
+        expect(staleCallback).toBeTypeOf("function");
 
-      // fn1 must NOT have been called again by a zombie callback
-      expect(fn1).toHaveBeenCalledOnce();
-      // fn2 should have run at least once
-      expect(fn2).toHaveBeenCalled();
+        // Re-register with a new function. clearTimeout(existing.timer) removes the
+        // old pending timer, so explicitly invoke the stale callback to verify the
+        // generation guard inside tick() is what kills the zombie chain.
+        scheduler.register(createJob({ fn: fn2, interval: 100 }));
+        const scheduledCountBeforeZombieTick = scheduledCallbacks.length;
+
+        await staleCallback();
+
+        expect(fn1).toHaveBeenCalledOnce();
+        expect(scheduledCallbacks).toHaveLength(scheduledCountBeforeZombieTick);
+
+        // The replacement job should still execute on its own schedule.
+        await vi.advanceTimersByTimeAsync(100);
+        expect(fn2).toHaveBeenCalledOnce();
+      } finally {
+        setTimeoutSpy.mockRestore();
+      }
     });
 
     it("throws when registering a job with zero interval", () => {
@@ -258,12 +284,11 @@ describe("Scheduler", () => {
       const beforeRun = Date.now();
       await vi.advanceTimersByTimeAsync(1000);
 
-      const status = scheduler.getJobStatus("test-job");
-      expect(status).toBeDefined();
-      expect(status!.lastRunAt).toBeGreaterThanOrEqual(beforeRun);
-      expect(typeof status!.lastDurationMs).toBe("number");
-      expect(status!.lastDurationMs).toBeGreaterThanOrEqual(0);
-      expect(status!.running).toBe(false);
+      const status = expectDefined(scheduler.getJobStatus("test-job"));
+      expect(status.lastRunAt).toBeGreaterThanOrEqual(beforeRun);
+      expect(typeof status.lastDurationMs).toBe("number");
+      expect(status.lastDurationMs).toBeGreaterThanOrEqual(0);
+      expect(status.running).toBe(false);
     });
 
     it("tracks duration for slow jobs", async () => {
@@ -280,9 +305,8 @@ describe("Scheduler", () => {
       // The 50ms setTimeout inside the job also needs to fire
       await vi.advanceTimersByTimeAsync(50);
 
-      const status = scheduler.getJobStatus("test-job");
-      expect(status).toBeDefined();
-      expect(status!.lastDurationMs).toBeGreaterThanOrEqual(0);
+      const status = expectDefined(scheduler.getJobStatus("test-job"));
+      expect(status.lastDurationMs).toBeGreaterThanOrEqual(0);
     });
   });
 
@@ -311,12 +335,16 @@ describe("Scheduler", () => {
 
       // Check that overlap skip was logged
       const entries = getLogEntries();
-      const skipEntry = entries.find((e) => e.event === "job.skipped");
-      expect(skipEntry).toBeDefined();
-      expect(skipEntry!.reason).toBe("overlap");
+      const skipEntry = expectDefined(entries.find((e) => e.event === "job.skipped"));
+      expect(skipEntry.reason).toBe("overlap");
 
       // Resolve the first job
-      resolveJob!();
+      expect(resolveJob).toBeDefined();
+      if (!resolveJob) {
+        throw new Error("expected resolveJob to be assigned");
+      }
+      const finishJob = resolveJob as () => void;
+      finishJob();
       await vi.advanceTimersByTimeAsync(0); // flush microtasks
 
       // Third tick should fire at 300ms — job should run again
@@ -343,7 +371,7 @@ describe("Scheduler", () => {
       // Each tick should be ~1000ms apart from the start
       // With drift correction, ticks should align to the schedule
       for (let i = 1; i < timestamps.length; i++) {
-        const gap = timestamps[i]! - timestamps[i - 1]!;
+        const gap = expectDefined(timestamps[i]) - expectDefined(timestamps[i - 1]);
         // Allow some tolerance but the gap should be close to 1000ms
         expect(gap).toBeGreaterThanOrEqual(900);
         expect(gap).toBeLessThanOrEqual(1100);
@@ -436,9 +464,8 @@ describe("Scheduler", () => {
       expect(fn).toHaveBeenCalledOnce();
 
       const entries = getLogEntries();
-      const errorEntry = entries.find((e) => e.event === "job.error");
-      expect(errorEntry).toBeDefined();
-      expect(errorEntry!.error).toBe("boom");
+      const errorEntry = expectDefined(entries.find((e) => e.event === "job.error"));
+      expect(errorEntry.error).toBe("boom");
 
       // Job should continue to be scheduled after error
       await vi.advanceTimersByTimeAsync(500);
@@ -457,10 +484,9 @@ describe("Scheduler", () => {
 
       await vi.advanceTimersByTimeAsync(1000);
 
-      const status = scheduler.getJobStatus("test-job");
-      expect(status).toBeDefined();
-      expect(status!.lastRunAt).not.toBeNull();
-      expect(status!.lastDurationMs).not.toBeNull();
+      const status = expectDefined(scheduler.getJobStatus("test-job"));
+      expect(status.lastRunAt).not.toBeNull();
+      expect(status.lastDurationMs).not.toBeNull();
     });
   });
 
@@ -488,13 +514,10 @@ describe("Scheduler", () => {
 
       await vi.advanceTimersByTimeAsync(500);
 
-      const fastStatus = scheduler.getJobStatus("fast");
-      const slowStatus = scheduler.getJobStatus("slow");
-
-      expect(fastStatus).toBeDefined();
-      expect(slowStatus).toBeDefined();
-      expect(fastStatus!.lastRunAt).not.toBeNull();
-      expect(slowStatus!.lastRunAt).not.toBeNull();
+      const fastStatus = expectDefined(scheduler.getJobStatus("fast"));
+      const slowStatus = expectDefined(scheduler.getJobStatus("slow"));
+      expect(fastStatus.lastRunAt).not.toBeNull();
+      expect(slowStatus.lastRunAt).not.toBeNull();
     });
   });
 
@@ -530,10 +553,9 @@ describe("Scheduler", () => {
       await vi.advanceTimersByTimeAsync(1000);
 
       const entries = getLogEntries();
-      const completed = entries.find((e) => e.event === "job.completed");
-      expect(completed).toBeDefined();
-      expect(completed!.job).toBe("test-job");
-      expect(typeof completed!.duration_ms).toBe("number");
+      const completed = expectDefined(entries.find((e) => e.event === "job.completed"));
+      expect(completed.job).toBe("test-job");
+      expect(typeof completed.duration_ms).toBe("number");
     });
   });
 });

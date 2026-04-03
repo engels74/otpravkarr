@@ -85,11 +85,19 @@ const localsInit: Handle = async ({ event, resolve }) => {
 };
 
 const runtimeInit: Handle = async ({ event, resolve }) => {
+  if (building) {
+    return resolve(event);
+  }
+
   await ensureRuntimeInitialized();
   return resolve(event);
 };
 
 const setupGate: Handle = async ({ event, resolve }) => {
+  if (building) {
+    return resolve(event);
+  }
+
   if (
     !isSetupComplete() &&
     !event.url.pathname.startsWith("/setup") &&
@@ -104,6 +112,10 @@ const setupGate: Handle = async ({ event, resolve }) => {
 };
 
 const sessionResolver: Handle = async ({ event, resolve }) => {
+  if (building) {
+    return resolve(event);
+  }
+
   const sessionId = event.cookies.get(SESSION_COOKIE_NAME);
   if (!sessionId) {
     return resolve(event);
@@ -139,6 +151,10 @@ const sessionResolver: Handle = async ({ event, resolve }) => {
 };
 
 const csrfValidator: Handle = async ({ event, resolve }) => {
+  if (building) {
+    return resolve(event);
+  }
+
   const method = event.request.method;
   if (
     isSetupComplete() &&

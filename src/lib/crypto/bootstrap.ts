@@ -67,10 +67,10 @@ export function validateBootstrapToken(candidate: string): boolean {
     return false;
   }
 
-  // Expected format: xxxx-xxxx-xxxx (14 chars). Reject oversized input early
-  // to prevent O(n) work in timingSafeEqual from untrusted user input.
+  // Expected format: xxxx-xxxx-xxxx (14 chars). Reject wrong-length input early
+  // to prevent the timingSafeEqual wrapping comparison from leaking info on short inputs.
   const expectedLen = SEGMENT_COUNT * SEGMENT_LENGTH + (SEGMENT_COUNT - 1); // 14
-  if (candidate.length > expectedLen) return false;
+  if (candidate.length !== expectedLen) return false;
 
   return timingSafeEqual(candidate, activeToken.value);
 }

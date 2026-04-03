@@ -2,7 +2,7 @@ import { type Cookies, fail, redirect } from "@sveltejs/kit";
 import { env } from "$env/dynamic/private";
 import { clearBootstrapToken, consumeBootstrapToken } from "$lib/crypto/bootstrap";
 import { hashAdminPassword } from "$lib/crypto/passwords";
-import { createAdmin as insertAdmin } from "$lib/db/repositories/admin";
+import { adminExists, createAdmin as insertAdmin } from "$lib/db/repositories/admin";
 import { appendAuditLog } from "$lib/db/repositories/audit";
 import { getConfig, setConfig } from "$lib/db/repositories/config";
 import { createSession } from "$lib/db/repositories/sessions";
@@ -174,6 +174,18 @@ export const actions: Actions = {
         field: "confirmPassword",
       });
     }
+
+    const adminPasswordHash = await hashAdminPassword(password);
+    try {
+      insertAdmin(username, adminPasswordHash);
+    } catch {
+      return fail(400, {
+        error: "Admin account could not be created",
+        field: "username",
+      });
+    }
+
+    await setConfig("admin_username", username);
 
     return { success: true };
   },
@@ -367,13 +379,19 @@ export const actions: Actions = {
       });
     }
 
+    const adminUsername = await getConfig("admin_username");
+    if (!adminUsername || !adminExists()) {
+      return fail(400, {
+        error: "Admin account must be created before completing setup",
+        field: "defaults",
+      });
+    }
+
     const formData = await request.formData();
     const defaultGroupId = String(formData.get("defaultGroupId") ?? "").trim();
     const defaultProfileId = String(formData.get("defaultProfileId") ?? "").trim();
     const syncInterval = String(formData.get("syncInterval") ?? "").trim();
     const defaultProvisioningMode = String(formData.get("defaultProvisioningMode") ?? "").trim();
-    const adminUsername = String(formData.get("adminUsername") ?? "").trim();
-    const adminPassword = String(formData.get("adminPassword") ?? "");
 
     const syncMinutes = Number(syncInterval);
     if (!Number.isFinite(syncMinutes) || syncMinutes < 1 || syncMinutes > 1440) {
@@ -390,36 +408,12 @@ export const actions: Actions = {
       });
     }
 
-    if (!USERNAME_PATTERN.test(adminUsername)) {
-      return fail(400, {
-        error: "Username must be 3-32 characters (letters, numbers, underscore, dash)",
-        field: "adminUsername",
-      });
-    }
-
-    if (adminPassword.length < MIN_PASSWORD_LENGTH) {
-      return fail(400, {
-        error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters`,
-        field: "adminPassword",
-      });
-    }
-
     await Promise.all([
       setConfig("default_group_id", defaultGroupId),
       setConfig("default_profile_id", defaultProfileId),
       setConfig("sync_interval_minutes", String(syncMinutes)),
       setConfig("default_provisioning_mode", defaultProvisioningMode),
     ]);
-
-    const adminPasswordHash = await hashAdminPassword(adminPassword);
-    try {
-      insertAdmin(adminUsername, adminPasswordHash);
-    } catch {
-      return fail(400, {
-        error: "Admin account could not be created",
-        field: "adminUsername",
-      });
-    }
 
     await Promise.all([
       setConfig(SETUP_CLAIMED_CONFIG_KEY, SETUP_UNCLAIMED_VALUE),

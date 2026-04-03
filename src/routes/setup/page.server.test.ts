@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => ({
   requireSetupIncomplete: vi.fn(),
   hashAdminPassword: vi.fn(async () => "hashed-password"),
   createAdmin: vi.fn(),
+  adminExists: vi.fn(() => false),
   appendAuditLog: vi.fn(),
   createSession: vi.fn(() => "session-id"),
 }));
@@ -41,6 +42,7 @@ vi.mock("$lib/crypto/passwords", () => ({
 
 vi.mock("$lib/db/repositories/admin", () => ({
   createAdmin: mocks.createAdmin,
+  adminExists: mocks.adminExists,
 }));
 
 vi.mock("$lib/db/repositories/audit", () => ({
@@ -186,6 +188,7 @@ function resetStateAndMocks() {
   mocks.requireSetupIncomplete.mockClear();
   mocks.hashAdminPassword.mockClear();
   mocks.createAdmin.mockClear();
+  mocks.adminExists.mockClear().mockReturnValue(false);
   mocks.appendAuditLog.mockClear();
   mocks.createSession.mockClear();
 }
@@ -355,6 +358,70 @@ describe("setup claim ownership", () => {
   });
 });
 
+describe("createAdmin", () => {
+  beforeEach(() => {
+    resetStateAndMocks();
+    state.configValues.set(setupClaimedKey, "true");
+    state.configValues.set(setupClaimProofKey, "proof-123");
+    state.configValues.set(setupClaimedAtKey, String(Date.now()));
+  });
+
+  it("persists the admin account and stores username in config", async () => {
+    const { cookies } = createCookies({ [setupClaimCookie]: "proof-123" });
+    const body = new FormData();
+    body.set("username", "admin");
+    body.set("password", "passwordpassword");
+    body.set("confirmPassword", "passwordpassword");
+
+    const request = new Request("http://localhost/setup", { method: "POST", body });
+
+    const { actions } = await import("./+page.server");
+    const createAdmin = actions.createAdmin;
+    if (!createAdmin) {
+      throw new Error("createAdmin action is undefined");
+    }
+
+    const result = await createAdmin({
+      request,
+      cookies,
+    } as unknown as Parameters<typeof createAdmin>[0]);
+
+    expect(result).toEqual({ success: true });
+    expect(mocks.hashAdminPassword).toHaveBeenCalledWith("passwordpassword");
+    expect(mocks.createAdmin).toHaveBeenCalledWith("admin", "hashed-password");
+    expect(state.configValues.get("admin_username")).toBe("admin");
+  });
+
+  it("returns error when admin account creation fails", async () => {
+    mocks.createAdmin.mockImplementation(() => {
+      throw new Error("duplicate");
+    });
+    const { cookies } = createCookies({ [setupClaimCookie]: "proof-123" });
+    const body = new FormData();
+    body.set("username", "admin");
+    body.set("password", "passwordpassword");
+    body.set("confirmPassword", "passwordpassword");
+
+    const request = new Request("http://localhost/setup", { method: "POST", body });
+
+    const { actions } = await import("./+page.server");
+    const createAdmin = actions.createAdmin;
+    if (!createAdmin) {
+      throw new Error("createAdmin action is undefined");
+    }
+
+    const result = await createAdmin({
+      request,
+      cookies,
+    } as unknown as Parameters<typeof createAdmin>[0]);
+
+    expect(result).toMatchObject({
+      status: 400,
+      data: { error: "Admin account could not be created", field: "username" },
+    });
+  });
+});
+
 describe("setDefaults", () => {
   beforeEach(() => {
     resetStateAndMocks();
@@ -364,14 +431,15 @@ describe("setDefaults", () => {
   });
 
   it("rejects setup completion when required prior steps are missing", async () => {
+    state.configValues.set("admin_username", "admin");
+    mocks.adminExists.mockReturnValue(true);
+
     const { cookies } = createCookies({ [setupClaimCookie]: "proof-123" });
     const body = new FormData();
     body.set("defaultGroupId", "10");
     body.set("defaultProfileId", "20");
     body.set("syncInterval", "15");
     body.set("defaultProvisioningMode", "automatic");
-    body.set("adminUsername", "admin");
-    body.set("adminPassword", "passwordpassword");
 
     const request = new Request("http://localhost/setup", { method: "POST", body });
 
@@ -406,8 +474,6 @@ describe("setDefaults", () => {
         ]),
       },
     });
-    expect(mocks.hashAdminPassword).not.toHaveBeenCalled();
-    expect(mocks.createAdmin).not.toHaveBeenCalled();
     expect(mocks.clearBootstrapToken).not.toHaveBeenCalled();
   });
 
@@ -415,6 +481,8 @@ describe("setDefaults", () => {
     for (const [key, value] of Object.entries(setupPrerequisiteConfig)) {
       state.configValues.set(key, value);
     }
+    state.configValues.set("admin_username", "admin");
+    mocks.adminExists.mockReturnValue(true);
 
     const { cookies, setCalls } = createCookies({ [setupClaimCookie]: "proof-123" });
     const body = new FormData();
@@ -422,8 +490,6 @@ describe("setDefaults", () => {
     body.set("defaultProfileId", "20");
     body.set("syncInterval", "15");
     body.set("defaultProvisioningMode", "automatic");
-    body.set("adminUsername", "admin");
-    body.set("adminPassword", "passwordpassword");
 
     const request = new Request("http://localhost/setup", { method: "POST", body });
 
@@ -445,8 +511,8 @@ describe("setDefaults", () => {
     });
 
     expect(mocks.clearBootstrapToken).toHaveBeenCalledOnce();
-    expect(mocks.hashAdminPassword).toHaveBeenCalledWith("passwordpassword");
-    expect(mocks.createAdmin).toHaveBeenCalledWith("admin", "hashed-password");
+    expect(mocks.hashAdminPassword).not.toHaveBeenCalled();
+    expect(mocks.createAdmin).not.toHaveBeenCalled();
     expect(mocks.createSession).toHaveBeenCalledWith("admin", "admin", 3600);
     expect(mocks.appendAuditLog).toHaveBeenCalledOnce();
     expect(state.configValues.get(setupClaimedAtKey)).toBe("");

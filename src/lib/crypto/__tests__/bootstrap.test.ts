@@ -121,9 +121,7 @@ describe("consumeBootstrapToken", () => {
     expect(_getActiveTokenForTesting()).toBeNull();
   });
 
-  it("does not leak timing information (constant-time comparison)", () => {
-    // This test verifies the comparison runs for both matching and non-matching inputs
-    // by ensuring the function handles different-length inputs correctly
+  it("rejects candidates shorter than expected length", () => {
     createBootstrapToken();
     expect(consumeBootstrapToken("")).toBe(false);
     expect(_getActiveTokenForTesting()).not.toBeNull();
@@ -131,6 +129,12 @@ describe("consumeBootstrapToken", () => {
     expect(consumeBootstrapToken("a")).toBe(false);
     expect(_getActiveTokenForTesting()).not.toBeNull();
 
+    expect(consumeBootstrapToken("abcd-efgh")).toBe(false);
+    expect(_getActiveTokenForTesting()).not.toBeNull();
+  });
+
+  it("rejects candidates longer than expected length", () => {
+    createBootstrapToken();
     expect(consumeBootstrapToken("abcd-efgh-ijkl-mnop-extra")).toBe(false);
     expect(_getActiveTokenForTesting()).not.toBeNull();
   });

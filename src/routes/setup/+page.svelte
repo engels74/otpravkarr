@@ -874,8 +874,6 @@ function enhanceHandler(nextStep?: number) {
           {/if}
 
           <form method="POST" action="?/setDefaults" use:enhance={enhanceHandler()}>
-            <input type="hidden" name="adminUsername" value={adminUsername} />
-            <input type="hidden" name="adminPassword" value={password} />
             <div class="grid gap-4">
               <!-- Default Group -->
               <div class="grid gap-2">

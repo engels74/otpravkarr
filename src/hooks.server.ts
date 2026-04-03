@@ -50,6 +50,11 @@ if (!adminExists()) {
 // Handle middleware
 // ---------------------------------------------------------------------------
 
+const requestIdInit: Handle = async ({ event, resolve }) => {
+  event.locals.requestId = crypto.randomUUID();
+  return resolve(event);
+};
+
 const setupGate: Handle = async ({ event, resolve }) => {
   if (
     !isSetupComplete() &&
@@ -64,8 +69,6 @@ const setupGate: Handle = async ({ event, resolve }) => {
 };
 
 const sessionResolver: Handle = async ({ event, resolve }) => {
-  event.locals.requestId = crypto.randomUUID();
-
   const sessionId = event.cookies.get(SESSION_COOKIE_NAME);
   if (!sessionId) {
     event.locals.session = null;
@@ -128,9 +131,11 @@ const csrfValidator: Handle = async ({ event, resolve }) => {
       }
     }
     if (parsedOrigins.length === 0) {
-      // Fail closed: use the request's own origin so only same-origin requests pass
-      const requestOrigin = new URL(event.request.url).origin;
-      validateOrigin(event.request, [requestOrigin]);
+      // Fail closed: prefer ORIGIN env var (set by deployer) over request URL
+      // to avoid mismatches behind reverse proxies where the internal URL
+      // (e.g. http://127.0.0.1:3000) differs from the public origin.
+      const fallbackOrigin = env.ORIGIN || new URL(event.request.url).origin;
+      validateOrigin(event.request, [fallbackOrigin]);
     } else {
       validateOrigin(event.request, parsedOrigins);
     }
@@ -140,4 +145,10 @@ const csrfValidator: Handle = async ({ event, resolve }) => {
 
 const requestLogger = createRequestLogger();
 
-export const handle = sequence(setupGate, sessionResolver, csrfValidator, requestLogger);
+export const handle = sequence(
+  requestLogger,
+  requestIdInit,
+  setupGate,
+  sessionResolver,
+  csrfValidator,
+);

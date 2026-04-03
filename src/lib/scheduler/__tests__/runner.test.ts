@@ -70,14 +70,42 @@ describe("Scheduler", () => {
       expect(reg!.interval).toBe(1000);
     });
 
-    it("replaces existing job on duplicate name (idempotent)", () => {
+    it("replaces existing job on duplicate name (idempotent)", async () => {
       const fn1 = vi.fn(async () => {});
       const fn2 = vi.fn(async () => {});
       scheduler.register(createJob({ fn: fn1 }));
       scheduler.register(createJob({ fn: fn2 }));
+      scheduler.start();
 
-      const status = scheduler.getJobStatus("test-job");
-      expect(status).toBeDefined();
+      await vi.advanceTimersByTimeAsync(1000);
+
+      expect(fn2).toHaveBeenCalledOnce();
+      expect(fn1).not.toHaveBeenCalled();
+    });
+
+    it("zombie guard: old timer callback does not re-schedule after re-registration", async () => {
+      const fn1 = vi.fn(async () => {});
+      const fn2 = vi.fn(async () => {});
+
+      scheduler.register(createJob({ fn: fn1, interval: 100 }));
+      scheduler.start();
+
+      // First tick fires at 100ms
+      await vi.advanceTimersByTimeAsync(100);
+      expect(fn1).toHaveBeenCalledOnce();
+
+      // Re-register with a new function — old timer for 200ms is already
+      // scheduled via the closure over the old entry.
+      scheduler.register(createJob({ fn: fn2, interval: 100 }));
+
+      // Advance past where the old timer would fire (200ms) and into
+      // the new job's first tick (also ~200ms from registration).
+      await vi.advanceTimersByTimeAsync(200);
+
+      // fn1 must NOT have been called again by a zombie callback
+      expect(fn1).toHaveBeenCalledOnce();
+      // fn2 should have run at least once
+      expect(fn2).toHaveBeenCalled();
     });
 
     it("throws when registering a job with zero interval", () => {

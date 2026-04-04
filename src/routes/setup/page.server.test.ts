@@ -725,6 +725,40 @@ describe("createAdmin", () => {
   });
 });
 
+describe("configureOrigin", () => {
+  beforeEach(() => {
+    resetStateAndMocks();
+    state.configValues.set(setupClaimedKey, "true");
+    state.configValues.set(setupClaimProofKey, "proof-123");
+    state.configValues.set(setupClaimedAtKey, String(Date.now()));
+  });
+
+  it("rejects origin input that normalizes to an empty list", async () => {
+    const { cookies } = createCookies({ [setupClaimCookie]: "proof-123" });
+    const body = new FormData();
+    body.set("allowedOrigins", "   ,   ");
+
+    const request = new Request("http://localhost/setup", { method: "POST", body });
+
+    const { actions } = await import("./+page.server");
+    const configureOrigin = actions.configureOrigin;
+    if (!configureOrigin) {
+      throw new Error("configureOrigin action is undefined");
+    }
+
+    const result = await configureOrigin({
+      request,
+      cookies,
+    } as unknown as Parameters<typeof configureOrigin>[0]);
+
+    expect(result).toMatchObject({
+      status: 400,
+      data: { error: "At least one origin is required" },
+    });
+    expect(state.configValues.get("allowed_origins")).toBeUndefined();
+  });
+});
+
 describe("setDefaults", () => {
   beforeEach(() => {
     resetStateAndMocks();

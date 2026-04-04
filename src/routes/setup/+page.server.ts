@@ -463,6 +463,10 @@ export const actions: Actions = {
       }
     }
 
+    if (normalizedOrigins.length === 0) {
+      return fail(400, { error: "At least one origin is required" });
+    }
+
     await setConfig("allowed_origins", JSON.stringify(normalizedOrigins));
 
     return { success: true };

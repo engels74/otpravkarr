@@ -865,22 +865,22 @@ All sensitive data handling depends on this module. It must be built and tested 
 
 ### 12.1 — Portal layout (`src/routes/(portal)/+layout.server.ts` + `+layout.svelte`)
 
-- [ ] `+layout.server.ts`: call `requireUser(event)` — redirects to portal login if not authenticated
-- [ ] `+layout.svelte`: minimal portal chrome — app logo, user avatar + Plex username, sign-out button
-  - [ ] Use `{@render children()}` for content
+- [x] `+layout.server.ts`: call `requireUser(event)` — redirects to portal login if not authenticated
+- [x] `+layout.svelte`: minimal portal chrome — app logo, user avatar + Plex username, sign-out button
+  - [x] Use `{@render children()}` for content
 
 ### 12.2 — Portal landing / "Sign in with Plex" (`src/routes/(portal)/+page.server.ts` + `+page.svelte`)
 
-- [ ] If user is already authenticated → show streaming URLs (see 12.3)
-- [ ] If not authenticated → show "Sign in with Plex" button
-- [ ] Form action for "Sign in with Plex":
+- [x] If user is already authenticated → show streaming URLs (see 12.3)
+- [x] If not authenticated → show "Sign in with Plex" button
+- [x] Form action for "Sign in with Plex":
   1. Call `initiateOAuth(forwardUrl)` where `forwardUrl = '/auth/plex/callback'`
   2. Store `webLogin` object in server-side memory map
   3. Redirect user to `webLogin.uri`
 
 ### 12.3 — Plex OAuth callback (`src/routes/(portal)/auth/plex/+page.server.ts`)
 
-- [ ] Load function:
+- [x] Load function:
   1. Retrieve `webLogin` from server-side memory map
   2. Call `completeOAuth(webLogin)` — polls for completion
   3. Extract `PlexIdentity` from result
@@ -892,24 +892,24 @@ All sensitive data handling depends on this module. It must be built and tested 
 
 ### 12.4 — Streaming URLs page (portal home, authenticated)
 
-- [ ] Load function:
-  - [ ] Get user mapping from `event.locals.user`
-  - [ ] Decrypt XC password (for automatic-mode users)
-  - [ ] Build streaming URLs via `lib/url/xc.ts`
-  - [ ] Fetch channel list for M3U generation (or generate on-demand)
-  - [ ] Update `last_accessed_at` on user mapping
-- [ ] Portal UI for **automatic-mode** users:
-  - [ ] XC URL displayed in a copyable field with "Copy" button
-  - [ ] Player API URL in a copyable field
-  - [ ] M3U download button (generates `.m3u` file on-demand)
-  - [ ] QR code of XC URL for mobile scanning
-  - [ ] Platform-specific setup instructions (expandable sections for VLC, TiviMate, Smarters)
-  - [ ] "Refresh credentials" button (triggers credential rotation)
-- [ ] Portal UI for **self-managed** users:
-  - [ ] Message explaining they manage their own Dispatcharr credentials
-  - [ ] Link to Dispatcharr web interface
-  - [ ] Their Dispatcharr username (display only)
-- [ ] Use shadcn-svelte `Card`, `Button`, `Tabs`, `Alert`, `Badge`, `Tooltip`
+- [x] Load function:
+  - [x] Get user mapping from `event.locals.user`
+  - [x] Decrypt XC password (for automatic-mode users)
+  - [x] Build streaming URLs via `lib/url/xc.ts`
+  - [x] Fetch channel list for M3U generation (or generate on-demand)
+  - [x] Update `last_accessed_at` on user mapping
+- [x] Portal UI for **automatic-mode** users:
+  - [x] XC URL displayed in a copyable field with "Copy" button
+  - [x] Player API URL in a copyable field
+  - [x] M3U download button (generates `.m3u` file on-demand)
+  - [x] QR code of XC URL for mobile scanning
+  - [x] Platform-specific setup instructions (expandable sections for VLC, TiviMate, Smarters)
+  - [x] "Refresh credentials" button (triggers credential rotation)
+- [x] Portal UI for **self-managed** users:
+  - [x] Message explaining they manage their own Dispatcharr credentials
+  - [x] Link to Dispatcharr web interface
+  - [x] Their Dispatcharr username (display only)
+- [x] Use shadcn-svelte `Card`, `Button`, `Tabs`, `Alert`, `Badge`, `Tooltip`
 
 ---
 

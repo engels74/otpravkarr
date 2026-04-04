@@ -780,84 +780,84 @@ All sensitive data handling depends on this module. It must be built and tested 
 
 ### 11.1 — Admin layout (`src/routes/(admin)/+layout.server.ts` + `+layout.svelte`)
 
-- [ ] `+layout.server.ts`: call `requireAdmin(event)` — redirects to login if not authenticated
-- [ ] `+layout.svelte`: admin chrome — sidebar nav, top bar with admin username, sign-out button
-  - [ ] Sidebar links: Dashboard, Users, Settings, Audit Log
-  - [ ] Use shadcn-svelte `Sidebar` component
-  - [ ] Use `{@render children()}` for content slot
+- [x] `+layout.server.ts`: call `requireAdmin(event)` — redirects to login if not authenticated
+- [x] `+layout.svelte`: admin chrome — sidebar nav, top bar with admin username, sign-out button
+  - [x] Sidebar links: Dashboard, Users, Settings, Audit Log
+  - [x] Use shadcn-svelte `Sidebar` component
+  - [x] Use `{@render children()}` for content slot
 
 ### 11.2 — Admin login page (`src/routes/(admin)/login/+page.server.ts` + `+page.svelte`)
 
-- [ ] Note: login route may need to sit outside `(admin)` layout group to avoid auth-guard loop
-- [ ] Consider placing at `src/routes/login/+page.svelte`
-- [ ] Form action: validate username/password against `admin_accounts`, create session, set cookie
-- [ ] Rate-limit login attempts (10 per 15 minutes per IP)
-- [ ] On success: redirect to `/dashboard`
-- [ ] Append audit log `admin.login`
+- [x] Note: login route may need to sit outside `(admin)` layout group to avoid auth-guard loop
+- [x] Consider placing at `src/routes/login/+page.svelte`
+- [x] Form action: validate username/password against `admin_accounts`, create session, set cookie
+- [x] Rate-limit login attempts (10 per 15 minutes per IP)
+- [x] On success: redirect to `/dashboard`
+- [x] Append audit log `admin.login`
 
 ### 11.3 — Dashboard page (`src/routes/(admin)/dashboard/+page.server.ts` + `+page.svelte`)
 
-- [ ] Load function returns:
-  - [ ] Total user count (active/inactive)
-  - [ ] Recent sync status
-  - [ ] Plex connection health
-  - [ ] Dispatcharr connection health
-  - [ ] SQLite health
-  - [ ] Last sync report summary
-  - [ ] "Available" Plex friends not yet onboarded
-- [ ] Dashboard UI:
-  - [ ] Health status cards (Plex, Dispatcharr, SQLite) with color-coded indicators
-  - [ ] User statistics card (total, active, inactive, orphaned)
-  - [ ] Recent activity from audit log (last 10 entries)
-  - [ ] "Available Plex friends" list with "Invite" action buttons
-  - [ ] Next scheduled sync countdown
+- [x] Load function returns:
+  - [x] Total user count (active/inactive)
+  - [x] Recent sync status
+  - [x] Plex connection health
+  - [x] Dispatcharr connection health
+  - [x] SQLite health
+  - [x] Last sync report summary
+  - [x] "Available" Plex friends not yet onboarded
+- [x] Dashboard UI:
+  - [x] Health status cards (Plex, Dispatcharr, SQLite) with color-coded indicators
+  - [x] User statistics card (total, active, inactive, orphaned)
+  - [x] Recent activity from audit log (last 10 entries)
+  - [x] "Available Plex friends" list with "Invite" action buttons
+  - [x] Next scheduled sync countdown
 
 ### 11.4 — Users management page (`src/routes/(admin)/users/+page.server.ts` + `+page.svelte`)
 
-- [ ] Load function: fetch all `user_mappings` with pagination
-- [ ] Users table with columns:
-  - [ ] Plex avatar + username
-  - [ ] Dispatcharr username
-  - [ ] Provisioning mode (badge)
-  - [ ] Status (active/inactive/orphaned badges)
-  - [ ] Last accessed
-  - [ ] Actions dropdown
-- [ ] Actions per user:
-  - [ ] **Rotate credentials** — calls `rotateCredentials()` via form action
-  - [ ] **Disable** — calls `disableUser()` via form action
-  - [ ] **Enable** — calls `enableUser()` via form action
-  - [ ] **Change group** — modal with group selector, submits PUT to Dispatcharr
-  - [ ] **Change profile** — modal with profile selector
-  - [ ] **View details** — modal showing full mapping info, streaming URLs
-- [ ] Filters: status (all/active/inactive/orphaned), provisioning mode, search by username
-- [ ] Use shadcn-svelte `Table`, `Badge`, `DropdownMenu`, `Dialog`, `Button`
+- [x] Load function: fetch all `user_mappings` with pagination
+- [x] Users table with columns:
+  - [x] Plex avatar + username
+  - [x] Dispatcharr username
+  - [x] Provisioning mode (badge)
+  - [x] Status (active/inactive/orphaned badges)
+  - [x] Last accessed
+  - [x] Actions dropdown
+- [x] Actions per user:
+  - [x] **Rotate credentials** — calls `rotateCredentials()` via form action
+  - [x] **Disable** — calls `disableUser()` via form action
+  - [x] **Enable** — calls `enableUser()` via form action
+  - [x] **Change group** — modal with group selector, submits PUT to Dispatcharr
+  - [x] **Change profile** — modal with profile selector
+  - [x] **View details** — modal showing full mapping info, streaming URLs
+- [x] Filters: status (all/active/inactive/orphaned), provisioning mode, search by username
+- [x] Use shadcn-svelte `Table`, `Badge`, `DropdownMenu`, `Dialog`, `Button`
 
 ### 11.5 — Settings page (`src/routes/(admin)/settings/+page.server.ts` + `+page.svelte`)
 
-- [ ] Load function: read all config values (decrypt sensitive ones for display/redaction)
-- [ ] Settings sections:
-  - [ ] **Plex Connection**: server URL, token (redacted, with "Re-authenticate" button), server info display
-  - [ ] **Dispatcharr Connection**: URL, API key (redacted, with "Update" button), connection status
-  - [ ] **XC URL Template**: editable template string, "Test" button that runs discovery probe
-  - [ ] **Default Provisioning**: default mode selector, default group selector, default profile selector
-  - [ ] **Sync Settings**: sync interval (minutes), health check interval (minutes)
-  - [ ] **Security**: allowed origins editor, session TTL settings
-  - [ ] **Audit Log**: max retention days
-- [ ] Each section is a form with its own action
-- [ ] Changes write to `config` table, invalidate config cache, append audit log `config.changed`
+- [x] Load function: read all config values (decrypt sensitive ones for display/redaction)
+- [x] Settings sections:
+  - [x] **Plex Connection**: server URL, token (redacted, with "Re-authenticate" button), server info display
+  - [x] **Dispatcharr Connection**: URL, API key (redacted, with "Update" button), connection status
+  - [x] **XC URL Template**: editable template string, "Test" button that runs discovery probe
+  - [x] **Default Provisioning**: default mode selector, default group selector, default profile selector
+  - [x] **Sync Settings**: sync interval (minutes), health check interval (minutes)
+  - [x] **Security**: allowed origins editor, session TTL settings
+  - [x] **Audit Log**: max retention days
+- [x] Each section is a form with its own action
+- [x] Changes write to `config` table, invalidate config cache, append audit log `config.changed`
 
 ### 11.6 — Audit log page (`src/routes/(admin)/audit/+page.server.ts` + `+page.svelte`)
 
-- [ ] Load function: query audit log with filters and pagination
-- [ ] Audit log table:
-  - [ ] Timestamp
-  - [ ] Actor
-  - [ ] Action (color-coded badge)
-  - [ ] Detail (expandable JSON)
-  - [ ] IP address
-- [ ] Filters: action type dropdown, date range, actor search
-- [ ] Pagination controls
-- [ ] Use shadcn-svelte `Table`, `Badge`, `Input` (for search), date pickers
+- [x] Load function: query audit log with filters and pagination
+- [x] Audit log table:
+  - [x] Timestamp
+  - [x] Actor
+  - [x] Action (color-coded badge)
+  - [x] Detail (expandable JSON)
+  - [x] IP address
+- [x] Filters: action type dropdown, date range, actor search
+- [x] Pagination controls
+- [x] Use shadcn-svelte `Table`, `Badge`, `Input` (for search), date pickers
 
 ---
 

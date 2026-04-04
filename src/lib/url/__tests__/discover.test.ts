@@ -147,6 +147,57 @@ describe("probeXcSurface", () => {
     });
   });
 
+  describe("auth error (401/403) proves endpoint exists", () => {
+    it("returns found: true when get.php returns 401", async () => {
+      mockOfetch.mockRejectedValueOnce(makeFetchError(401, "Unauthorized"));
+
+      const result = await probeXcSurface(HOST, USER, PASS);
+
+      expect(result.found).toBe(true);
+      expect(result.template).toContain("get.php");
+      expect(result.probedPaths).toHaveLength(1);
+      expect(mockOfetch).toHaveBeenCalledTimes(1);
+    });
+
+    it("returns found: true when get.php returns 403", async () => {
+      mockOfetch.mockRejectedValueOnce(makeFetchError(403, "Forbidden"));
+
+      const result = await probeXcSurface(HOST, USER, PASS);
+
+      expect(result.found).toBe(true);
+      expect(result.template).toContain("get.php");
+    });
+
+    it("returns found: true when player_api returns 401 after get.php 404", async () => {
+      mockOfetch.mockRejectedValueOnce(makeFetchError(404, "Not Found"));
+      mockOfetch.mockRejectedValueOnce(makeFetchError(401, "Unauthorized"));
+
+      const result = await probeXcSurface(HOST, USER, PASS);
+
+      expect(result.found).toBe(true);
+      expect(result.template).toContain("player_api.php");
+      expect(result.probedPaths).toHaveLength(2);
+    });
+
+    it("works with empty credentials (unauthenticated probe)", async () => {
+      mockOfetch.mockRejectedValueOnce(makeFetchError(401, "Unauthorized"));
+
+      const result = await probeXcSurface(HOST, "", "");
+
+      expect(result.found).toBe(true);
+      expect(result.template).toContain("get.php");
+    });
+
+    it("does not treat 500 as auth error", async () => {
+      mockOfetch.mockRejectedValue(makeFetchError(500, "Internal Server Error"));
+
+      const result = await probeXcSurface(HOST, USER, PASS);
+
+      expect(result.found).toBe(false);
+      expect(result.probedPaths).toHaveLength(3);
+    });
+  });
+
   describe("all probes fail (network error)", () => {
     it("returns found: false with all probed paths", async () => {
       mockOfetch.mockRejectedValue(new Error("ECONNREFUSED"));

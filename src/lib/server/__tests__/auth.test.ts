@@ -46,6 +46,11 @@ vi.mock("$lib/db/repositories/users", () => ({
   getUserMappingById: (id: number) => mockUser,
 }));
 
+vi.mock("$app/environment", () => ({
+  dev: false,
+  building: false,
+}));
+
 // ---------------------------------------------------------------------------
 // Dynamic import after mocks are in place
 // ---------------------------------------------------------------------------

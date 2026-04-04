@@ -119,6 +119,7 @@ vi.mock("$lib/server/auth", () => ({
     maxAge: 3600,
   },
   ADMIN_SESSION_TTL: 3600,
+  isSecure: true,
   requireSetupIncomplete: mocks.requireSetupIncomplete,
   SETUP_COMPLETED_CONFIG_KEY: "setup_completed",
   SESSION_COOKIE_NAME: "otpravkarr_session",

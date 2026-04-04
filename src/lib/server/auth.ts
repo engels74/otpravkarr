@@ -1,5 +1,6 @@
 import type { RequestEvent } from "@sveltejs/kit";
 import { error, redirect } from "@sveltejs/kit";
+import { dev } from "$app/environment";
 import { adminExists, getAdminByUsername } from "$lib/db/repositories/admin";
 import { getConfig } from "$lib/db/repositories/config";
 import { getSession } from "$lib/db/repositories/sessions";
@@ -12,10 +13,12 @@ export const USER_SESSION_TTL = 14400;
 export const SETUP_COMPLETED_CONFIG_KEY = "setup_completed";
 const SETUP_COMPLETED_VALUE = "true";
 
+export const isSecure = !dev;
+
 export const ADMIN_COOKIE_OPTIONS = {
   path: "/",
   httpOnly: true,
-  secure: true,
+  secure: isSecure,
   sameSite: "strict" as const,
   maxAge: ADMIN_SESSION_TTL,
 };
@@ -23,7 +26,7 @@ export const ADMIN_COOKIE_OPTIONS = {
 export const USER_COOKIE_OPTIONS = {
   path: "/",
   httpOnly: true,
-  secure: true,
+  secure: isSecure,
   sameSite: "lax" as const,
   maxAge: USER_SESSION_TTL,
 };

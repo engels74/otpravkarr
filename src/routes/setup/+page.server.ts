@@ -18,6 +18,7 @@ import { PlexAuthError, PlexConnectionError } from "$lib/plex/types";
 import {
   ADMIN_COOKIE_OPTIONS,
   ADMIN_SESSION_TTL,
+  isSecure,
   requireSetupIncomplete,
   SESSION_COOKIE_NAME,
   SETUP_COMPLETED_CONFIG_KEY,
@@ -53,7 +54,7 @@ const ORIGIN_SETUP_KEY = "allowed_origins";
 const SETUP_CLAIM_COOKIE_OPTIONS = {
   path: "/setup",
   httpOnly: true,
-  secure: true,
+  secure: isSecure,
   sameSite: "strict" as const,
   maxAge: SETUP_CLAIM_TTL_SECONDS,
 };
@@ -224,7 +225,7 @@ export const actions: Actions = {
     }
 
     const formData = await request.formData();
-    const token = String(formData.get("token") ?? "");
+    const token = String(formData.get("token") ?? "").trim();
 
     if (!token) {
       return fail(400, { error: "invalid_token" });
@@ -426,7 +427,7 @@ export const actions: Actions = {
 
     let xcProbe: { found: boolean; template?: string; probedPaths: string[] } | null = null;
     try {
-      xcProbe = await probeXcSurface(dispatcharrUrl, "test", "test");
+      xcProbe = await probeXcSurface(dispatcharrUrl, "", "");
     } catch {
       // Probe is best-effort; ignore failures
     }

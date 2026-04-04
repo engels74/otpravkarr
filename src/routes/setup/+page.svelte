@@ -342,7 +342,7 @@ function enhanceHandler(nextStep?: number) {
                   id="bootstrap-token"
                   name="token"
                   type="text"
-                  placeholder="otpv_bootstrap_..."
+                  placeholder="xxxx-xxxx-xxxx"
                   value={data.tokenFromUrl ?? ''}
                   autocomplete="off"
                   class="font-mono text-sm"

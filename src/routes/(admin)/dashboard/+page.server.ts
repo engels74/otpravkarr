@@ -4,9 +4,11 @@ import type { ProvisioningMode } from "$lib/db/types";
 import { getCachedFriends } from "$lib/plex/friends";
 import { getHealthStatus } from "$lib/scheduler/jobs/health";
 import { scheduler } from "$lib/scheduler/runner";
+import { requireAdmin } from "$lib/server/auth";
 import type { PageServerLoad } from "./$types";
 
-export const load: PageServerLoad = async () => {
+export const load: PageServerLoad = async (event) => {
+  await requireAdmin(event);
   const mappings = getAllUserMappings();
 
   // User stats

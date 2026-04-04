@@ -86,6 +86,12 @@ function sqliteDatetime(ts: string): string {
     .replace(/\.\d{3}$/, "");
 }
 
+function sqliteNextDayStart(dateOnly: string): string {
+  const date = new Date(`${dateOnly}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + 1);
+  return date.toISOString().slice(0, 19).replace("T", " ");
+}
+
 function applyFilters(sql: string, params: unknown[]): AuditRow[] {
   let filtered = [...auditRows];
   let paramIdx = 0;
@@ -103,6 +109,10 @@ function applyFilters(sql: string, params: unknown[]): AuditRow[] {
     if (sql.includes("timestamp >= datetime(?)")) {
       const normalized = sqliteDatetime(params[paramIdx++] as string);
       filtered = filtered.filter((r) => sqliteDatetime(r.timestamp) >= normalized);
+    }
+    if (sql.includes("timestamp < datetime(?, '+1 day')")) {
+      const nextDayStart = sqliteNextDayStart(params[paramIdx++] as string);
+      filtered = filtered.filter((r) => sqliteDatetime(r.timestamp) < nextDayStart);
     }
     if (sql.includes("timestamp <= datetime(?)")) {
       const normalized = sqliteDatetime(params[paramIdx++] as string);
@@ -285,6 +295,15 @@ describe("audit repository", () => {
 
       expect(total).toBe(2);
       expect(entries).toHaveLength(2);
+    });
+
+    it("includes the full selected day for date-only before filters", () => {
+      seedEntries();
+      const { entries, total } = queryAuditLog({ before: "2024-01-02" });
+
+      expect(total).toBe(2);
+      expect(entries).toHaveLength(2);
+      expect(entries[0]!.timestamp).toBe("2024-01-02T10:00:00Z");
     });
 
     it("combines multiple filters", () => {

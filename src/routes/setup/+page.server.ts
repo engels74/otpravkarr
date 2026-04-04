@@ -23,6 +23,7 @@ import {
   SESSION_COOKIE_NAME,
   SETUP_COMPLETED_CONFIG_KEY,
 } from "$lib/server/auth";
+import { parseAndNormalizeOrigins } from "$lib/server/origins";
 import { setupLimiter } from "$lib/server/ratelimit";
 import { probeXcSurface } from "$lib/url/discover";
 
@@ -444,23 +445,9 @@ export const actions: Actions = {
     const formData = await request.formData();
     const rawOrigins = String(formData.get("allowedOrigins") ?? "");
 
-    const origins = rawOrigins
-      .split(",")
-      .map((o) => o.trim())
-      .filter((o) => o.length > 0);
-
-    const normalizedOrigins: string[] = [];
-
-    for (const origin of origins) {
-      try {
-        const parsedOrigin = new URL(origin).origin;
-        if (parsedOrigin === "null") {
-          return fail(400, { error: `Invalid origin: ${origin}` });
-        }
-        normalizedOrigins.push(parsedOrigin);
-      } catch {
-        return fail(400, { error: `Invalid origin: ${origin}` });
-      }
+    const { origins: normalizedOrigins, invalidOrigin } = parseAndNormalizeOrigins(rawOrigins, ",");
+    if (invalidOrigin) {
+      return fail(400, { error: `Invalid origin: ${invalidOrigin}` });
     }
 
     if (normalizedOrigins.length === 0) {

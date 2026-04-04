@@ -9,6 +9,7 @@ import type { PlexFriend } from "$lib/plex/types";
 import type { HealthStatus } from "$lib/scheduler/jobs/health";
 import type { JobStatus } from "$lib/scheduler/runner";
 import { cn } from "$lib/utils";
+import { normalizeSqliteDatetime } from "$lib/utils/datetime";
 
 interface Props {
   data: {
@@ -31,7 +32,7 @@ let { data }: Props = $props();
 
 function formatRelativeTime(isoString: string | null): string {
   if (!isoString) return "never";
-  const date = new Date(isoString);
+  const date = new Date(normalizeSqliteDatetime(isoString));
   if (Number.isNaN(date.getTime())) return "unknown";
   const diffMs = Date.now() - date.getTime();
   if (diffMs < 0) return "just now";

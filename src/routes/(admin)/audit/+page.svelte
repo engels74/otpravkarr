@@ -12,6 +12,7 @@ import * as Select from "$lib/components/ui/select";
 import * as Table from "$lib/components/ui/table";
 import type { AuditEntry } from "$lib/db/types";
 import { cn } from "$lib/utils";
+import { normalizeSqliteDatetime } from "$lib/utils/datetime";
 
 interface Props {
   data: {
@@ -64,7 +65,7 @@ function actionBadgeVariant(action: string): "default" | "secondary" | "destruct
 }
 
 function formatTimestamp(ts: string): string {
-  const d = new Date(ts);
+  const d = new Date(normalizeSqliteDatetime(ts));
   if (Number.isNaN(d.getTime())) return ts;
   return new Intl.DateTimeFormat("en-GB", {
     year: "numeric",

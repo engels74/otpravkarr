@@ -5,7 +5,6 @@ import { Button } from "$lib/components/ui/button";
 import * as Card from "$lib/components/ui/card";
 import { Input } from "$lib/components/ui/input";
 import { Label } from "$lib/components/ui/label";
-import * as Select from "$lib/components/ui/select";
 
 interface Props {
   data: {
@@ -21,19 +20,12 @@ interface Props {
     sync: {
       intervalMinutes: string;
     };
-    provisioning: {
-      defaultMode: string;
-      defaultGroupId: string;
-      defaultProfileId: string;
-    };
     security: {
       allowedOrigins: string;
     };
     audit: {
       retentionDays: string;
     };
-    groups: { id: number; name: string }[];
-    profiles: { id: number; name: string }[];
   };
 }
 
@@ -49,18 +41,6 @@ function makeEnhance(section: string) {
       sectionSubmitting[section] = false;
     };
   };
-}
-
-// Track select values for provisioning section (need hidden inputs for form submission)
-let provisioningMode = $derived(data.provisioning.defaultMode);
-let defaultGroupId = $derived(data.provisioning.defaultGroupId);
-let defaultProfileId = $derived(data.provisioning.defaultProfileId);
-
-function modeLabel(mode: string): string {
-  if (mode === "automatic") return "Automatic";
-  if (mode === "self_managed") return "Self-managed";
-  if (mode === "staff") return "Staff";
-  return mode;
 }
 </script>
 
@@ -180,92 +160,14 @@ function modeLabel(mode: string): string {
   <Card.Root>
     <Card.Header>
       <Card.Title class="text-base">Default Provisioning</Card.Title>
-      <Card.Description>Set defaults for newly provisioned users.</Card.Description>
+      <Card.Description>Managed during setup only.</Card.Description>
     </Card.Header>
-    <form method="POST" action="?/updateDefaultProvisioning" use:enhance={makeEnhance("provisioning")}>
-      <input type="hidden" name="default_provisioning_mode" value={provisioningMode} />
-      <input type="hidden" name="default_group_id" value={defaultGroupId} />
-      <input type="hidden" name="default_profile_id" value={defaultProfileId} />
-
-      <Card.Content class="grid gap-4">
-        <div class="grid gap-1.5">
-          <Label>Default mode</Label>
-          <Select.Root
-            type="single"
-            value={provisioningMode}
-            onValueChange={(v) => (provisioningMode = v ?? "automatic")}
-          >
-            <Select.Trigger class="w-[200px]">
-              <span data-slot="select-value">{modeLabel(provisioningMode)}</span>
-            </Select.Trigger>
-            <Select.Content>
-              <Select.Item value="automatic" label="Automatic">Automatic</Select.Item>
-              <Select.Item value="self_managed" label="Self-managed">Self-managed</Select.Item>
-              <Select.Item value="staff" label="Staff">Staff</Select.Item>
-            </Select.Content>
-          </Select.Root>
-        </div>
-
-        <div class="grid gap-1.5">
-          <Label>Default group</Label>
-          {#if data.groups.length > 0}
-            <Select.Root
-              type="single"
-              value={defaultGroupId}
-              onValueChange={(v) => (defaultGroupId = v ?? "")}
-            >
-              <Select.Trigger class="w-[200px]">
-                <span data-slot="select-value">
-                  {defaultGroupId
-                    ? data.groups.find((g) => String(g.id) === defaultGroupId)?.name ?? "Select group"
-                    : "None"}
-                </span>
-              </Select.Trigger>
-              <Select.Content>
-                <Select.Item value="" label="None">None</Select.Item>
-                {#each data.groups as group (group.id)}
-                  <Select.Item value={String(group.id)} label={group.name}>{group.name}</Select.Item>
-                {/each}
-              </Select.Content>
-            </Select.Root>
-          {:else}
-            <p class="text-sm text-muted-foreground">No groups available. Configure Dispatcharr first.</p>
-          {/if}
-        </div>
-
-        <div class="grid gap-1.5">
-          <Label>Default profile</Label>
-          {#if data.profiles.length > 0}
-            <Select.Root
-              type="single"
-              value={defaultProfileId}
-              onValueChange={(v) => (defaultProfileId = v ?? "")}
-            >
-              <Select.Trigger class="w-[200px]">
-                <span data-slot="select-value">
-                  {defaultProfileId
-                    ? data.profiles.find((p) => String(p.id) === defaultProfileId)?.name ?? "Select profile"
-                    : "None"}
-                </span>
-              </Select.Trigger>
-              <Select.Content>
-                <Select.Item value="" label="None">None</Select.Item>
-                {#each data.profiles as profile (profile.id)}
-                  <Select.Item value={String(profile.id)} label={profile.name}>{profile.name}</Select.Item>
-                {/each}
-              </Select.Content>
-            </Select.Root>
-          {:else}
-            <p class="text-sm text-muted-foreground">No profiles available. Configure Dispatcharr first.</p>
-          {/if}
-        </div>
-      </Card.Content>
-      <Card.Footer>
-        <Button type="submit" disabled={sectionSubmitting["provisioning"]}>
-          {sectionSubmitting["provisioning"] ? "Saving..." : "Save"}
-        </Button>
-      </Card.Footer>
-    </form>
+    <Card.Content>
+      <p class="text-sm text-muted-foreground">
+        Provisioning default overrides are disabled in Admin because runtime provisioning does not
+        currently consume these values.
+      </p>
+    </Card.Content>
   </Card.Root>
 
   <!-- Security -->

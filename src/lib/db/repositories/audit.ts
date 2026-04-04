@@ -1,6 +1,12 @@
 import { getDb } from "../connection";
 import type { AuditEntry } from "../types";
 
+const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+function isDateOnlyFilter(value: string): boolean {
+  return DATE_ONLY_RE.test(value);
+}
+
 /**
  * Append an entry to the audit log.
  * Serializes `detail` as JSON if provided.
@@ -54,7 +60,12 @@ export function queryAuditLog(filters: {
   }
 
   if (filters.before != null) {
-    conditions.push("timestamp <= datetime(?)");
+    if (isDateOnlyFilter(filters.before)) {
+      // Date-only "before" values come from the UI date picker and should include that full day.
+      conditions.push("timestamp < datetime(?, '+1 day')");
+    } else {
+      conditions.push("timestamp <= datetime(?)");
+    }
     params.push(filters.before);
   }
 

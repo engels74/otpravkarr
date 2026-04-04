@@ -9,8 +9,8 @@ import {
 import type { ProvisioningMode } from "$lib/db/types";
 import { DispatcharrClient } from "$lib/dispatcharr/client";
 import { listGroups } from "$lib/dispatcharr/endpoints/groups";
-import { listProfiles } from "$lib/dispatcharr/endpoints/profiles";
 import { updateUser } from "$lib/dispatcharr/endpoints/users";
+import { requireAdmin } from "$lib/server/auth";
 import type { Actions, PageServerLoad } from "./$types";
 
 async function getClient(): Promise<DispatcharrClient> {
@@ -20,7 +20,9 @@ async function getClient(): Promise<DispatcharrClient> {
   return new DispatcharrClient(url, key);
 }
 
-export const load: PageServerLoad = async ({ url }) => {
+export const load: PageServerLoad = async (event) => {
+  await requireAdmin(event);
+  const { url } = event;
   const status = url.searchParams.get("status") ?? "all";
   const mode = url.searchParams.get("mode") ?? "all";
   const search = url.searchParams.get("search") ?? "";
@@ -50,33 +52,28 @@ export const load: PageServerLoad = async ({ url }) => {
     );
   }
 
-  // Fetch Dispatcharr groups and profiles
+  // Fetch Dispatcharr groups
   let groups: { id: number; name: string }[] = [];
-  let profiles: { id: number; name: string }[] = [];
 
   try {
     const client = await getClient();
-    const [groupsResult, profilesResult] = await Promise.all([
-      listGroups(client),
-      listProfiles(client),
-    ]);
+    const groupsResult = await listGroups(client);
     if (groupsResult.ok) groups = groupsResult.data;
-    if (profilesResult.ok) profiles = profilesResult.data;
   } catch {
-    // Dispatcharr may not be configured yet — groups/profiles stay empty
+    // Dispatcharr may not be configured yet — groups stay empty
   }
 
   return {
     mappings,
     groups,
-    profiles,
     filters: { status, mode, search },
   };
 };
 
 export const actions: Actions = {
-  rotateCredentials: async ({ request }) => {
-    const fd = await request.formData();
+  rotateCredentials: async (event) => {
+    await requireAdmin(event);
+    const fd = await event.request.formData();
     const id = Number(fd.get("id"));
     if (!id) return fail(400, { error: "Missing user mapping ID" });
 
@@ -94,8 +91,9 @@ export const actions: Actions = {
     }
   },
 
-  disableUser: async ({ request }) => {
-    const fd = await request.formData();
+  disableUser: async (event) => {
+    await requireAdmin(event);
+    const fd = await event.request.formData();
     const id = Number(fd.get("id"));
     if (!id) return fail(400, { error: "Missing user mapping ID" });
 
@@ -111,8 +109,9 @@ export const actions: Actions = {
     }
   },
 
-  enableUser: async ({ request }) => {
-    const fd = await request.formData();
+  enableUser: async (event) => {
+    await requireAdmin(event);
+    const fd = await event.request.formData();
     const id = Number(fd.get("id"));
     if (!id) return fail(400, { error: "Missing user mapping ID" });
 
@@ -128,8 +127,9 @@ export const actions: Actions = {
     }
   },
 
-  changeGroup: async ({ request }) => {
-    const fd = await request.formData();
+  changeGroup: async (event) => {
+    await requireAdmin(event);
+    const fd = await event.request.formData();
     const id = Number(fd.get("id"));
     if (!id) return fail(400, { error: "Missing user mapping ID" });
 
@@ -149,6 +149,21 @@ export const actions: Actions = {
         const client = await getClient();
         const result = await updateUser(client, mapping.dispatcharr_user_id, { groups: groupIds });
         if (!result.ok) {
+          if (result.error === "not_found") {
+            updateUserMapping(id, {
+              is_active: 0,
+              dispatcharr_user_id: null,
+              dispatcharr_username: null,
+              dispatcharr_xc_password_enc: null,
+              dispatcharr_group_ids: JSON.stringify(groupIds),
+            });
+            return {
+              success: true,
+              staleMappingCleared: true,
+              message:
+                "Dispatcharr user no longer exists. Cleared stale mapping and saved groups locally.",
+            };
+          }
           return fail(500, { error: `Dispatcharr error: ${result.message}` });
         }
       }
@@ -159,21 +174,11 @@ export const actions: Actions = {
     }
   },
 
-  changeProfile: async ({ request }) => {
-    const fd = await request.formData();
-    const id = Number(fd.get("id"));
-    if (!id) return fail(400, { error: "Missing user mapping ID" });
-
-    const profileId = Number(fd.get("profile_id"));
-
-    const mapping = getUserMappingById(id);
-    if (!mapping) return fail(400, { error: "User mapping not found" });
-
-    try {
-      updateUserMapping(id, { dispatcharr_profile_id: profileId || null });
-      return { success: true };
-    } catch (err) {
-      return fail(500, { error: err instanceof Error ? err.message : "Failed to change profile" });
-    }
+  changeProfile: async (event) => {
+    await requireAdmin(event);
+    return fail(400, {
+      error:
+        "Profile changes are currently unavailable because the Dispatcharr integration does not support propagating this update.",
+    });
   },
 };

@@ -1,8 +1,11 @@
 import { queryAuditLog } from "$lib/db/repositories/audit";
 import { AuditAction } from "$lib/db/types";
+import { requireAdmin } from "$lib/server/auth";
 import type { PageServerLoad } from "./$types";
 
-export const load: PageServerLoad = async ({ url }) => {
+export const load: PageServerLoad = async (event) => {
+  await requireAdmin(event);
+  const { url } = event;
   const action = url.searchParams.get("action") || null;
   const actor = url.searchParams.get("actor") || null;
   const after = url.searchParams.get("after") || null;

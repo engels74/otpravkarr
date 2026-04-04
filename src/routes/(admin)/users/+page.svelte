@@ -4,7 +4,6 @@ import CheckCircle2Icon from "lucide-svelte/icons/check-circle-2";
 import EllipsisIcon from "lucide-svelte/icons/ellipsis";
 import InfoIcon from "lucide-svelte/icons/info";
 import KeyRoundIcon from "lucide-svelte/icons/key-round";
-import LayersIcon from "lucide-svelte/icons/layers";
 import UsersIcon from "lucide-svelte/icons/users";
 import { enhance } from "$app/forms";
 import { goto } from "$app/navigation";
@@ -19,13 +18,13 @@ import * as Select from "$lib/components/ui/select";
 import { Separator } from "$lib/components/ui/separator";
 import * as Table from "$lib/components/ui/table";
 import type { ProvisioningMode, UserMapping } from "$lib/db/types";
-import type { DispatcharrChannelProfile, DispatcharrGroup } from "$lib/dispatcharr/types";
+import type { DispatcharrGroup } from "$lib/dispatcharr/types";
+import { normalizeSqliteDatetime } from "$lib/utils/datetime";
 
 interface Props {
   data: {
     mappings: UserMapping[];
     groups: DispatcharrGroup[];
-    profiles: DispatcharrChannelProfile[];
     filters: { status: string; mode: string; search: string };
   };
 }
@@ -36,19 +35,17 @@ let submitting = $state(false);
 
 // Dialog state
 let groupDialogOpen = $state(false);
-let profileDialogOpen = $state(false);
 let detailDialogOpen = $state(false);
 let selectedMapping = $state<UserMapping | null>(null);
 let selectedGroupIds = $state<number[]>([]);
-let selectedProfileId = $state<string>("");
 
 // Search debounce
 let searchTimeout: ReturnType<typeof setTimeout> | undefined;
-let searchValue = $state(data.filters.search);
+let searchValue = $derived(data.filters.search);
 
 function formatRelativeTime(isoString: string | null): string {
   if (!isoString) return "never";
-  const date = new Date(isoString);
+  const date = new Date(normalizeSqliteDatetime(isoString));
   if (Number.isNaN(date.getTime())) return "unknown";
   const diffMs = Date.now() - date.getTime();
   if (diffMs < 0) return "just now";
@@ -114,12 +111,6 @@ function openGroupDialog(m: UserMapping) {
   groupDialogOpen = true;
 }
 
-function openProfileDialog(m: UserMapping) {
-  selectedMapping = m;
-  selectedProfileId = m.dispatcharr_profile_id != null ? String(m.dispatcharr_profile_id) : "";
-  profileDialogOpen = true;
-}
-
 function openDetailDialog(m: UserMapping) {
   selectedMapping = m;
   detailDialogOpen = true;
@@ -140,7 +131,6 @@ function makeEnhanceHandler() {
       await update();
       submitting = false;
       groupDialogOpen = false;
-      profileDialogOpen = false;
     };
   };
 }
@@ -313,10 +303,6 @@ function makeActionEnhance() {
                       <UsersIcon class="h-3.5 w-3.5" />
                       Change Group
                     </DropdownMenu.Item>
-                    <DropdownMenu.Item onclick={() => openProfileDialog(m)}>
-                      <LayersIcon class="h-3.5 w-3.5" />
-                      Change Profile
-                    </DropdownMenu.Item>
                     <DropdownMenu.Separator />
                     <DropdownMenu.Item onclick={() => openDetailDialog(m)}>
                       <InfoIcon class="h-3.5 w-3.5" />
@@ -362,52 +348,6 @@ function makeActionEnhance() {
               </label>
             {/each}
           {/if}
-        </div>
-        <Dialog.Footer>
-          <Button type="submit" disabled={submitting} size="sm">
-            {submitting ? "Saving..." : "Save"}
-          </Button>
-        </Dialog.Footer>
-      </form>
-    {/if}
-  </Dialog.Content>
-</Dialog.Root>
-
-<!-- Change Profile Dialog -->
-<Dialog.Root bind:open={profileDialogOpen}>
-  <Dialog.Content class="sm:max-w-md">
-    <Dialog.Header>
-      <Dialog.Title>Change Profile</Dialog.Title>
-      <Dialog.Description>
-        Select a channel profile for {selectedMapping?.plex_username ?? "user"}.
-      </Dialog.Description>
-    </Dialog.Header>
-    {#if selectedMapping}
-      <form method="POST" action="?/changeProfile" use:enhance={makeEnhanceHandler()}>
-        <input type="hidden" name="id" value={selectedMapping.id} />
-        <div class="py-2">
-          <Select.Root
-            type="single"
-            value={selectedProfileId}
-            onValueChange={(v) => (selectedProfileId = v ?? "")}
-          >
-            <Select.Trigger class="w-full">
-              <span data-slot="select-value">
-                {#if selectedProfileId}
-                  {data.profiles.find((p) => String(p.id) === selectedProfileId)?.name ?? "Select profile"}
-                {:else}
-                  None
-                {/if}
-              </span>
-            </Select.Trigger>
-            <Select.Content>
-              <Select.Item value="" label="None">None</Select.Item>
-              {#each data.profiles as profile (profile.id)}
-                <Select.Item value={String(profile.id)} label={profile.name}>{profile.name}</Select.Item>
-              {/each}
-            </Select.Content>
-          </Select.Root>
-          <input type="hidden" name="profile_id" value={selectedProfileId} />
         </div>
         <Dialog.Footer>
           <Button type="submit" disabled={submitting} size="sm">

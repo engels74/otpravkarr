@@ -16,9 +16,19 @@ export interface ProbeResult {
 
 const PROBE_TIMEOUT_MS = 5_000;
 
+/** HTTP status codes that prove an endpoint exists even without valid credentials. */
+const AUTH_ERROR_CODES = new Set([401, 403]);
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+function isAuthError(error: unknown): boolean {
+  if (typeof error === "object" && error !== null && "statusCode" in error) {
+    return AUTH_ERROR_CODES.has((error as { statusCode: number }).statusCode);
+  }
+  return false;
+}
 
 /** Ensures the host string has an `http(s)://` scheme prefix. Defaults to `http://` for bare hosts. */
 function ensureScheme(host: string): string {
@@ -39,7 +49,7 @@ function redactUrl(url: string, username: string, password: string): string {
   try {
     const parsed = new URL(url);
     for (const [key, value] of parsed.searchParams) {
-      if (value === username || value === password) {
+      if (value && (value === username || value === password)) {
         parsed.searchParams.set(key, "***");
       }
     }
@@ -92,6 +102,8 @@ async function probeGetPhp(
     password,
     type: "m3u_plus",
   });
+  const base = ensureScheme(host).replace(/\/+$/, "");
+  const template = `${base}/get.php?username={username}&password={password}&type=m3u_plus`;
 
   try {
     const response = await ofetch(url, {
@@ -100,15 +112,13 @@ async function probeGetPhp(
     });
 
     if (looksLikeM3U(response)) {
-      const base = ensureScheme(host).replace(/\/+$/, "");
-      return {
-        ok: true,
-        url,
-        template: `${base}/get.php?username={username}&password={password}&type=m3u_plus`,
-      };
+      return { ok: true, url, template };
     }
-  } catch {
-    // Probe failed — not fatal
+  } catch (error: unknown) {
+    // Auth error means the endpoint exists but credentials are wrong
+    if (isAuthError(error)) {
+      return { ok: true, url, template };
+    }
   }
 
   return { ok: false, url };
@@ -120,6 +130,8 @@ async function probePlayerApi(
   password: string,
 ): Promise<{ ok: boolean; url: string; template?: string }> {
   const url = buildUrl(host, "player_api.php", { username, password });
+  const base = ensureScheme(host).replace(/\/+$/, "");
+  const template = `${base}/player_api.php?username={username}&password={password}`;
 
   try {
     const response: unknown = await ofetch(url, {
@@ -127,15 +139,12 @@ async function probePlayerApi(
     });
 
     if (looksLikePlayerApiJson(response)) {
-      const base = ensureScheme(host).replace(/\/+$/, "");
-      return {
-        ok: true,
-        url,
-        template: `${base}/player_api.php?username={username}&password={password}`,
-      };
+      return { ok: true, url, template };
     }
-  } catch {
-    // Probe failed — not fatal
+  } catch (error: unknown) {
+    if (isAuthError(error)) {
+      return { ok: true, url, template };
+    }
   }
 
   return { ok: false, url };
@@ -151,6 +160,8 @@ async function probeLiveCategories(
     password,
     action: "get_live_categories",
   });
+  const base = ensureScheme(host).replace(/\/+$/, "");
+  const template = `${base}/player_api.php?username={username}&password={password}`;
 
   try {
     const response: unknown = await ofetch(url, {
@@ -158,15 +169,12 @@ async function probeLiveCategories(
     });
 
     if (looksLikeXcCategories(response)) {
-      const base = ensureScheme(host).replace(/\/+$/, "");
-      return {
-        ok: true,
-        url,
-        template: `${base}/player_api.php?username={username}&password={password}`,
-      };
+      return { ok: true, url, template };
     }
-  } catch {
-    // Probe failed — not fatal
+  } catch (error: unknown) {
+    if (isAuthError(error)) {
+      return { ok: true, url, template };
+    }
   }
 
   return { ok: false, url };

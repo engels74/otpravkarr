@@ -56,23 +56,32 @@ export function createBootstrapToken(ttlMinutes: number = DEFAULT_TTL_MINUTES): 
 }
 
 /**
- * Consume a bootstrap token. Returns `true` if the candidate matches the
- * active token and it has not expired. The token is nulled on success
- * (single-use). Uses constant-time comparison to prevent timing attacks.
+ * Validate a bootstrap token without consuming it.
+ * This allows the same setup token to recover an in-progress claim
+ * until the token expires or setup completes.
  */
-export function consumeBootstrapToken(candidate: string): boolean {
+export function validateBootstrapToken(candidate: string): boolean {
   if (!activeToken) return false;
   if (Date.now() >= activeToken.expiresAt) {
     activeToken = null;
     return false;
   }
 
-  // Expected format: xxxx-xxxx-xxxx (14 chars). Reject oversized input early
-  // to prevent O(n) work in timingSafeEqual from untrusted user input.
+  // Expected format: xxxx-xxxx-xxxx (14 chars). Reject wrong-length input early
+  // to bound work for untrusted input before the constant-time comparison.
   const expectedLen = SEGMENT_COUNT * SEGMENT_LENGTH + (SEGMENT_COUNT - 1); // 14
-  if (candidate.length > expectedLen) return false;
+  if (candidate.length !== expectedLen) return false;
 
-  const match = timingSafeEqual(candidate, activeToken.value);
+  return timingSafeEqual(candidate, activeToken.value);
+}
+
+/**
+ * Consume a bootstrap token. Returns `true` if the candidate matches the
+ * active token and it has not expired. The token is nulled on success
+ * (single-use). Uses constant-time comparison to prevent timing attacks.
+ */
+export function consumeBootstrapToken(candidate: string): boolean {
+  const match = validateBootstrapToken(candidate);
   if (match) {
     activeToken = null;
   }
@@ -109,6 +118,11 @@ function timingSafeEqual(a: string, b: string): boolean {
 
 /** Reset active token — for testing only. */
 export function _resetForTesting(): void {
+  activeToken = null;
+}
+
+/** Clear the active token once setup is complete. */
+export function clearBootstrapToken(): void {
   activeToken = null;
 }
 

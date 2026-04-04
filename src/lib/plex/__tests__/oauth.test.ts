@@ -84,6 +84,29 @@ describe("oauth", () => {
       expect(getPendingOAuth(id)).toBe(false);
     });
 
+    it("returns cached identity on retry after successful completion", async () => {
+      const fakeWebLogin = { id: 1, code: "abc", uri: "https://plex.tv/auth#abc" };
+      mockGetWebLogin.mockResolvedValue(fakeWebLogin);
+
+      const fakeAccount = {
+        id: 42,
+        uuid: "uuid-123",
+        username: "testuser",
+        email: "test@example.com",
+        thumb: "https://plex.tv/thumb.png",
+        authenticationToken: "tok-abc",
+      };
+      mockWebLoginCheck.mockResolvedValue(fakeAccount);
+
+      const { id } = await initiateOAuth("https://example.com/callback");
+      const first = await completeOAuth(id);
+      const second = await completeOAuth(id);
+
+      expect(first).toEqual(second);
+      expect(mockWebLoginCheck).toHaveBeenCalledTimes(1);
+      expect(getPendingOAuth(id)).toBe(false);
+    });
+
     it("throws when ID is not found", async () => {
       await expect(completeOAuth("nonexistent-id")).rejects.toThrow(
         "OAuth session not found or expired",

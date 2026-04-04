@@ -1,0 +1,432 @@
+// @vitest-environment node
+
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { UserMapping } from "$lib/db/types";
+
+const state = vi.hoisted(() => ({
+  oauthCookie: "oauth-pin-id" as string | undefined,
+  configValues: {} as Record<string, string | null>,
+  existingMappingByPlexId: null as UserMapping | null,
+  cachedFriends: null as null | Array<{ id: number; email: string; status: string }>,
+  friends: [{ id: 12345, email: "test@example.com", status: "accepted" }] as Array<{
+    id: number;
+    email: string;
+    status: string;
+  }>,
+  provisionResult: {
+    status: "provisioned",
+    mapping: {
+      id: 1,
+      plex_account_id: 12345,
+      plex_uuid: "abc-uuid",
+      plex_username: "testuser",
+      plex_email: "test@example.com",
+      plex_thumb: null,
+      dispatcharr_user_id: 10,
+      dispatcharr_username: "testuser",
+      dispatcharr_xc_password_enc: "enc-pw",
+      dispatcharr_group_ids: "[]",
+      dispatcharr_profile_id: null,
+      provisioning_mode: "automatic" as const,
+      is_active: 1,
+      created_at: "2024-01-01 00:00:00",
+      updated_at: "2024-01-01 00:00:00",
+      last_synced_at: null,
+      last_accessed_at: null,
+    } satisfies UserMapping,
+  } as { status: string; mapping?: UserMapping; error?: string },
+}));
+
+const mocks = vi.hoisted(() => ({
+  completeOAuth: vi.fn(async (_id: string) => ({
+    id: 12345,
+    uuid: "abc-uuid",
+    username: "testuser",
+    email: "test@example.com",
+    thumb: "https://plex.tv/thumb",
+    authenticationToken: "plex-token",
+  })),
+  getAccount: vi.fn(async (_token: string) => ({
+    id: 99999,
+    uuid: "admin-uuid",
+    username: "admin",
+    email: "admin@example.com",
+    thumb: "",
+    authenticationToken: "admin-token",
+  })),
+  getCachedFriends: vi.fn(() => state.cachedFriends),
+  fetchFriends: vi.fn(async () => [...state.friends]),
+  provisionUser: vi.fn(async () => state.provisionResult),
+  getConfig: vi.fn(async (key: string) => state.configValues[key] ?? null),
+  getUserMappingByPlexId: vi.fn((_plexAccountId: number) => state.existingMappingByPlexId),
+  createSession: vi.fn((_ref: string, _type: string, _ttl: number) => "session-id"),
+  updateLastAccessed: vi.fn((_id: number) => {}),
+  DispatcharrClient: vi.fn(),
+}));
+
+vi.mock("$lib/plex/oauth", () => ({
+  completeOAuth: mocks.completeOAuth,
+}));
+
+vi.mock("$lib/plex/types", async () => {
+  class PlexAuthError extends Error {
+    override readonly name = "PlexAuthError" as const;
+  }
+  return { PlexAuthError };
+});
+
+vi.mock("$lib/plex/client", () => ({
+  getAccount: mocks.getAccount,
+}));
+
+vi.mock("$lib/plex/friends", () => ({
+  getCachedFriends: mocks.getCachedFriends,
+  fetchFriends: mocks.fetchFriends,
+}));
+
+vi.mock("$lib/bridge/provisioner", () => ({
+  provisionUser: mocks.provisionUser,
+}));
+
+vi.mock("$lib/db/repositories/config", () => ({
+  getConfig: mocks.getConfig,
+}));
+
+vi.mock("$lib/db/repositories/sessions", () => ({
+  createSession: mocks.createSession,
+}));
+
+vi.mock("$lib/db/repositories/users", () => ({
+  getUserMappingByPlexId: mocks.getUserMappingByPlexId,
+  updateLastAccessed: mocks.updateLastAccessed,
+}));
+
+vi.mock("$lib/dispatcharr/client", () => ({
+  DispatcharrClient: mocks.DispatcharrClient,
+}));
+
+vi.mock("$lib/server/auth", () => ({
+  SESSION_COOKIE_NAME: "otpravkarr_session",
+  USER_COOKIE_OPTIONS: {
+    path: "/",
+    httpOnly: true,
+    secure: false,
+    sameSite: "lax",
+    maxAge: 14400,
+  },
+  USER_SESSION_TTL: 14400,
+  isSecure: false,
+}));
+
+function createCookies() {
+  const set = vi.fn();
+  const deleteFn = vi.fn();
+  const get = vi.fn((name: string) => {
+    if (name === "otpravkarr_oauth_id") return state.oauthCookie;
+    return undefined;
+  });
+  return {
+    cookies: { get, set, delete: deleteFn },
+    set,
+    deleteFn,
+  };
+}
+
+function resetAll() {
+  state.oauthCookie = "oauth-pin-id";
+  state.configValues = {
+    plex_admin_token: "admin-plex-token",
+    dispatcharr_url: "http://dispatcharr.local",
+    dispatcharr_api_key: "api-key-123",
+    default_group_id: "1",
+    default_profile_id: "2",
+    default_provisioning_mode: "automatic",
+  };
+  state.existingMappingByPlexId = null;
+  state.cachedFriends = null;
+  state.friends = [{ id: 12345, email: "test@example.com", status: "accepted" }];
+  state.provisionResult = {
+    status: "provisioned",
+    mapping: {
+      id: 1,
+      plex_account_id: 12345,
+      plex_uuid: "abc-uuid",
+      plex_username: "testuser",
+      plex_email: "test@example.com",
+      plex_thumb: null,
+      dispatcharr_user_id: 10,
+      dispatcharr_username: "testuser",
+      dispatcharr_xc_password_enc: "enc-pw",
+      dispatcharr_group_ids: "[1]",
+      dispatcharr_profile_id: 2,
+      provisioning_mode: "automatic",
+      is_active: 1,
+      created_at: "2024-01-01 00:00:00",
+      updated_at: "2024-01-01 00:00:00",
+      last_synced_at: null,
+      last_accessed_at: null,
+    },
+  };
+
+  for (const fn of Object.values(mocks)) {
+    if (typeof fn === "function" && "mockClear" in fn) {
+      (fn as ReturnType<typeof vi.fn>).mockClear();
+    }
+  }
+}
+
+describe("plex OAuth callback", () => {
+  beforeEach(() => {
+    resetAll();
+  });
+
+  it("throws 400 when OAuth cookie is missing", async () => {
+    state.oauthCookie = undefined;
+    const { load } = await import("./+page.server");
+    const { cookies } = createCookies();
+
+    await expect(load({ cookies } as unknown as Parameters<typeof load>[0])).rejects.toMatchObject({
+      status: 400,
+    });
+  });
+
+  it("deletes OAuth cookie on load", async () => {
+    const { load } = await import("./+page.server");
+    const { cookies, deleteFn } = createCookies();
+
+    try {
+      await load({ cookies } as unknown as Parameters<typeof load>[0]);
+    } catch {
+      // redirect expected
+    }
+
+    expect(deleteFn).toHaveBeenCalledWith(
+      "otpravkarr_oauth_id",
+      expect.objectContaining({ path: "/" }),
+    );
+  });
+
+  it("throws 400 when completeOAuth fails with PlexAuthError", async () => {
+    const { PlexAuthError } = await import("$lib/plex/types");
+    mocks.completeOAuth.mockRejectedValueOnce(new PlexAuthError("OAuth expired"));
+
+    const { load } = await import("./+page.server");
+    const { cookies } = createCookies();
+
+    await expect(load({ cookies } as unknown as Parameters<typeof load>[0])).rejects.toMatchObject({
+      status: 400,
+    });
+  });
+
+  it("re-throws unknown errors from completeOAuth", async () => {
+    mocks.completeOAuth.mockRejectedValueOnce(new Error("network failure"));
+
+    const { load } = await import("./+page.server");
+    const { cookies } = createCookies();
+
+    await expect(load({ cookies } as unknown as Parameters<typeof load>[0])).rejects.toThrow(
+      "network failure",
+    );
+  });
+
+  it("throws 500 when plex_admin_token is missing", async () => {
+    state.configValues.plex_admin_token = null;
+
+    const { load } = await import("./+page.server");
+    const { cookies } = createCookies();
+
+    await expect(load({ cookies } as unknown as Parameters<typeof load>[0])).rejects.toMatchObject({
+      status: 500,
+    });
+  });
+
+  it("throws 403 when user is not in accepted friends list", async () => {
+    state.friends = [{ id: 777, email: "other@example.com", status: "accepted" }];
+
+    const { load } = await import("./+page.server");
+    const { cookies } = createCookies();
+
+    await expect(load({ cookies } as unknown as Parameters<typeof load>[0])).rejects.toMatchObject({
+      status: 403,
+    });
+  });
+
+  it("throws 403 when matching invite is pending", async () => {
+    state.friends = [{ id: 12345, email: "test@example.com", status: "pending" }];
+
+    const { load } = await import("./+page.server");
+    const { cookies } = createCookies();
+
+    await expect(load({ cookies } as unknown as Parameters<typeof load>[0])).rejects.toMatchObject({
+      status: 403,
+    });
+  });
+
+  it("throws 403 when a matching mapping is inactive", async () => {
+    state.existingMappingByPlexId = {
+      id: 2,
+      plex_account_id: 12345,
+      plex_uuid: "inactive-uuid",
+      plex_username: "inactive-user",
+      plex_email: "inactive@example.com",
+      plex_thumb: null,
+      dispatcharr_user_id: 88,
+      dispatcharr_username: "inactiveuser",
+      dispatcharr_xc_password_enc: "enc-pw",
+      dispatcharr_group_ids: "[1]",
+      dispatcharr_profile_id: 2,
+      provisioning_mode: "automatic",
+      is_active: 0,
+      created_at: "2024-01-01 00:00:00",
+      updated_at: "2024-01-01 00:00:00",
+      last_synced_at: null,
+      last_accessed_at: null,
+    };
+
+    const { load } = await import("./+page.server");
+    const { cookies } = createCookies();
+
+    await expect(load({ cookies } as unknown as Parameters<typeof load>[0])).rejects.toMatchObject({
+      status: 403,
+    });
+
+    expect(mocks.getUserMappingByPlexId).toHaveBeenCalledWith(12345);
+    expect(mocks.provisionUser).not.toHaveBeenCalled();
+    expect(mocks.createSession).not.toHaveBeenCalled();
+  });
+
+  it("fetches fresh friends for authorization", async () => {
+    const { load } = await import("./+page.server");
+    const { cookies } = createCookies();
+
+    try {
+      await load({ cookies } as unknown as Parameters<typeof load>[0]);
+    } catch {
+      // redirect expected
+    }
+
+    expect(mocks.getAccount).toHaveBeenCalledWith("admin-plex-token");
+    expect(mocks.fetchFriends).toHaveBeenCalled();
+  });
+
+  it("does not authorize from cached friends when fresh list denies access", async () => {
+    state.cachedFriends = [{ id: 12345, email: "test@example.com", status: "accepted" }];
+    state.friends = [{ id: 12345, email: "test@example.com", status: "pending" }];
+
+    const { load } = await import("./+page.server");
+    const { cookies } = createCookies();
+
+    await expect(load({ cookies } as unknown as Parameters<typeof load>[0])).rejects.toMatchObject({
+      status: 403,
+    });
+
+    expect(mocks.fetchFriends).toHaveBeenCalled();
+    expect(mocks.getCachedFriends).not.toHaveBeenCalled();
+  });
+
+  it("throws 500 when dispatcharr config is missing", async () => {
+    state.configValues.dispatcharr_url = null;
+    state.configValues.dispatcharr_api_key = null;
+
+    const { load } = await import("./+page.server");
+    const { cookies } = createCookies();
+
+    await expect(load({ cookies } as unknown as Parameters<typeof load>[0])).rejects.toMatchObject({
+      status: 500,
+    });
+  });
+
+  it("throws 500 when provisioning fails", async () => {
+    state.provisionResult = { status: "failed", error: "DB error" };
+
+    const { load } = await import("./+page.server");
+    const { cookies } = createCookies();
+
+    await expect(load({ cookies } as unknown as Parameters<typeof load>[0])).rejects.toMatchObject({
+      status: 500,
+    });
+  });
+
+  it("creates session, sets cookie, and redirects on success", async () => {
+    const { load } = await import("./+page.server");
+    const { cookies, set } = createCookies();
+
+    await expect(load({ cookies } as unknown as Parameters<typeof load>[0])).rejects.toMatchObject({
+      status: 303,
+      location: "/",
+    });
+
+    expect(mocks.createSession).toHaveBeenCalledWith("1", "user", 14400);
+    expect(set).toHaveBeenCalledWith(
+      "otpravkarr_session",
+      "session-id",
+      expect.objectContaining({
+        path: "/",
+        httpOnly: true,
+      }),
+    );
+    expect(mocks.updateLastAccessed).toHaveBeenCalledWith(1);
+  });
+
+  it("handles already_exists provisioning result", async () => {
+    const mapping = state.provisionResult.mapping as UserMapping;
+    state.provisionResult = {
+      status: "already_exists",
+      mapping,
+    };
+
+    const { load } = await import("./+page.server");
+    const { cookies } = createCookies();
+
+    await expect(load({ cookies } as unknown as Parameters<typeof load>[0])).rejects.toMatchObject({
+      status: 303,
+      location: "/",
+    });
+
+    expect(mocks.createSession).toHaveBeenCalled();
+  });
+
+  it("passes correct provisioning parameters", async () => {
+    const { load } = await import("./+page.server");
+    const { cookies } = createCookies();
+
+    try {
+      await load({ cookies } as unknown as Parameters<typeof load>[0]);
+    } catch {
+      // redirect expected
+    }
+
+    expect(mocks.provisionUser).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        plexIdentity: expect.objectContaining({
+          id: 12345,
+          username: "testuser",
+        }),
+        mode: "automatic",
+        groupIds: [1],
+        profileId: 2,
+      }),
+    );
+  });
+
+  it("defaults to automatic mode when config says self_managed", async () => {
+    state.configValues.default_provisioning_mode = "self_managed";
+
+    const { load } = await import("./+page.server");
+    const { cookies } = createCookies();
+
+    try {
+      await load({ cookies } as unknown as Parameters<typeof load>[0]);
+    } catch {
+      // redirect expected
+    }
+
+    expect(mocks.provisionUser).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        mode: "self_managed",
+      }),
+    );
+  });
+});

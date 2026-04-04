@@ -6,6 +6,7 @@ import { SESSION_COOKIE_NAME } from "$lib/server/auth";
 import type { RequestHandler } from "./$types";
 
 export const POST: RequestHandler = async ({ cookies, locals, getClientAddress }) => {
+  const sessionType = locals.session?.type;
   const sessionId = cookies.get(SESSION_COOKIE_NAME);
 
   if (sessionId) {
@@ -22,5 +23,5 @@ export const POST: RequestHandler = async ({ cookies, locals, getClientAddress }
     });
   }
 
-  throw redirect(303, "/login");
+  throw redirect(303, sessionType === "user" ? "/" : "/login");
 };

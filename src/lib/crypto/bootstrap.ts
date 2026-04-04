@@ -68,7 +68,7 @@ export function validateBootstrapToken(candidate: string): boolean {
   }
 
   // Expected format: xxxx-xxxx-xxxx (14 chars). Reject wrong-length input early
-  // to prevent the timingSafeEqual wrapping comparison from leaking info on short inputs.
+  // to bound work for untrusted input before the constant-time comparison.
   const expectedLen = SEGMENT_COUNT * SEGMENT_LENGTH + (SEGMENT_COUNT - 1); // 14
   if (candidate.length !== expectedLen) return false;
 

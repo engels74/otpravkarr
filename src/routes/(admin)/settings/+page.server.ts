@@ -12,6 +12,8 @@ import { requireAdmin } from "$lib/server/auth";
 import { parseAndNormalizeOrigins } from "$lib/server/origins";
 import type { Actions, PageServerLoad } from "./$types";
 
+const MAX_SYNC_INTERVAL_MINUTES = 1440;
+
 export const load: PageServerLoad = async (event) => {
   await requireAdmin(event);
   const [
@@ -188,8 +190,10 @@ export const actions: Actions = {
     const raw = String(fd.get("sync_interval_minutes") ?? "").trim();
     const interval = Number.parseInt(raw, 10);
 
-    if (!Number.isFinite(interval) || interval < 1) {
-      return fail(400, { error: "Sync interval must be a positive integer" });
+    if (!Number.isFinite(interval) || interval < 1 || interval > MAX_SYNC_INTERVAL_MINUTES) {
+      return fail(400, {
+        error: `Sync interval must be a number between 1 and ${MAX_SYNC_INTERVAL_MINUTES}`,
+      });
     }
 
     const actor = locals.admin?.username ?? "unknown";

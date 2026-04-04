@@ -198,6 +198,32 @@ describe("admin settings actions", () => {
     expect(state.configValues.get("allowed_origins")).toBe(JSON.stringify([]));
   });
 
+  it("rejects oversized sync intervals in updateSyncSettings before persisting", async () => {
+    const { actions } = await import("./+page.server");
+    const updateSyncSettings = actions.updateSyncSettings;
+    if (!updateSyncSettings) throw new Error("updateSyncSettings action is undefined");
+
+    state.configValues.set("sync_interval_minutes", "15");
+
+    const body = new FormData();
+    body.set("sync_interval_minutes", "1441");
+
+    const result = await updateSyncSettings(
+      createActionEvent(body) as unknown as Parameters<typeof updateSyncSettings>[0],
+    );
+
+    expect(result).toMatchObject({
+      status: 400,
+      data: { error: "Sync interval must be a number between 1 and 1440" },
+    });
+    expect(state.configValues.get("sync_interval_minutes")).toBe("15");
+    expect(mocks.setConfig).not.toHaveBeenCalled();
+    expect(mocks.createSyncJob).not.toHaveBeenCalled();
+    expect(mocks.schedulerRegister).not.toHaveBeenCalled();
+    expect(mocks.invalidateConfigCache).not.toHaveBeenCalled();
+    expect(mocks.appendAuditLog).not.toHaveBeenCalled();
+  });
+
   it("re-registers sync job immediately in updateSyncSettings", async () => {
     const { actions } = await import("./+page.server");
     const updateSyncSettings = actions.updateSyncSettings;

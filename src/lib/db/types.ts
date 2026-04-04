@@ -68,6 +68,7 @@ export const AuditAction = {
   SYNC_COMPLETED: "sync.completed",
   SYNC_FAILED: "sync.failed",
   CONFIG_CHANGED: "config.changed",
+  ADMIN_LOGOUT: "admin.logout",
   HEALTH_CHECK_FAILED: "health.check_failed",
 } as const;
 

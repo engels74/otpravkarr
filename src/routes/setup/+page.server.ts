@@ -124,11 +124,13 @@ export const load: PageServerLoad = async ({ url, cookies }) => {
 
   const tokenFromUrl = url.searchParams.get("token");
   const claimActive = await hasActiveSetupClaim(cookies);
+  const adminCreated = adminExists();
 
   return {
     tokenProvided: tokenFromUrl !== null,
     tokenFromUrl,
     claimActive,
+    adminCreated,
   };
 };
 

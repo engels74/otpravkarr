@@ -214,9 +214,30 @@ describe("setup claim ownership", () => {
 
     expect(result).toMatchObject({
       claimActive: true,
+      adminCreated: false,
       tokenProvided: false,
     });
     expect(mocks.requireSetupIncomplete).toHaveBeenCalledOnce();
+  });
+
+  it("marks adminCreated on load when an admin already exists", async () => {
+    mocks.adminExists.mockReturnValue(true);
+    state.configValues.set(setupClaimedKey, "true");
+    state.configValues.set(setupClaimProofKey, "proof-123");
+    state.configValues.set(setupClaimedAtKey, String(Date.now()));
+    const { cookies } = createCookies({ [setupClaimCookie]: "proof-123" });
+
+    const { load } = await import("./+page.server");
+    const result = await load({
+      url: new URL("http://localhost/setup"),
+      cookies,
+    } as unknown as Parameters<typeof load>[0]);
+
+    expect(result).toMatchObject({
+      claimActive: true,
+      adminCreated: true,
+      tokenProvided: false,
+    });
   });
 
   it("blocks setup actions when instance is claimed by a different requester", async () => {

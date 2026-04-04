@@ -13,6 +13,7 @@ import { cn } from "$lib/utils";
 
 type SetupPageData = {
   claimActive: boolean;
+  adminCreated: boolean;
   tokenProvided: boolean;
   tokenFromUrl: string | null;
 };
@@ -21,7 +22,12 @@ type StepErrors = Record<string, string>;
 const ERROR_CODE_PATTERN = /^[a-z0-9_]+$/;
 
 let { data }: { data: SetupPageData } = $props();
-const initialStep = untrack(() => (data.claimActive ? 1 : 0));
+const initialStep = untrack(() => {
+  if (!data.claimActive) {
+    return 0;
+  }
+  return data.adminCreated ? 2 : 1;
+});
 
 // ── Wizard state ────────────────────────────────────────────────
 let step = $state(initialStep);
@@ -149,9 +155,9 @@ function enhanceHandler(nextStep?: number) {
       if (result.type === "success" && result.data) {
         const d = result.data as Record<string, any>;
 
-        // Step 0 → 1: Claim success
+        // Step 0: Claim success
         if (step === 0 && d.success) {
-          step = 1;
+          step = data.adminCreated ? 2 : 1;
           return;
         }
 

@@ -1,4 +1,11 @@
 <script lang="ts">
+import { enhance } from "$app/forms";
+import * as Alert from "$lib/components/ui/alert";
+import { Button } from "$lib/components/ui/button";
+import * as Card from "$lib/components/ui/card";
+import { Input } from "$lib/components/ui/input";
+import { Label } from "$lib/components/ui/label";
+
 interface Props {
   form?: {
     error?: string;
@@ -12,42 +19,85 @@ const ERROR_MESSAGES: Record<string, string> = {
 };
 
 let { form }: Props = $props();
+let submitting = $state(false);
+
 let errorMessage = $derived(
   form?.error ? (ERROR_MESSAGES[form.error] ?? "Unable to sign in.") : null,
 );
+
+function enhanceHandler() {
+  submitting = true;
+  return async ({ update }: { update: () => Promise<void> }) => {
+    submitting = false;
+    await update();
+  };
+}
 </script>
 
-<section class="mx-auto max-w-md space-y-4 p-6">
-  <h1 class="text-2xl font-semibold">Admin Login</h1>
-  <p class="text-sm opacity-80">Sign in to return to the dashboard.</p>
+<svelte:head>
+  <title>Login — otpravkarr</title>
+</svelte:head>
 
-  {#if errorMessage}
-    <p class="rounded border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-700">{errorMessage}</p>
-  {/if}
+<main class="min-h-screen flex flex-col items-center justify-center px-4 py-12 bg-background text-foreground">
+  <div class="mb-8 text-center">
+    <h1 class="text-2xl font-semibold tracking-tight">otpravkarr</h1>
+    <p class="mt-1 text-sm text-muted-foreground">Admin login</p>
+  </div>
 
-  <form method="POST" class="space-y-3 rounded border p-4">
-    <label class="block space-y-1">
-      <span class="text-sm font-medium">Username</span>
-      <input
-        class="w-full rounded border px-3 py-2"
-        name="username"
-        type="text"
-        autocomplete="username"
-        required
-      />
-    </label>
+  <div class="w-full max-w-sm">
+    <Card.Root>
+      <Card.Header>
+        <Card.Title class="text-lg">Sign in</Card.Title>
+        <Card.Description>
+          Enter your credentials to access the dashboard.
+        </Card.Description>
+      </Card.Header>
+      <Card.Content>
+        {#if errorMessage}
+          <Alert.Root variant="destructive" class="mb-4">
+            <Alert.Title>Authentication failed</Alert.Title>
+            <Alert.Description>{errorMessage}</Alert.Description>
+          </Alert.Root>
+        {/if}
 
-    <label class="block space-y-1">
-      <span class="text-sm font-medium">Password</span>
-      <input
-        class="w-full rounded border px-3 py-2"
-        name="password"
-        type="password"
-        autocomplete="current-password"
-        required
-      />
-    </label>
+        <form method="POST" use:enhance={enhanceHandler}>
+          <div class="grid gap-4">
+            <div class="grid gap-2">
+              <Label for="login-username">Username</Label>
+              <Input
+                id="login-username"
+                name="username"
+                type="text"
+                autocomplete="username"
+                required
+              />
+            </div>
 
-    <button class="rounded border px-4 py-2 text-sm font-medium" type="submit">Sign In</button>
-  </form>
-</section>
+            <div class="grid gap-2">
+              <Label for="login-password">Password</Label>
+              <Input
+                id="login-password"
+                name="password"
+                type="password"
+                autocomplete="current-password"
+                required
+              />
+            </div>
+
+            <Button type="submit" disabled={submitting} class="w-full">
+              {#if submitting}
+                <svg class="mr-2 h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" class="opacity-25" />
+                  <path d="M4 12a8 8 0 018-8" stroke="currentColor" stroke-width="3" stroke-linecap="round" class="opacity-75" />
+                </svg>
+                Signing in…
+              {:else}
+                Sign In
+              {/if}
+            </Button>
+          </div>
+        </form>
+      </Card.Content>
+    </Card.Root>
+  </div>
+</main>

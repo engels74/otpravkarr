@@ -1,0 +1,225 @@
+<script lang="ts">
+import { enhance } from "$app/forms";
+import { Badge } from "$lib/components/ui/badge";
+import { Button } from "$lib/components/ui/button";
+import * as Card from "$lib/components/ui/card";
+import { Input } from "$lib/components/ui/input";
+import { Label } from "$lib/components/ui/label";
+
+interface Props {
+  data: {
+    plex: {
+      serverUrl: string;
+      hasToken: boolean;
+      machineId: string;
+    };
+    dispatcharr: {
+      url: string;
+      hasApiKey: boolean;
+    };
+    sync: {
+      intervalMinutes: string;
+    };
+    security: {
+      allowedOrigins: string;
+    };
+    audit: {
+      retentionDays: string;
+    };
+  };
+}
+
+let { data }: Props = $props();
+
+let sectionSubmitting = $state<Record<string, boolean>>({});
+
+function makeEnhance(section: string) {
+  return () => {
+    sectionSubmitting[section] = true;
+    return async ({ update }: { update: () => Promise<void> }) => {
+      await update();
+      sectionSubmitting[section] = false;
+    };
+  };
+}
+</script>
+
+<svelte:head>
+  <title>Settings — otpravkarr</title>
+</svelte:head>
+
+<div class="space-y-6">
+  <h1 class="text-lg font-semibold">Settings</h1>
+
+  <!-- Plex Connection -->
+  <Card.Root>
+    <Card.Header>
+      <Card.Title class="text-base">Plex Connection</Card.Title>
+      <Card.Description>Configure the connection to your Plex Media Server.</Card.Description>
+    </Card.Header>
+    <form method="POST" action="?/updatePlexConnection" use:enhance={makeEnhance("plex")}>
+      <Card.Content class="grid gap-4">
+        <div class="grid gap-1.5">
+          <Label for="plex_server_url">Server URL</Label>
+          <Input id="plex_server_url" name="plex_server_url" value={data.plex.serverUrl} placeholder="http://localhost:32400" />
+        </div>
+
+        <div class="grid gap-1.5">
+          <Label>Token Status</Label>
+          <div>
+            {#if data.plex.hasToken}
+              <Badge variant="default">Token configured</Badge>
+            {:else}
+              <Badge variant="destructive">Not configured</Badge>
+            {/if}
+          </div>
+        </div>
+
+        <div class="grid gap-1.5">
+          <Label for="plex_admin_token">New token (leave blank to keep current)</Label>
+          <Input id="plex_admin_token" name="plex_admin_token" type="password" placeholder="Enter new Plex token..." />
+        </div>
+
+        {#if data.plex.machineId}
+          <div class="grid gap-1.5">
+            <Label>Machine ID</Label>
+            <p class="font-mono text-sm text-muted-foreground">{data.plex.machineId}</p>
+          </div>
+        {/if}
+      </Card.Content>
+      <Card.Footer>
+        <Button type="submit" disabled={sectionSubmitting["plex"]}>
+          {sectionSubmitting["plex"] ? "Saving..." : "Save"}
+        </Button>
+      </Card.Footer>
+    </form>
+  </Card.Root>
+
+  <!-- Dispatcharr Connection -->
+  <Card.Root>
+    <Card.Header>
+      <Card.Title class="text-base">Dispatcharr Connection</Card.Title>
+      <Card.Description>Configure the connection to your Dispatcharr instance.</Card.Description>
+    </Card.Header>
+    <form method="POST" action="?/updateDispatcharrConnection" use:enhance={makeEnhance("dispatcharr")}>
+      <Card.Content class="grid gap-4">
+        <div class="grid gap-1.5">
+          <Label for="dispatcharr_url">URL</Label>
+          <Input id="dispatcharr_url" name="dispatcharr_url" value={data.dispatcharr.url} placeholder="http://localhost:8000" />
+        </div>
+
+        <div class="grid gap-1.5">
+          <Label>API Key Status</Label>
+          <div>
+            {#if data.dispatcharr.hasApiKey}
+              <Badge variant="default">Key configured</Badge>
+            {:else}
+              <Badge variant="destructive">Not configured</Badge>
+            {/if}
+          </div>
+        </div>
+
+        <div class="grid gap-1.5">
+          <Label for="dispatcharr_api_key">New API key (leave blank to keep current)</Label>
+          <Input id="dispatcharr_api_key" name="dispatcharr_api_key" type="password" placeholder="Enter new API key..." />
+        </div>
+      </Card.Content>
+      <Card.Footer>
+        <Button type="submit" disabled={sectionSubmitting["dispatcharr"]}>
+          {sectionSubmitting["dispatcharr"] ? "Saving..." : "Save"}
+        </Button>
+      </Card.Footer>
+    </form>
+  </Card.Root>
+
+  <!-- Sync Settings -->
+  <Card.Root>
+    <Card.Header>
+      <Card.Title class="text-base">Sync Settings</Card.Title>
+      <Card.Description>Control how frequently Plex friends are synced.</Card.Description>
+    </Card.Header>
+    <form method="POST" action="?/updateSyncSettings" use:enhance={makeEnhance("sync")}>
+      <Card.Content class="grid gap-4">
+        <div class="grid gap-1.5">
+          <Label for="sync_interval_minutes">Sync interval</Label>
+          <div class="flex items-center gap-2">
+            <Input id="sync_interval_minutes" name="sync_interval_minutes" type="number" min="1" value={data.sync.intervalMinutes} class="w-[120px]" />
+            <span class="text-sm text-muted-foreground">minutes</span>
+          </div>
+        </div>
+      </Card.Content>
+      <Card.Footer>
+        <Button type="submit" disabled={sectionSubmitting["sync"]}>
+          {sectionSubmitting["sync"] ? "Saving..." : "Save"}
+        </Button>
+      </Card.Footer>
+    </form>
+  </Card.Root>
+
+  <!-- Default Provisioning -->
+  <Card.Root>
+    <Card.Header>
+      <Card.Title class="text-base">Default Provisioning</Card.Title>
+      <Card.Description>Managed during setup only.</Card.Description>
+    </Card.Header>
+    <Card.Content>
+      <p class="text-sm text-muted-foreground">
+        Provisioning default overrides are disabled in Admin because runtime provisioning does not
+        currently consume these values.
+      </p>
+    </Card.Content>
+  </Card.Root>
+
+  <!-- Security -->
+  <Card.Root>
+    <Card.Header>
+      <Card.Title class="text-base">Security</Card.Title>
+      <Card.Description>Configure CORS and origin validation.</Card.Description>
+    </Card.Header>
+    <form method="POST" action="?/updateSecurity" use:enhance={makeEnhance("security")}>
+      <Card.Content class="grid gap-4">
+        <div class="grid gap-1.5">
+          <Label for="allowed_origins">Allowed origins</Label>
+          <textarea
+            id="allowed_origins"
+            name="allowed_origins"
+            rows="4"
+            class="w-full rounded-lg border border-input bg-transparent px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-3 outline-none"
+            placeholder="https://example.com"
+          >{data.security.allowedOrigins}</textarea>
+          <p class="text-xs text-muted-foreground">One origin per line (e.g. https://example.com). If empty, falls back to the ORIGIN environment variable.</p>
+        </div>
+      </Card.Content>
+      <Card.Footer>
+        <Button type="submit" disabled={sectionSubmitting["security"]}>
+          {sectionSubmitting["security"] ? "Saving..." : "Save"}
+        </Button>
+      </Card.Footer>
+    </form>
+  </Card.Root>
+
+  <!-- Audit Log -->
+  <Card.Root>
+    <Card.Header>
+      <Card.Title class="text-base">Audit Log</Card.Title>
+      <Card.Description>Configure audit log retention.</Card.Description>
+    </Card.Header>
+    <form method="POST" action="?/updateAuditRetention" use:enhance={makeEnhance("audit")}>
+      <Card.Content class="grid gap-4">
+        <div class="grid gap-1.5">
+          <Label for="audit_retention_days">Retention period</Label>
+          <div class="flex items-center gap-2">
+            <Input id="audit_retention_days" name="audit_retention_days" type="number" min="1" value={data.audit.retentionDays} class="w-[120px]" />
+            <span class="text-sm text-muted-foreground">days</span>
+          </div>
+          <p class="text-xs text-muted-foreground">Audit log entries older than this will be automatically purged.</p>
+        </div>
+      </Card.Content>
+      <Card.Footer>
+        <Button type="submit" disabled={sectionSubmitting["audit"]}>
+          {sectionSubmitting["audit"] ? "Saving..." : "Save"}
+        </Button>
+      </Card.Footer>
+    </form>
+  </Card.Root>
+</div>

@@ -34,6 +34,7 @@ interface Props {
 let { data }: Props = $props();
 
 let expandedRows = $state(new Set<number>());
+const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 function toggleRow(id: number) {
   if (expandedRows.has(id)) {
@@ -44,6 +45,47 @@ function toggleRow(id: number) {
   expandedRows = new Set(expandedRows);
 }
 
+function localDateStartToIso(dateOnly: string): string | null {
+  if (!DATE_ONLY_RE.test(dateOnly)) return null;
+  const date = new Date(`${dateOnly}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString();
+}
+
+function localDateEndToIso(dateOnly: string): string | null {
+  if (!DATE_ONLY_RE.test(dateOnly)) return null;
+  const date = new Date(`${dateOnly}T23:59:59.999`);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString();
+}
+
+function syncDateFilterBounds(url: URL): void {
+  const after = url.searchParams.get("after");
+  const before = url.searchParams.get("before");
+
+  if (after) {
+    const afterUtc = localDateStartToIso(after);
+    if (afterUtc) {
+      url.searchParams.set("afterUtc", afterUtc);
+    } else {
+      url.searchParams.delete("afterUtc");
+    }
+  } else {
+    url.searchParams.delete("afterUtc");
+  }
+
+  if (before) {
+    const beforeUtc = localDateEndToIso(before);
+    if (beforeUtc) {
+      url.searchParams.set("beforeUtc", beforeUtc);
+    } else {
+      url.searchParams.delete("beforeUtc");
+    }
+  } else {
+    url.searchParams.delete("beforeUtc");
+  }
+}
+
 function updateFilter(key: string, value: string | null) {
   const url = new URL(page.url);
   if (value) {
@@ -51,6 +93,7 @@ function updateFilter(key: string, value: string | null) {
   } else {
     url.searchParams.delete(key);
   }
+  syncDateFilterBounds(url);
   if (key !== "page") {
     url.searchParams.delete("page");
   }

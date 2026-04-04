@@ -10,6 +10,8 @@ export const load: PageServerLoad = async (event) => {
   const actor = url.searchParams.get("actor") || null;
   const after = url.searchParams.get("after") || null;
   const before = url.searchParams.get("before") || null;
+  const afterUtc = url.searchParams.get("afterUtc") || null;
+  const beforeUtc = url.searchParams.get("beforeUtc") || null;
   const page = Math.max(1, Number(url.searchParams.get("page")) || 1);
   const limit = Math.max(1, Math.min(100, Number(url.searchParams.get("limit")) || 50));
   const offset = (page - 1) * limit;
@@ -25,10 +27,13 @@ export const load: PageServerLoad = async (event) => {
     limit,
     offset,
   };
+  const effectiveAfter = afterUtc ?? after;
+  const effectiveBefore = beforeUtc ?? before;
+
   if (action) filters.action = action;
   if (actor) filters.actor = actor;
-  if (after) filters.after = after;
-  if (before) filters.before = before;
+  if (effectiveAfter) filters.after = effectiveAfter;
+  if (effectiveBefore) filters.before = effectiveBefore;
 
   const { entries, total } = queryAuditLog(filters);
   const totalPages = Math.max(1, Math.ceil(total / limit));

@@ -743,15 +743,6 @@ function enhanceHandler(nextStep?: number) {
             </Alert.Root>
           {/if}
 
-          {#if stepErrors.notInitialized}
-            <Alert.Root class="mb-4">
-              <Alert.Title>Dispatcharr not ready</Alert.Title>
-              <Alert.Description>
-                You need to create a superuser in Dispatcharr first. Visit your Dispatcharr instance and complete initial setup, then return here.
-              </Alert.Description>
-            </Alert.Root>
-          {/if}
-
           <form method="POST" action="?/configureDispatcharr" use:enhance={enhanceHandler()}>
             <div class="grid gap-4">
               <div class="grid gap-2">

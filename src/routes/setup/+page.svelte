@@ -13,9 +13,11 @@ import { cn } from "$lib/utils";
 
 type SetupPageData = {
   claimActive: boolean;
-  adminCreated: boolean;
+  resumePhase: 1 | 2 | 3 | 4 | 5;
   tokenProvided: boolean;
   tokenFromUrl: string | null;
+  dispatcharrGroups: Array<{ id: number; name: string }>;
+  dispatcharrProfiles: Array<{ id: number; name: string }>;
 };
 
 type StepErrors = Record<string, string>;
@@ -26,8 +28,10 @@ const initialStep = untrack(() => {
   if (!data.claimActive) {
     return 0;
   }
-  return data.adminCreated ? 2 : 1;
+  return data.resumePhase;
 });
+const initialDispatcharrGroups = untrack(() => data.dispatcharrGroups);
+const initialDispatcharrProfiles = untrack(() => data.dispatcharrProfiles);
 
 // ── Wizard state ────────────────────────────────────────────────
 let step = $state(initialStep);
@@ -41,8 +45,8 @@ let plexServerInfo = $state<{
   machineIdentifier: string;
   version: string;
 } | null>(null);
-let dispatcharrGroups = $state<Array<{ id: number; name: string }>>([]);
-let dispatcharrProfiles = $state<Array<{ id: number; name: string }>>([]);
+let dispatcharrGroups = $state<Array<{ id: number; name: string }>>(initialDispatcharrGroups);
+let dispatcharrProfiles = $state<Array<{ id: number; name: string }>>(initialDispatcharrProfiles);
 let xcProbeResult = $state<{ found: boolean; template?: string } | null>(null);
 let currentOrigin = $state("");
 
@@ -157,7 +161,7 @@ function enhanceHandler(nextStep?: number) {
 
         // Step 0: Claim success
         if (step === 0 && d.success) {
-          step = data.adminCreated ? 2 : 1;
+          step = data.resumePhase;
           return;
         }
 

@@ -47,12 +47,22 @@ const SETUP_PREREQUISITE_KEYS = [
   "dispatcharr_api_key",
   "allowed_origins",
 ] as const;
+const PLEX_SETUP_KEYS = ["plex_server_url", "plex_admin_token", "plex_machine_id"] as const;
+const DISPATCHARR_SETUP_KEYS = ["dispatcharr_url", "dispatcharr_api_key"] as const;
+const ORIGIN_SETUP_KEY = "allowed_origins";
 const SETUP_CLAIM_COOKIE_OPTIONS = {
   path: "/setup",
   httpOnly: true,
   secure: true,
   sameSite: "strict" as const,
   maxAge: SETUP_CLAIM_TTL_SECONDS,
+};
+type SetupResumePhase = 1 | 2 | 3 | 4 | 5;
+type SetupSelectionOption = { id: number; name: string };
+
+type SetupResumePayload = {
+  dispatcharrGroups: SetupSelectionOption[];
+  dispatcharrProfiles: SetupSelectionOption[];
 };
 
 async function isSetupClaimed(): Promise<boolean> {
@@ -119,18 +129,82 @@ async function getMissingSetupPrerequisites(): Promise<string[]> {
   });
 }
 
+async function hasNonEmptyConfigValues(keys: readonly string[]): Promise<boolean> {
+  const values = await Promise.all(keys.map((key) => getConfig(key)));
+  return values.every((value) => value !== null && value.trim().length > 0);
+}
+
+async function deriveSetupResumePhase(): Promise<SetupResumePhase> {
+  if (!adminExists()) {
+    return 1;
+  }
+  if (!(await hasNonEmptyConfigValues(PLEX_SETUP_KEYS))) {
+    return 2;
+  }
+  if (!(await hasNonEmptyConfigValues(DISPATCHARR_SETUP_KEYS))) {
+    return 3;
+  }
+  if (!(await hasNonEmptyConfigValues([ORIGIN_SETUP_KEY]))) {
+    return 4;
+  }
+  return 5;
+}
+
+async function loadDispatcharrSetupPayload(phase: SetupResumePhase): Promise<SetupResumePayload> {
+  if (phase < 4) {
+    return {
+      dispatcharrGroups: [],
+      dispatcharrProfiles: [],
+    };
+  }
+
+  const [dispatcharrUrl, dispatcharrApiKey] = await Promise.all([
+    getConfig("dispatcharr_url"),
+    getConfig("dispatcharr_api_key"),
+  ]);
+  if (!dispatcharrUrl || !dispatcharrApiKey) {
+    return {
+      dispatcharrGroups: [],
+      dispatcharrProfiles: [],
+    };
+  }
+
+  try {
+    const client = new DispatcharrClient(dispatcharrUrl, dispatcharrApiKey);
+    const [groupsResult, profilesResult] = await Promise.all([
+      listGroups(client),
+      listProfiles(client),
+    ]);
+
+    return {
+      dispatcharrGroups: groupsResult.ok ? groupsResult.data : [],
+      dispatcharrProfiles: profilesResult.ok ? profilesResult.data : [],
+    };
+  } catch {
+    return {
+      dispatcharrGroups: [],
+      dispatcharrProfiles: [],
+    };
+  }
+}
+
 export const load: PageServerLoad = async ({ url, cookies }) => {
   await requireSetupIncomplete();
 
   const tokenFromUrl = url.searchParams.get("token");
-  const claimActive = await hasActiveSetupClaim(cookies);
-  const adminCreated = adminExists();
+  const [claimActive, resumePhase] = await Promise.all([
+    hasActiveSetupClaim(cookies),
+    deriveSetupResumePhase(),
+  ]);
+  const { dispatcharrGroups, dispatcharrProfiles } = await loadDispatcharrSetupPayload(resumePhase);
 
   return {
     tokenProvided: tokenFromUrl !== null,
     tokenFromUrl,
     claimActive,
-    adminCreated,
+    resumePhase,
+    dispatcharrGroups,
+    dispatcharrProfiles,
   };
 };
 

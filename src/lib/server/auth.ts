@@ -31,19 +31,19 @@ export const USER_COOKIE_OPTIONS = {
 export async function requireAdmin(event: RequestEvent): Promise<AdminAccount> {
   const sessionId = event.cookies.get(SESSION_COOKIE_NAME);
   if (!sessionId) {
-    throw redirect(303, "/");
+    throw redirect(303, "/login");
   }
 
   const session = getSession(sessionId);
   if (!session || session.session_type !== "admin") {
     event.cookies.delete(SESSION_COOKIE_NAME, { path: "/" });
-    throw redirect(303, "/");
+    throw redirect(303, "/login");
   }
 
   const admin = getAdminByUsername(session.user_ref);
   if (!admin) {
     event.cookies.delete(SESSION_COOKIE_NAME, { path: "/" });
-    throw redirect(303, "/");
+    throw redirect(303, "/login");
   }
 
   return admin;

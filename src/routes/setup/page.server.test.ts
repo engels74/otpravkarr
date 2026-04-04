@@ -214,13 +214,15 @@ describe("setup claim ownership", () => {
 
     expect(result).toMatchObject({
       claimActive: true,
-      adminCreated: false,
+      resumePhase: 1,
+      dispatcharrGroups: [],
+      dispatcharrProfiles: [],
       tokenProvided: false,
     });
     expect(mocks.requireSetupIncomplete).toHaveBeenCalledOnce();
   });
 
-  it("marks adminCreated on load when an admin already exists", async () => {
+  it("resumes at Plex step when an admin already exists", async () => {
     mocks.adminExists.mockReturnValue(true);
     state.configValues.set(setupClaimedKey, "true");
     state.configValues.set(setupClaimProofKey, "proof-123");
@@ -235,7 +237,83 @@ describe("setup claim ownership", () => {
 
     expect(result).toMatchObject({
       claimActive: true,
-      adminCreated: true,
+      resumePhase: 2,
+      dispatcharrGroups: [],
+      dispatcharrProfiles: [],
+      tokenProvided: false,
+    });
+  });
+
+  it("resumes at origin step with persisted Dispatcharr setup on reload", async () => {
+    mocks.adminExists.mockReturnValue(true);
+    state.configValues.set(setupClaimedKey, "true");
+    state.configValues.set(setupClaimProofKey, "proof-123");
+    state.configValues.set(setupClaimedAtKey, String(Date.now()));
+    state.configValues.set("plex_server_url", setupPrerequisiteConfig.plex_server_url);
+    state.configValues.set("plex_admin_token", setupPrerequisiteConfig.plex_admin_token);
+    state.configValues.set("plex_machine_id", setupPrerequisiteConfig.plex_machine_id);
+    state.configValues.set("dispatcharr_url", setupPrerequisiteConfig.dispatcharr_url);
+    state.configValues.set("dispatcharr_api_key", setupPrerequisiteConfig.dispatcharr_api_key);
+    const { cookies } = createCookies({ [setupClaimCookie]: "proof-123" });
+
+    const groups = await import("$lib/dispatcharr/endpoints/groups");
+    const profiles = await import("$lib/dispatcharr/endpoints/profiles");
+    vi.mocked(groups.listGroups).mockResolvedValueOnce({
+      ok: true,
+      data: [{ id: 10, name: "Group 10", permissions: [] }],
+    });
+    vi.mocked(profiles.listProfiles).mockResolvedValueOnce({
+      ok: true,
+      data: [{ id: 20, name: "Profile 20" }],
+    });
+
+    const { load } = await import("./+page.server");
+    const result = await load({
+      url: new URL("http://localhost/setup"),
+      cookies,
+    } as unknown as Parameters<typeof load>[0]);
+
+    expect(result).toMatchObject({
+      claimActive: true,
+      resumePhase: 4,
+      dispatcharrGroups: [{ id: 10, name: "Group 10" }],
+      dispatcharrProfiles: [{ id: 20, name: "Profile 20" }],
+      tokenProvided: false,
+    });
+  });
+
+  it("resumes at defaults step after origin completion on reload", async () => {
+    mocks.adminExists.mockReturnValue(true);
+    state.configValues.set(setupClaimedKey, "true");
+    state.configValues.set(setupClaimProofKey, "proof-123");
+    state.configValues.set(setupClaimedAtKey, String(Date.now()));
+    for (const [key, value] of Object.entries(setupPrerequisiteConfig)) {
+      state.configValues.set(key, value);
+    }
+    const { cookies } = createCookies({ [setupClaimCookie]: "proof-123" });
+
+    const groups = await import("$lib/dispatcharr/endpoints/groups");
+    const profiles = await import("$lib/dispatcharr/endpoints/profiles");
+    vi.mocked(groups.listGroups).mockResolvedValueOnce({
+      ok: true,
+      data: [{ id: 30, name: "Group 30", permissions: [] }],
+    });
+    vi.mocked(profiles.listProfiles).mockResolvedValueOnce({
+      ok: true,
+      data: [{ id: 40, name: "Profile 40" }],
+    });
+
+    const { load } = await import("./+page.server");
+    const result = await load({
+      url: new URL("http://localhost/setup"),
+      cookies,
+    } as unknown as Parameters<typeof load>[0]);
+
+    expect(result).toMatchObject({
+      claimActive: true,
+      resumePhase: 5,
+      dispatcharrGroups: [{ id: 30, name: "Group 30" }],
+      dispatcharrProfiles: [{ id: 40, name: "Profile 40" }],
       tokenProvided: false,
     });
   });

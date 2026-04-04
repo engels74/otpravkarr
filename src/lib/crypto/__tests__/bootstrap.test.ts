@@ -2,10 +2,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   _getActiveTokenForTesting,
   _resetForTesting,
+  clearBootstrapToken,
   consumeBootstrapToken,
   createBootstrapToken,
   generateBootstrapToken,
   isBootstrapTokenExpired,
+  validateBootstrapToken,
 } from "../bootstrap";
 
 afterEach(() => {
@@ -70,6 +72,20 @@ describe("createBootstrapToken", () => {
   });
 });
 
+describe("validateBootstrapToken", () => {
+  it("returns true for the correct token without consuming it", () => {
+    const token = createBootstrapToken();
+    expect(validateBootstrapToken(token)).toBe(true);
+    expect(_getActiveTokenForTesting()?.value).toBe(token);
+  });
+
+  it("returns false for an incorrect token and keeps the active token", () => {
+    createBootstrapToken();
+    expect(validateBootstrapToken("wrong-token-here")).toBe(false);
+    expect(_getActiveTokenForTesting()).not.toBeNull();
+  });
+});
+
 describe("consumeBootstrapToken", () => {
   it("returns true for the correct token", () => {
     const token = createBootstrapToken();
@@ -105,9 +121,7 @@ describe("consumeBootstrapToken", () => {
     expect(_getActiveTokenForTesting()).toBeNull();
   });
 
-  it("does not leak timing information (constant-time comparison)", () => {
-    // This test verifies the comparison runs for both matching and non-matching inputs
-    // by ensuring the function handles different-length inputs correctly
+  it("rejects candidates shorter than expected length", () => {
     createBootstrapToken();
     expect(consumeBootstrapToken("")).toBe(false);
     expect(_getActiveTokenForTesting()).not.toBeNull();
@@ -115,6 +129,12 @@ describe("consumeBootstrapToken", () => {
     expect(consumeBootstrapToken("a")).toBe(false);
     expect(_getActiveTokenForTesting()).not.toBeNull();
 
+    expect(consumeBootstrapToken("abcd-efgh")).toBe(false);
+    expect(_getActiveTokenForTesting()).not.toBeNull();
+  });
+
+  it("rejects candidates longer than expected length", () => {
+    createBootstrapToken();
     expect(consumeBootstrapToken("abcd-efgh-ijkl-mnop-extra")).toBe(false);
     expect(_getActiveTokenForTesting()).not.toBeNull();
   });
@@ -141,5 +161,13 @@ describe("isBootstrapTokenExpired", () => {
     const token = createBootstrapToken();
     consumeBootstrapToken(token);
     expect(isBootstrapTokenExpired()).toBe(true);
+  });
+});
+
+describe("clearBootstrapToken", () => {
+  it("removes the active token", () => {
+    createBootstrapToken();
+    clearBootstrapToken();
+    expect(_getActiveTokenForTesting()).toBeNull();
   });
 });

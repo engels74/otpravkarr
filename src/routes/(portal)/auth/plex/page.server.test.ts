@@ -34,7 +34,7 @@ const state = vi.hoisted(() => ({
       last_synced_at: null,
       last_accessed_at: null,
     } satisfies UserMapping,
-  } as { status: string; mapping?: UserMapping; error?: string },
+  } as { status: string; mapping?: UserMapping; error?: string; initialPassword?: string },
 }));
 
 const mocks = vi.hoisted(() => ({
@@ -366,6 +366,35 @@ describe("plex OAuth callback", () => {
       }),
     );
     expect(mocks.updateLastAccessed).toHaveBeenCalledWith(1);
+  });
+
+  it("stores one-time password in short-lived cookie for newly provisioned self-managed users", async () => {
+    const mapping = state.provisionResult.mapping as UserMapping;
+    state.provisionResult = {
+      status: "provisioned",
+      mapping: { ...mapping, provisioning_mode: "self_managed" },
+      initialPassword: "TempPassword!23",
+    };
+    state.configValues.default_provisioning_mode = "self_managed";
+
+    const { load } = await import("./+page.server");
+    const { cookies, set } = createCookies();
+
+    await expect(load({ cookies } as unknown as Parameters<typeof load>[0])).rejects.toMatchObject({
+      status: 303,
+      location: "/",
+    });
+
+    expect(set).toHaveBeenCalledWith(
+      "otpravkarr_initial_password",
+      "TempPassword!23",
+      expect.objectContaining({
+        path: "/",
+        httpOnly: true,
+        sameSite: "lax",
+        maxAge: 120,
+      }),
+    );
   });
 
   it("handles already_exists provisioning result", async () => {

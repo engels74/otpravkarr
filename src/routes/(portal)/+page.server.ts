@@ -21,6 +21,7 @@ import { buildPlayerApiUrl, buildXcUrl } from "$lib/url/xc";
 import { generateQRCodeDataUri } from "$lib/utils/qrcode";
 
 const OAUTH_COOKIE_NAME = "otpravkarr_oauth_id";
+const INITIAL_PASSWORD_COOKIE_NAME = "otpravkarr_initial_password";
 const OAUTH_COOKIE_OPTIONS = {
   path: "/",
   httpOnly: true,
@@ -36,7 +37,7 @@ interface PlatformEntry {
   result: PlatformUrlResult;
 }
 
-export const load = async ({ locals }: RequestEvent) => {
+export const load = async ({ locals, cookies }: RequestEvent) => {
   if (!locals.user) {
     return { authenticated: false as const };
   }
@@ -52,12 +53,18 @@ export const load = async ({ locals }: RequestEvent) => {
 
   // Self-managed / staff users see Dispatcharr info only
   if (user.provisioning_mode !== "automatic") {
+    const initialPassword = cookies.get(INITIAL_PASSWORD_COOKIE_NAME) ?? null;
+    if (initialPassword) {
+      cookies.delete(INITIAL_PASSWORD_COOKIE_NAME, { path: "/" });
+    }
+
     const dispatcharrUrl = await getConfig("dispatcharr_url");
     return {
       authenticated: true as const,
       mode: user.provisioning_mode as "self_managed" | "staff",
       dispatcharrUsername: user.dispatcharr_username,
       dispatcharrUrl,
+      initialPassword,
     };
   }
 

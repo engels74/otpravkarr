@@ -17,6 +17,14 @@ import {
 import type { PageServerLoad } from "./$types";
 
 const OAUTH_COOKIE_NAME = "otpravkarr_oauth_id";
+const INITIAL_PASSWORD_COOKIE_NAME = "otpravkarr_initial_password";
+const INITIAL_PASSWORD_COOKIE_OPTIONS = {
+  path: "/",
+  httpOnly: true,
+  secure: isSecure,
+  sameSite: "lax" as const,
+  maxAge: 120,
+};
 
 export const load: PageServerLoad = async ({ cookies }) => {
   // 1. Read OAuth ID from cookie, then delete it
@@ -104,6 +112,14 @@ export const load: PageServerLoad = async ({ cookies }) => {
   const mapping = result.mapping;
   const sessionId = createSession(String(mapping.id), "user", USER_SESSION_TTL);
   cookies.set(SESSION_COOKIE_NAME, sessionId, USER_COOKIE_OPTIONS);
+
+  if (result.status === "provisioned" && result.initialPassword) {
+    cookies.set(
+      INITIAL_PASSWORD_COOKIE_NAME,
+      result.initialPassword,
+      INITIAL_PASSWORD_COOKIE_OPTIONS,
+    );
+  }
 
   // Update last accessed timestamp
   updateLastAccessed(mapping.id);

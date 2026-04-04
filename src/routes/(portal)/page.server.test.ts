@@ -8,6 +8,7 @@ const state = vi.hoisted(() => ({
   limiterAllowed: true,
   configValues: {} as Record<string, string | null>,
   user: null as UserMapping | null,
+  initialPasswordCookie: undefined as string | undefined,
 }));
 
 const mocks = vi.hoisted(() => ({
@@ -145,9 +146,15 @@ function createUser(overrides?: Partial<UserMapping>): UserMapping {
 
 function createCookies() {
   const set = vi.fn();
+  const deleteFn = vi.fn();
+  const get = vi.fn((name: string) => {
+    if (name === "otpravkarr_initial_password") return state.initialPasswordCookie;
+    return undefined;
+  });
   return {
-    cookies: { set, get: vi.fn(), delete: vi.fn() },
+    cookies: { set, get, delete: deleteFn },
     set,
+    deleteFn,
   };
 }
 
@@ -158,6 +165,7 @@ function resetAll() {
     dispatcharr_api_key: "api-key-123",
   };
   state.user = null;
+  state.initialPasswordCookie = undefined;
   envState.ORIGIN = "";
 
   for (const fn of Object.values(mocks)) {
@@ -177,9 +185,11 @@ describe("portal page server", () => {
   describe("load", () => {
     it("returns unauthenticated when no user in locals", async () => {
       const { load } = await import("./+page.server");
+      const { cookies } = createCookies();
 
       const result = await load({
         locals: {},
+        cookies,
       } as unknown as Parameters<typeof load>[0]);
 
       expect(result).toEqual({ authenticated: false });
@@ -188,9 +198,11 @@ describe("portal page server", () => {
     it("returns revoked status for inactive user", async () => {
       const { load } = await import("./+page.server");
       const user = createUser({ is_active: 0 });
+      const { cookies } = createCookies();
 
       const result = await load({
         locals: { user },
+        cookies,
       } as unknown as Parameters<typeof load>[0]);
 
       expect(result).toEqual({ authenticated: true, revoked: true });
@@ -201,9 +213,11 @@ describe("portal page server", () => {
       const { load } = await import("./+page.server");
       const user = createUser({ provisioning_mode: "self_managed" });
       state.configValues.dispatcharr_url = "http://dispatcharr.local";
+      const { cookies } = createCookies();
 
       const result = await load({
         locals: { user },
+        cookies,
       } as unknown as Parameters<typeof load>[0]);
 
       expect(result).toMatchObject({
@@ -211,16 +225,39 @@ describe("portal page server", () => {
         mode: "self_managed",
         dispatcharrUsername: "testuser",
         dispatcharrUrl: "http://dispatcharr.local",
+        initialPassword: null,
       });
       expect(mocks.updateLastAccessed).toHaveBeenCalledWith(1);
+    });
+
+    it("returns and clears one-time initial password for self-managed user", async () => {
+      const { load } = await import("./+page.server");
+      const user = createUser({ provisioning_mode: "self_managed" });
+      state.configValues.dispatcharr_url = "http://dispatcharr.local";
+      state.initialPasswordCookie = "TempPassword!23";
+      const { cookies, deleteFn } = createCookies();
+
+      const result = await load({
+        locals: { user },
+        cookies,
+      } as unknown as Parameters<typeof load>[0]);
+
+      expect(result).toMatchObject({
+        authenticated: true,
+        mode: "self_managed",
+        initialPassword: "TempPassword!23",
+      });
+      expect(deleteFn).toHaveBeenCalledWith("otpravkarr_initial_password", { path: "/" });
     });
 
     it("returns error when automatic user has no credentials", async () => {
       const { load } = await import("./+page.server");
       const user = createUser({ dispatcharr_xc_password_enc: null });
+      const { cookies } = createCookies();
 
       const result = await load({
         locals: { user },
+        cookies,
       } as unknown as Parameters<typeof load>[0]);
 
       expect(result).toMatchObject({
@@ -234,9 +271,11 @@ describe("portal page server", () => {
       const { load } = await import("./+page.server");
       const user = createUser();
       state.configValues.dispatcharr_url = "http://dispatcharr.local";
+      const { cookies } = createCookies();
 
       const result = await load({
         locals: { user },
+        cookies,
       } as unknown as Parameters<typeof load>[0]);
 
       expect(result).toMatchObject({
@@ -255,9 +294,11 @@ describe("portal page server", () => {
     it("calls updateLastAccessed for active users", async () => {
       const { load } = await import("./+page.server");
       const user = createUser();
+      const { cookies } = createCookies();
 
       await load({
         locals: { user },
+        cookies,
       } as unknown as Parameters<typeof load>[0]);
 
       expect(mocks.updateLastAccessed).toHaveBeenCalledWith(1);

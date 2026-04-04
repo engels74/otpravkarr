@@ -42,6 +42,7 @@ interface Props {
         mode: "self_managed" | "staff";
         dispatcharrUsername: string | null;
         dispatcharrUrl: string | null;
+        initialPassword: string | null;
       };
   form?: {
     error?: string;
@@ -178,6 +179,25 @@ function enhanceDownload() {
 {:else if "mode" in data && (data.mode === "self_managed" || data.mode === "staff")}
   <!-- Self-managed / staff view -->
   <div class="max-w-lg mx-auto space-y-4">
+    {#if data.initialPassword}
+      <Alert.Root variant="destructive">
+        <ShieldAlertIcon class="h-5 w-5" />
+        <Alert.Title>Temporary Dispatcharr password</Alert.Title>
+        <Alert.Description>
+          This password is shown only once. Sign in to Dispatcharr now and change it immediately.
+        </Alert.Description>
+      </Alert.Root>
+
+      <Card.Root>
+        <Card.Header>
+          <Card.Title class="text-base">One-time Password</Card.Title>
+        </Card.Header>
+        <Card.Content>
+          <CopyableField label="Password" value={data.initialPassword} />
+        </Card.Content>
+      </Card.Root>
+    {/if}
+
     <Alert.Root>
       <AlertCircleIcon class="h-5 w-5" />
       <Alert.Title>Self-managed account</Alert.Title>

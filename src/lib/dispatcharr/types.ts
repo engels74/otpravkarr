@@ -3,8 +3,9 @@ export interface DispatcharrUser {
   username: string;
   email?: string | undefined;
   is_staff: boolean;
-  is_active: boolean;
-  groups: number[];
+  is_superuser: boolean;
+  /** Passthrough fields from the API that we don't actively use */
+  [key: string]: unknown;
 }
 
 export interface DispatcharrGroup {

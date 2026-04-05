@@ -99,6 +99,24 @@ describe("fetchFriends", () => {
     expect(result).toEqual(friendsWithoutUsername);
   });
 
+  it("accepts friends with null optional fields (Plex API returns null)", async () => {
+    const friendsWithNulls = [
+      {
+        id: 3001,
+        uuid: null,
+        username: "nullfriendly",
+        title: null,
+        friendlyName: null,
+        email: "nullfields@test.com",
+        thumb: null,
+        status: "accepted",
+      },
+    ];
+    const mockAccount = createMockAccount(vi.fn().mockResolvedValue(friendsWithNulls));
+    const result = await fetchFriends(mockAccount);
+    expect(result).toEqual(friendsWithNulls);
+  });
+
   it("returns empty array for empty array response", async () => {
     const mockAccount = createMockAccount(vi.fn().mockResolvedValue([]));
     const result = await fetchFriends(mockAccount);

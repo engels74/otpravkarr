@@ -17,20 +17,20 @@ vi.mock("$lib/utils/retry", () => ({
 
 const mockUpdateUser = vi.fn();
 const mockGetUser = vi.fn();
+const mockDeleteUser = vi.fn();
 vi.mock("$lib/dispatcharr/endpoints/users", () => ({
   updateUser: (...args: unknown[]) => mockUpdateUser(...args),
   getUser: (...args: unknown[]) => mockGetUser(...args),
+  deleteUser: (...args: unknown[]) => mockDeleteUser(...args),
 }));
 
 const mockGetAllUserMappings = vi.fn();
 const mockUpdateUserMapping = vi.fn();
-const mockMarkMappingInactive = vi.fn();
 const mockUpdateLastSynced = vi.fn();
 const mockUpdatePlexIdentity = vi.fn();
 vi.mock("$lib/db/repositories/users", () => ({
   getAllUserMappings: (...args: unknown[]) => mockGetAllUserMappings(...args),
   updateUserMapping: (...args: unknown[]) => mockUpdateUserMapping(...args),
-  markMappingInactive: (...args: unknown[]) => mockMarkMappingInactive(...args),
   updateLastSynced: (...args: unknown[]) => mockUpdateLastSynced(...args),
   updatePlexIdentity: (...args: unknown[]) => mockUpdatePlexIdentity(...args),
 }));
@@ -97,8 +97,7 @@ function makeDispatcharrUser(overrides: Partial<DispatcharrUser> = {}): Dispatch
     id: 10,
     username: "dispuser",
     is_staff: false,
-    is_active: true,
-    groups: [1, 2],
+    is_superuser: false,
     ...overrides,
   };
 }
@@ -219,17 +218,19 @@ describe("rotateCredentials", () => {
 // ---------------------------------------------------------------------------
 
 describe("disableUser", () => {
-  it("sends is_active: false to Dispatcharr, marks local mapping inactive, writes audit", async () => {
+  it("deletes user on Dispatcharr, clears local Dispatcharr fields, writes audit", async () => {
     const mapping = makeMapping();
-    mockUpdateUser.mockResolvedValueOnce({
-      ok: true,
-      data: makeDispatcharrUser({ is_active: false }),
-    });
+    mockDeleteUser.mockResolvedValueOnce({ ok: true });
 
     await disableUser(mockClient, mapping);
 
-    expect(mockUpdateUser).toHaveBeenCalledWith(mockClient, 10, { is_active: false });
-    expect(mockMarkMappingInactive).toHaveBeenCalledWith(1);
+    expect(mockDeleteUser).toHaveBeenCalledWith(mockClient, 10);
+    expect(mockUpdateUserMapping).toHaveBeenCalledWith(1, {
+      is_active: 0,
+      dispatcharr_user_id: null,
+      dispatcharr_username: null,
+      dispatcharr_xc_password_enc: null,
+    });
     expect(mockAppendAuditLog).toHaveBeenCalledWith({
       action: AuditAction.USER_DISABLED,
       detail: {
@@ -239,25 +240,25 @@ describe("disableUser", () => {
     });
   });
 
-  it("throws when Dispatcharr update fails with non-not_found error", async () => {
+  it("throws when Dispatcharr delete fails with non-not_found error", async () => {
     const mapping = makeMapping();
-    mockUpdateUser.mockResolvedValueOnce({
+    mockDeleteUser.mockResolvedValueOnce({
       ok: false,
       error: "server_error",
       message: "Internal Server Error",
     });
 
     await expect(disableUser(mockClient, mapping)).rejects.toThrow(
-      "Failed to disable user on Dispatcharr: Internal Server Error",
+      "Failed to delete user on Dispatcharr: Internal Server Error",
     );
 
-    expect(mockMarkMappingInactive).not.toHaveBeenCalled();
+    expect(mockUpdateUserMapping).not.toHaveBeenCalled();
     expect(mockAppendAuditLog).not.toHaveBeenCalled();
   });
 
   it("clears stale Dispatcharr fields on not_found instead of throwing", async () => {
     const mapping = makeMapping();
-    mockUpdateUser.mockResolvedValueOnce({
+    mockDeleteUser.mockResolvedValueOnce({
       ok: false,
       error: "not_found",
       message: "Not Found",
@@ -271,22 +272,23 @@ describe("disableUser", () => {
       dispatcharr_username: null,
       dispatcharr_xc_password_enc: null,
     });
-    // Should NOT call markMappingInactive or appendAuditLog
-    expect(mockMarkMappingInactive).not.toHaveBeenCalled();
+    // Should NOT write audit (user was already gone)
     expect(mockAppendAuditLog).not.toHaveBeenCalled();
   });
 
   it("skips audit log when mapping is already inactive (idempotent re-disable)", async () => {
     const mapping = makeMapping({ is_active: 0 });
-    mockUpdateUser.mockResolvedValueOnce({
-      ok: true,
-      data: makeDispatcharrUser({ is_active: false }),
-    });
+    mockDeleteUser.mockResolvedValueOnce({ ok: true });
 
     await disableUser(mockClient, mapping);
 
-    expect(mockUpdateUser).toHaveBeenCalledWith(mockClient, 10, { is_active: false });
-    expect(mockMarkMappingInactive).toHaveBeenCalledWith(1);
+    expect(mockDeleteUser).toHaveBeenCalledWith(mockClient, 10);
+    expect(mockUpdateUserMapping).toHaveBeenCalledWith(1, {
+      is_active: 0,
+      dispatcharr_user_id: null,
+      dispatcharr_username: null,
+      dispatcharr_xc_password_enc: null,
+    });
     // Audit should NOT fire for re-disable
     expect(mockAppendAuditLog).not.toHaveBeenCalled();
   });
@@ -297,43 +299,45 @@ describe("disableUser", () => {
 // ---------------------------------------------------------------------------
 
 describe("enableUser", () => {
-  it("sends is_active: true to Dispatcharr, updates local mapping", async () => {
+  it("verifies user exists on Dispatcharr, updates local mapping", async () => {
     const mapping = makeMapping({ is_active: 0 });
-    mockUpdateUser.mockResolvedValueOnce({
+    mockGetUser.mockResolvedValueOnce({
       ok: true,
-      data: makeDispatcharrUser({ is_active: true }),
+      data: makeDispatcharrUser(),
     });
 
     await enableUser(mockClient, mapping);
 
-    expect(mockUpdateUser).toHaveBeenCalledWith(mockClient, 10, { is_active: true });
+    expect(mockGetUser).toHaveBeenCalledWith(mockClient, 10);
     expect(mockUpdateUserMapping).toHaveBeenCalledWith(1, { is_active: 1 });
   });
 
-  it("throws when Dispatcharr update fails", async () => {
+  it("throws when Dispatcharr verify fails", async () => {
     const mapping = makeMapping({ is_active: 0 });
-    mockUpdateUser.mockResolvedValueOnce({
+    mockGetUser.mockResolvedValueOnce({
       ok: false,
       error: "network_error",
       message: "Connection refused",
     });
 
     await expect(enableUser(mockClient, mapping)).rejects.toThrow(
-      "Failed to enable user on Dispatcharr: Connection refused",
+      "Failed to verify user on Dispatcharr: Connection refused",
     );
 
     expect(mockUpdateUserMapping).not.toHaveBeenCalled();
   });
 
-  it("clears stale Dispatcharr fields on not_found instead of throwing", async () => {
+  it("clears stale Dispatcharr fields on not_found and throws", async () => {
     const mapping = makeMapping({ is_active: 0 });
-    mockUpdateUser.mockResolvedValueOnce({
+    mockGetUser.mockResolvedValueOnce({
       ok: false,
       error: "not_found",
       message: "Not Found",
     });
 
-    await enableUser(mockClient, mapping);
+    await expect(enableUser(mockClient, mapping)).rejects.toThrow(
+      "Cannot enable user: Dispatcharr user no longer exists (re-provisioning required)",
+    );
 
     expect(mockUpdateUserMapping).toHaveBeenCalledWith(1, {
       is_active: 0,
@@ -362,16 +366,12 @@ describe("reconcileSync", () => {
       { id: 200, email: "other@example.com", status: "accepted" },
     ]);
     mockGetAllUserMappings.mockReturnValueOnce([mapping]);
-    mockUpdateUser.mockResolvedValueOnce({
-      ok: true,
-      data: makeDispatcharrUser({ is_active: false }),
-    });
+    mockDeleteUser.mockResolvedValueOnce({ ok: true });
 
     const report = await reconcileSync(mockClient, "admin-token");
 
     expect(report.disabled).toBe(1);
-    expect(mockUpdateUser).toHaveBeenCalledWith(mockClient, 10, { is_active: false });
-    expect(mockMarkMappingInactive).toHaveBeenCalledWith(1);
+    expect(mockDeleteUser).toHaveBeenCalledWith(mockClient, 10);
   });
 
   it("deactivates locally without Dispatcharr call when dispatcharr_user_id is null and friend removed", async () => {
@@ -389,6 +389,7 @@ describe("reconcileSync", () => {
 
     expect(report.disabled).toBe(1);
     // Should NOT call Dispatcharr API
+    expect(mockDeleteUser).not.toHaveBeenCalled();
     expect(mockUpdateUser).not.toHaveBeenCalled();
     // Should deactivate and clear stale credential fields
     expect(mockUpdateUserMapping).toHaveBeenCalledWith(1, {
@@ -407,7 +408,7 @@ describe("reconcileSync", () => {
     });
   });
 
-  it("disables Dispatcharr user even when local mapping is inactive (handles drift)", async () => {
+  it("deletes Dispatcharr user even when local mapping is inactive (handles drift)", async () => {
     const mapping = makeMapping({
       plex_account_id: 100,
       dispatcharr_user_id: 10,
@@ -415,16 +416,12 @@ describe("reconcileSync", () => {
     });
     mockFetchFriends.mockResolvedValueOnce([]);
     mockGetAllUserMappings.mockReturnValueOnce([mapping]);
-    mockUpdateUser.mockResolvedValueOnce({
-      ok: true,
-      data: makeDispatcharrUser({ is_active: false }),
-    });
+    mockDeleteUser.mockResolvedValueOnce({ ok: true });
 
     const report = await reconcileSync(mockClient, "admin-token");
 
     // Should still call Dispatcharr to handle potential drift
-    expect(mockUpdateUser).toHaveBeenCalledWith(mockClient, 10, { is_active: false });
-    expect(mockMarkMappingInactive).toHaveBeenCalledWith(1);
+    expect(mockDeleteUser).toHaveBeenCalledWith(mockClient, 10);
     // But report.disabled should NOT increment (already inactive — idempotent)
     expect(report.disabled).toBe(0);
   });
@@ -437,7 +434,7 @@ describe("reconcileSync", () => {
     });
     mockFetchFriends.mockResolvedValueOnce([]);
     mockGetAllUserMappings.mockReturnValueOnce([mapping]);
-    mockUpdateUser.mockResolvedValueOnce({
+    mockDeleteUser.mockResolvedValueOnce({
       ok: false,
       error: "not_found",
       message: "Not Found",
@@ -470,6 +467,7 @@ describe("reconcileSync", () => {
     const report = await reconcileSync(mockClient, "admin-token");
 
     expect(report.disabled).toBe(0);
+    expect(mockDeleteUser).not.toHaveBeenCalled();
     expect(mockUpdateUser).not.toHaveBeenCalled();
     expect(mockUpdateUserMapping).not.toHaveBeenCalled();
   });
@@ -568,56 +566,51 @@ describe("reconcileSync", () => {
     expect(mockUpdatePlexIdentity).not.toHaveBeenCalled();
   });
 
-  it("reconciles group drift from Dispatcharr", async () => {
+  it("reconciles username drift from Dispatcharr", async () => {
     const mapping = makeMapping({
       plex_account_id: 100,
       dispatcharr_user_id: 10,
-      dispatcharr_group_ids: "[1,2]",
+      dispatcharr_username: "oldname",
       is_active: 1,
     });
     mockFetchFriends.mockResolvedValueOnce([
       { id: 100, email: "plex@example.com", status: "accepted" },
     ]);
     mockGetAllUserMappings.mockReturnValueOnce([mapping]);
-    // Remote has groups [1, 3] — different from local [1, 2]
+    // Remote has different username
     mockGetUser.mockResolvedValueOnce({
       ok: true,
-      data: makeDispatcharrUser({ groups: [1, 3], is_active: true }),
+      data: makeDispatcharrUser({ username: "newname" }),
     });
 
     const report = await reconcileSync(mockClient, "admin-token");
 
     expect(mockUpdateUserMapping).toHaveBeenCalledWith(1, {
-      dispatcharr_group_ids: JSON.stringify([1, 3]),
-      is_active: 1,
+      dispatcharr_username: "newname",
     });
-    // No errors
     expect(report.errors).toHaveLength(0);
   });
 
-  it("reconciles active status drift from Dispatcharr", async () => {
+  it("does not update mapping when username matches", async () => {
     const mapping = makeMapping({
       plex_account_id: 100,
       dispatcharr_user_id: 10,
-      dispatcharr_group_ids: "[1,2]",
+      dispatcharr_username: "dispuser",
       is_active: 1,
     });
     mockFetchFriends.mockResolvedValueOnce([
       { id: 100, email: "plex@example.com", status: "accepted" },
     ]);
     mockGetAllUserMappings.mockReturnValueOnce([mapping]);
-    // Remote says user is inactive but local says active
     mockGetUser.mockResolvedValueOnce({
       ok: true,
-      data: makeDispatcharrUser({ groups: [1, 2], is_active: false }),
+      data: makeDispatcharrUser(),
     });
 
     await reconcileSync(mockClient, "admin-token");
 
-    expect(mockUpdateUserMapping).toHaveBeenCalledWith(1, {
-      dispatcharr_group_ids: JSON.stringify([1, 2]),
-      is_active: 0,
-    });
+    // updateUserMapping should NOT be called for username drift (username matches)
+    expect(mockUpdateUserMapping).not.toHaveBeenCalled();
   });
 
   it("updates last_synced_at for each processed mapping that is still a friend", async () => {
@@ -640,10 +633,7 @@ describe("reconcileSync", () => {
     const mapping = makeMapping({ plex_account_id: 100 });
     mockFetchFriends.mockResolvedValueOnce([]); // no friends
     mockGetAllUserMappings.mockReturnValueOnce([mapping]);
-    mockUpdateUser.mockResolvedValueOnce({
-      ok: true,
-      data: makeDispatcharrUser({ is_active: false }),
-    });
+    mockDeleteUser.mockResolvedValueOnce({ ok: true });
 
     await reconcileSync(mockClient, "admin-token");
 
@@ -682,11 +672,8 @@ describe("reconcileSync", () => {
     ]);
     mockGetAllUserMappings.mockReturnValueOnce([mapping1, mapping2, mapping3]);
 
-    // mapping2 disable
-    mockUpdateUser.mockResolvedValueOnce({
-      ok: true,
-      data: makeDispatcharrUser({ is_active: false }),
-    });
+    // mapping2 disable (delete)
+    mockDeleteUser.mockResolvedValueOnce({ ok: true });
     // mapping3 orphaned
     mockGetUser.mockResolvedValueOnce({
       ok: false,
@@ -712,16 +699,13 @@ describe("reconcileSync", () => {
       { id: 300, email: "invited@example.com", status: "pending" },
     ]);
     mockGetAllUserMappings.mockReturnValueOnce([mapping]);
-    mockUpdateUser.mockResolvedValueOnce({
-      ok: true,
-      data: makeDispatcharrUser({ is_active: false }),
-    });
+    mockDeleteUser.mockResolvedValueOnce({ ok: true });
 
     const report = await reconcileSync(mockClient, "admin-token");
 
     // Pending friend with id 100 should be treated as removed — user should be disabled
     expect(report.disabled).toBe(1);
-    expect(mockUpdateUser).toHaveBeenCalledWith(mockClient, 10, { is_active: false });
+    expect(mockDeleteUser).toHaveBeenCalledWith(mockClient, 10);
     // Only accepted unmapped friends should be counted as new
     expect(report.newFriends).toBe(1); // only id=200 (accepted), not id=300 (pending)
   });

@@ -12,7 +12,9 @@ import * as Card from "$lib/components/ui/card";
   <Card.Root class="w-full max-w-md">
     <Card.Header>
       <Card.Title class="text-lg">Error {page.status}</Card.Title>
-      <Card.Description>Something went wrong.</Card.Description>
+      <Card.Description>
+        {page.status === 404 ? "This page doesn't exist." : "Something went wrong."}
+      </Card.Description>
     </Card.Header>
     <Card.Content>
       <p class="text-sm text-muted-foreground">

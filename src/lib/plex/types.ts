@@ -9,12 +9,12 @@ export interface PlexIdentity {
 
 export interface PlexFriend {
   id: number;
-  uuid?: string | undefined;
-  username?: string | undefined;
-  title?: string | undefined;
-  friendlyName?: string | undefined;
+  uuid?: string | null | undefined;
+  username?: string | null | undefined;
+  title?: string | null | undefined;
+  friendlyName?: string | null | undefined;
   email: string;
-  thumb?: string | undefined;
+  thumb?: string | null | undefined;
   status: string;
 }
 

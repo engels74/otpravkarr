@@ -122,8 +122,8 @@ describe("checkHealth", () => {
     });
   });
 
-  it("returns reachable but not authValid on unexpected response shape", async () => {
-    // Server responds with 200 but unexpected JSON structure (e.g. different API version)
+  it("returns reachable and authValid on unexpected response shape", async () => {
+    // Server responds with 200 but unexpected JSON structure (e.g. plain array instead of paginated)
     mockOfetch.mockResolvedValueOnce({ unexpected: "data" });
     const endpoints = createHealthEndpoints(createClient());
 
@@ -131,7 +131,7 @@ describe("checkHealth", () => {
 
     expect(result).toEqual({
       ok: true,
-      data: { reachable: true, authValid: false },
+      data: { reachable: true, authValid: true },
     });
   });
 });

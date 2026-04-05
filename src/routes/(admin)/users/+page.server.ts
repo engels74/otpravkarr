@@ -9,7 +9,6 @@ import {
 import type { ProvisioningMode } from "$lib/db/types";
 import { DispatcharrClient } from "$lib/dispatcharr/client";
 import { listGroups } from "$lib/dispatcharr/endpoints/groups";
-import { updateUser } from "$lib/dispatcharr/endpoints/users";
 import { requireAdmin } from "$lib/server/auth";
 import type { Actions, PageServerLoad } from "./$types";
 
@@ -145,28 +144,8 @@ export const actions: Actions = {
     }
 
     try {
-      if (mapping.dispatcharr_user_id != null) {
-        const client = await getClient();
-        const result = await updateUser(client, mapping.dispatcharr_user_id, { groups: groupIds });
-        if (!result.ok) {
-          if (result.error === "not_found") {
-            updateUserMapping(id, {
-              is_active: 0,
-              dispatcharr_user_id: null,
-              dispatcharr_username: null,
-              dispatcharr_xc_password_enc: null,
-              dispatcharr_group_ids: JSON.stringify(groupIds),
-            });
-            return {
-              success: true,
-              staleMappingCleared: true,
-              message:
-                "Dispatcharr user no longer exists. Cleared stale mapping and saved groups locally.",
-            };
-          }
-          return fail(500, { error: `Dispatcharr error: ${result.message}` });
-        }
-      }
+      // Groups are tracked locally — the Dispatcharr User API does not have a groups field.
+      // Group assignments on Dispatcharr are managed separately through the Groups API.
       updateUserMapping(id, { dispatcharr_group_ids: JSON.stringify(groupIds) });
       return { success: true };
     } catch (err) {

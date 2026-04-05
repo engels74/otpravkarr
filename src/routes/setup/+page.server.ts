@@ -15,6 +15,7 @@ import { listProfiles } from "$lib/dispatcharr/endpoints/profiles";
 import { validateServerToken } from "$lib/plex/client";
 import { completeOAuth, initiateOAuth } from "$lib/plex/oauth";
 import { PlexAuthError, PlexConnectionError } from "$lib/plex/types";
+import { seedInitialHealth } from "$lib/scheduler/jobs/health";
 import {
   ADMIN_COOKIE_OPTIONS,
   ADMIN_SESSION_TTL,
@@ -542,6 +543,8 @@ export const actions: Actions = {
     ]);
     clearBootstrapToken();
     cookies.delete(SETUP_CLAIM_COOKIE_NAME, { path: SETUP_CLAIM_COOKIE_OPTIONS.path });
+
+    seedInitialHealth();
 
     const sessionId = createSession(adminUsername, "admin", ADMIN_SESSION_TTL);
     cookies.set(SESSION_COOKIE_NAME, sessionId, ADMIN_COOKIE_OPTIONS);

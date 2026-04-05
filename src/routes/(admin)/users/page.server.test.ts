@@ -11,12 +11,6 @@ const mocks = vi.hoisted(() => ({
   ),
   updateUserMapping: vi.fn(),
   listGroups: vi.fn(async () => ({ ok: true, data: [] })),
-  updateUser: vi.fn(
-    async () =>
-      ({ ok: true, data: {} }) as
-        | { ok: true; data: Record<string, unknown> }
-        | { ok: false; error: string; message: string },
-  ),
   rotateCredentials: vi.fn(async () => undefined),
   disableUser: vi.fn(async () => undefined),
   enableUser: vi.fn(async () => undefined),
@@ -44,10 +38,6 @@ vi.mock("$lib/dispatcharr/endpoints/groups", () => ({
   listGroups: mocks.listGroups,
 }));
 
-vi.mock("$lib/dispatcharr/endpoints/users", () => ({
-  updateUser: mocks.updateUser,
-}));
-
 vi.mock("$lib/bridge/lifecycle", () => ({
   rotateCredentials: mocks.rotateCredentials,
   disableUser: mocks.disableUser,
@@ -61,7 +51,6 @@ function resetMocks() {
   mocks.getUserMappingById.mockClear();
   mocks.updateUserMapping.mockClear();
   mocks.listGroups.mockClear();
-  mocks.updateUser.mockClear();
   mocks.rotateCredentials.mockClear();
   mocks.disableUser.mockClear();
   mocks.enableUser.mockClear();
@@ -81,7 +70,7 @@ describe("admin users actions", () => {
     resetMocks();
   });
 
-  it("cleans up stale mapping on changeGroup when Dispatcharr returns not_found", async () => {
+  it("saves group IDs locally on changeGroup without calling Dispatcharr", async () => {
     const { actions } = await import("./+page.server");
     const changeGroup = actions.changeGroup;
     if (!changeGroup) throw new Error("changeGroup action is undefined");
@@ -89,13 +78,6 @@ describe("admin users actions", () => {
     mocks.getUserMappingById.mockReturnValueOnce({
       id: 1,
       dispatcharr_user_id: 42,
-    });
-    mocks.getConfig.mockResolvedValueOnce("https://dispatch.example.com");
-    mocks.getConfig.mockResolvedValueOnce("test-api-key");
-    mocks.updateUser.mockResolvedValueOnce({
-      ok: false,
-      error: "not_found",
-      message: "Not Found",
     });
 
     const body = new FormData();
@@ -106,16 +88,8 @@ describe("admin users actions", () => {
       createActionEvent(body) as unknown as Parameters<typeof changeGroup>[0],
     );
 
-    expect(result).toMatchObject({
-      success: true,
-      staleMappingCleared: true,
-      message: "Dispatcharr user no longer exists. Cleared stale mapping and saved groups locally.",
-    });
+    expect(result).toMatchObject({ success: true });
     expect(mocks.updateUserMapping).toHaveBeenCalledWith(1, {
-      is_active: 0,
-      dispatcharr_user_id: null,
-      dispatcharr_username: null,
-      dispatcharr_xc_password_enc: null,
       dispatcharr_group_ids: JSON.stringify([5, 7]),
     });
     expect(mocks.requireAdmin).toHaveBeenCalledOnce();
@@ -143,7 +117,6 @@ describe("admin users actions", () => {
     });
     expect(mocks.requireAdmin).toHaveBeenCalledOnce();
     expect(mocks.getUserMappingById).not.toHaveBeenCalled();
-    expect(mocks.updateUser).not.toHaveBeenCalled();
     expect(mocks.updateUserMapping).not.toHaveBeenCalled();
   });
 });

@@ -59,7 +59,9 @@ vi.mock("$lib/db/types", () => ({
 }));
 
 // Import after mocking
-const { createHealthJob, getHealthStatus, resetHealthState } = await import("../health");
+const { createHealthJob, getHealthStatus, resetHealthState, seedInitialHealth } = await import(
+  "../health"
+);
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -361,5 +363,46 @@ describe("health check fn", () => {
 
     // Three audit log entries (one per failed check)
     expect(mockAppendAuditLog).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe("seedInitialHealth", () => {
+  it("sets all services to healthy with current timestamp", () => {
+    // Verify initial state is unhealthy
+    const before = getHealthStatus();
+    expect(before.plex.status).toBe("unreachable");
+    expect(before.dispatcharr.reachable).toBe(false);
+    expect(before.database.status).toBe("unhealthy");
+
+    seedInitialHealth();
+
+    const after = getHealthStatus();
+    expect(after.plex.status).toBe("healthy");
+    expect(after.plex.lastChecked).not.toBeNull();
+    expect(after.dispatcharr.reachable).toBe(true);
+    expect(after.dispatcharr.authValid).toBe(true);
+    expect(after.dispatcharr.lastChecked).not.toBeNull();
+    expect(after.database.status).toBe("healthy");
+    expect(after.database.lastChecked).not.toBeNull();
+  });
+
+  it("is overwritten by subsequent health check job", async () => {
+    seedInitialHealth();
+
+    // Now run a health check where plex is unhealthy
+    mockGetConfig.mockImplementation(configMap());
+    mockCheckServerHealth.mockResolvedValue("unauthorized");
+    mockCheckHealth.mockResolvedValue({
+      ok: true,
+      data: { reachable: true, authValid: true },
+    });
+
+    const job = createHealthJob();
+    await job.fn();
+
+    const health = getHealthStatus();
+    expect(health.plex.status).toBe("unauthorized");
+    expect(health.dispatcharr.reachable).toBe(true);
+    expect(health.database.status).toBe("healthy");
   });
 });

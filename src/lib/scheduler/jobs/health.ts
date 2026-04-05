@@ -24,6 +24,18 @@ export function getHealthStatus(): HealthStatus {
   return structuredClone(currentHealth);
 }
 
+/**
+ * Seeds health state to all-healthy after setup completes.
+ * The setup wizard already validated Plex, Dispatcharr, and SQLite,
+ * so we can skip re-checking and just mark everything as connected.
+ */
+export function seedInitialHealth(): void {
+  const now = new Date().toISOString();
+  currentHealth.plex = { status: "healthy", lastChecked: now };
+  currentHealth.dispatcharr = { reachable: true, authValid: true, lastChecked: now };
+  currentHealth.database = { status: "healthy", lastChecked: now };
+}
+
 /** @internal — for testing only */
 export function resetHealthState(): void {
   currentHealth.plex = { status: "unreachable", lastChecked: null };

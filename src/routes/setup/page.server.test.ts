@@ -85,6 +85,10 @@ vi.mock("$lib/dispatcharr/endpoints/profiles", () => ({
   listProfiles: vi.fn(async () => ({ ok: true, data: [] })),
 }));
 
+vi.mock("$lib/scheduler/jobs/health", () => ({
+  seedInitialHealth: vi.fn(),
+}));
+
 vi.mock("$lib/plex/client", () => ({
   validateServerToken: vi.fn(async () => ({
     friendlyName: "Plex",

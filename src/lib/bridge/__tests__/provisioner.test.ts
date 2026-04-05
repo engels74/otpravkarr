@@ -20,7 +20,7 @@ vi.mock("$lib/db/repositories/audit", () => ({
 
 vi.mock("$lib/dispatcharr/endpoints/users", () => ({
   createUser: vi.fn(),
-  updateUser: vi.fn(),
+  getUser: vi.fn(),
 }));
 
 vi.mock("$lib/crypto/encryption", () => ({
@@ -44,7 +44,7 @@ vi.mock("$lib/utils/retry", async (importOriginal) => {
 const { getUserMappingByPlexId, createUserMapping, updateUserMapping, getAllUserMappings } =
   await import("$lib/db/repositories/users");
 const { appendAuditLog } = await import("$lib/db/repositories/audit");
-const { createUser, updateUser } = await import("$lib/dispatcharr/endpoints/users");
+const { createUser, getUser } = await import("$lib/dispatcharr/endpoints/users");
 const { encrypt } = await import("$lib/crypto/encryption");
 const { generateXcPassword } = await import("$lib/crypto/passwords");
 const { sanitizeUsername, provisionUser } = await import("../provisioner");
@@ -82,8 +82,7 @@ function makeDispatcharrUser(overrides: Partial<DispatcharrUser> = {}): Dispatch
     username: "testuser",
     email: "test@example.com",
     is_staff: false,
-    is_active: true,
-    groups: [1, 2],
+    is_superuser: false,
     ...overrides,
   };
 }
@@ -113,7 +112,7 @@ beforeEach(() => {
   vi.mocked(getAllUserMappings).mockReset();
   vi.mocked(appendAuditLog).mockReset();
   vi.mocked(createUser).mockReset();
-  vi.mocked(updateUser).mockReset();
+  vi.mocked(getUser).mockReset();
   vi.mocked(encrypt)
     .mockReset()
     .mockImplementation(async (plaintext: string) => `encrypted:${plaintext}`);
@@ -187,7 +186,7 @@ describe("provisionUser — already_exists", () => {
     }
     // Should NOT call any Dispatcharr endpoints
     expect(createUser).not.toHaveBeenCalled();
-    expect(updateUser).not.toHaveBeenCalled();
+    expect(getUser).not.toHaveBeenCalled();
   });
 });
 
@@ -196,7 +195,7 @@ describe("provisionUser — already_exists", () => {
 // ---------------------------------------------------------------------------
 
 describe("provisionUser — reactivation", () => {
-  it("reactivates inactive mapping", async () => {
+  it("reactivates inactive mapping by verifying user exists on Dispatcharr", async () => {
     const inactive = makeMapping({ is_active: 0, dispatcharr_user_id: 42 });
     const reactivated = makeMapping({ is_active: 1, dispatcharr_user_id: 42 });
 
@@ -204,9 +203,9 @@ describe("provisionUser — reactivation", () => {
       .mockReturnValueOnce(inactive) // initial lookup
       .mockReturnValueOnce(reactivated); // re-read after update
 
-    vi.mocked(updateUser).mockResolvedValue({
+    vi.mocked(getUser).mockResolvedValue({
       ok: true,
-      data: makeDispatcharrUser({ is_active: true }),
+      data: makeDispatcharrUser(),
     } as DispatcharrResult<DispatcharrUser>);
 
     const result = await provisionUser(mockClient, {
@@ -219,7 +218,7 @@ describe("provisionUser — reactivation", () => {
     if (result.status === "reactivated") {
       expect(result.mapping.is_active).toBe(1);
     }
-    expect(updateUser).toHaveBeenCalledWith(mockClient, 42, { is_active: true });
+    expect(getUser).toHaveBeenCalledWith(mockClient, 42);
     expect(updateUserMapping).toHaveBeenCalledWith(inactive.id, { is_active: 1 });
     expect(appendAuditLog).toHaveBeenCalledWith({
       action: "user.provisioned",
@@ -227,11 +226,11 @@ describe("provisionUser — reactivation", () => {
     });
   });
 
-  it("returns failed when Dispatcharr updateUser fails with non-not_found error", async () => {
+  it("returns failed when Dispatcharr getUser fails with non-not_found error", async () => {
     const inactive = makeMapping({ is_active: 0, dispatcharr_user_id: 42 });
     vi.mocked(getUserMappingByPlexId).mockReturnValue(inactive);
 
-    vi.mocked(updateUser).mockResolvedValue({
+    vi.mocked(getUser).mockResolvedValue({
       ok: false,
       error: "validation_error",
       message: "User not found on Dispatcharr",
@@ -265,8 +264,8 @@ describe("provisionUser — reactivation", () => {
       .mockReturnValueOnce(inactive) // initial lookup
       .mockReturnValueOnce(updatedMapping); // re-read after updateUserMapping in create flow
 
-    // Reactivation fails with not_found (user deleted externally)
-    vi.mocked(updateUser).mockResolvedValue({
+    // Reactivation verify fails with not_found (user deleted externally)
+    vi.mocked(getUser).mockResolvedValue({
       ok: false,
       error: "not_found",
       message: "User not found",
@@ -331,7 +330,7 @@ describe("provisionUser — reactivation", () => {
     });
 
     // Should skip reactivation entirely and go to create flow
-    expect(updateUser).not.toHaveBeenCalled();
+    expect(getUser).not.toHaveBeenCalled();
 
     // Should update existing mapping instead of creating a new one (avoids UNIQUE constraint)
     expect(updateUserMapping).toHaveBeenCalledWith(
@@ -380,13 +379,11 @@ describe("provisionUser — create (automatic mode)", () => {
       expect(result.initialPassword).toBeUndefined();
     }
 
-    // Verify createUser was called with correct data
+    // Verify createUser was called with correct data (no is_active/groups — not in API)
     expect(createUser).toHaveBeenCalledWith(mockClient, {
       username: "testuser",
       password: "generated-password-24",
       is_staff: false,
-      is_active: true,
-      groups: [1, 2],
     });
 
     // Verify password was encrypted for automatic mode
@@ -626,7 +623,7 @@ describe("provisionUser — audit logging", () => {
       .mockReturnValueOnce(inactive)
       .mockReturnValueOnce(reactivated);
 
-    vi.mocked(updateUser).mockResolvedValue({
+    vi.mocked(getUser).mockResolvedValue({
       ok: true,
       data: makeDispatcharrUser(),
     } as DispatcharrResult<DispatcharrUser>);

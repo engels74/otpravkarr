@@ -4,21 +4,38 @@ import type { DispatcharrResult, DispatcharrUser, PaginatedResponse } from "../t
 
 const userPageSchema = paginatedSchema(DispatcharrUserSchema);
 
+/**
+ * Fields accepted by POST /api/accounts/users/ per the Dispatcharr OpenAPI spec.
+ * Only `username` and `password` are required. Other writable fields are optional.
+ */
 export interface CreateUserData {
   username: string;
   password: string;
   email?: string;
   is_staff?: boolean;
-  is_active?: boolean;
-  groups?: number[];
+  is_superuser?: boolean;
+  user_level?: number;
+  channel_profiles?: number[];
+  stream_limit?: number;
+  first_name?: string;
+  last_name?: string;
 }
 
+/**
+ * Fields accepted by PATCH /api/accounts/users/{id}/ (PatchedUser schema).
+ * All fields are optional for partial updates.
+ */
 export type UpdateUserData = Partial<{
+  username: string;
   password: string;
   email: string;
-  is_active: boolean;
   is_staff: boolean;
-  groups: number[];
+  is_superuser: boolean;
+  user_level: number;
+  channel_profiles: number[];
+  stream_limit: number;
+  first_name: string;
+  last_name: string;
 }>;
 
 export function listUsers(
@@ -60,8 +77,8 @@ export function updateUser(
   id: number,
   data: UpdateUserData,
 ): Promise<DispatcharrResult<DispatcharrUser>> {
-  // API docs list PUT for this endpoint; UpdateUserData is Partial for caller convenience
-  return client.request("PUT", `/api/accounts/users/${id}/`, {
+  // Use PATCH for partial updates (PatchedUser schema in the API spec)
+  return client.request("PATCH", `/api/accounts/users/${id}/`, {
     body: data,
     schema: DispatcharrUserSchema,
   });

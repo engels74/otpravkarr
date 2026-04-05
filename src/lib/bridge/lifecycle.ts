@@ -3,7 +3,6 @@ import { generateXcPassword } from "$lib/crypto/passwords";
 import { appendAuditLog } from "$lib/db/repositories/audit";
 import {
   getAllUserMappings,
-  markMappingInactive,
   updateLastSynced,
   updatePlexIdentity,
   updateUserMapping,
@@ -11,7 +10,7 @@ import {
 import type { UserMapping } from "$lib/db/types";
 import { AuditAction } from "$lib/db/types";
 import type { DispatcharrClient } from "$lib/dispatcharr/client";
-import { getUser, updateUser } from "$lib/dispatcharr/endpoints/users";
+import { deleteUser, getUser, updateUser } from "$lib/dispatcharr/endpoints/users";
 import { getAccount } from "$lib/plex/client";
 import { fetchFriends } from "$lib/plex/friends";
 import type { PlexFriend } from "$lib/plex/types";
@@ -92,7 +91,11 @@ export async function rotateCredentials(
 }
 
 /**
- * Disable a user on Dispatcharr and mark the local mapping as inactive.
+ * Disable a user: delete on Dispatcharr and mark the local mapping inactive.
+ *
+ * The Dispatcharr API does not expose an `is_active` field on users, so disabling
+ * means deleting the remote account. The local mapping retains the Plex identity so
+ * the user can be re-provisioned later if needed.
  */
 export async function disableUser(client: DispatcharrClient, mapping: UserMapping): Promise<void> {
   if (mapping.dispatcharr_user_id == null) {
@@ -101,12 +104,12 @@ export async function disableUser(client: DispatcharrClient, mapping: UserMappin
   const dispatcharrUserId = mapping.dispatcharr_user_id;
 
   const result = await retryResult(
-    () => updateUser(client, dispatcharrUserId, { is_active: false }),
+    () => deleteUser(client, dispatcharrUserId),
     isTransientResultError,
   );
   if (!result.ok) {
     if (result.error === "not_found") {
-      // Dispatcharr user was deleted externally — clear stale fields and mark inactive
+      // Already gone — clear stale fields and mark inactive
       try {
         updateUserMapping(mapping.id, {
           is_active: 0,
@@ -121,11 +124,16 @@ export async function disableUser(client: DispatcharrClient, mapping: UserMappin
       }
       return;
     }
-    throw new Error(`Failed to disable user on Dispatcharr: ${result.message}`);
+    throw new Error(`Failed to delete user on Dispatcharr: ${result.message}`);
   }
 
   try {
-    markMappingInactive(mapping.id);
+    updateUserMapping(mapping.id, {
+      is_active: 0,
+      dispatcharr_user_id: null,
+      dispatcharr_username: null,
+      dispatcharr_xc_password_enc: null,
+    });
 
     if (mapping.is_active === 1) {
       appendAuditLog({
@@ -138,22 +146,26 @@ export async function disableUser(client: DispatcharrClient, mapping: UserMappin
     }
   } catch (err) {
     throw new Error(
-      `Dispatcharr user disabled but local DB write failed (state may be inconsistent): ${err instanceof Error ? err.message : String(err)}`,
+      `Dispatcharr user deleted but local DB write failed (state may be inconsistent): ${err instanceof Error ? err.message : String(err)}`,
     );
   }
 }
 
 /**
- * Enable a user on Dispatcharr and mark the local mapping as active.
+ * Enable a user: verify they still exist on Dispatcharr and mark the local mapping as active.
+ *
+ * Since disabling deletes the Dispatcharr user, enabling an inactive mapping with a
+ * null `dispatcharr_user_id` requires re-provisioning (handled by the provisioner).
  */
 export async function enableUser(client: DispatcharrClient, mapping: UserMapping): Promise<void> {
   if (mapping.dispatcharr_user_id == null) {
-    throw new Error("Cannot enable user: no Dispatcharr user ID");
+    throw new Error("Cannot enable user: no Dispatcharr user ID (re-provisioning required)");
   }
   const dispatcharrUserId = mapping.dispatcharr_user_id;
 
+  // Verify user still exists on Dispatcharr
   const result = await retryResult(
-    () => updateUser(client, dispatcharrUserId, { is_active: true }),
+    () => getUser(client, dispatcharrUserId),
     isTransientResultError,
   );
   if (!result.ok) {
@@ -171,16 +183,18 @@ export async function enableUser(client: DispatcharrClient, mapping: UserMapping
           `Dispatcharr user not found and cleanup failed: ${dbErr instanceof Error ? dbErr.message : String(dbErr)}`,
         );
       }
-      return;
+      throw new Error(
+        "Cannot enable user: Dispatcharr user no longer exists (re-provisioning required)",
+      );
     }
-    throw new Error(`Failed to enable user on Dispatcharr: ${result.message}`);
+    throw new Error(`Failed to verify user on Dispatcharr: ${result.message}`);
   }
 
   try {
     updateUserMapping(mapping.id, { is_active: 1 });
   } catch (err) {
     throw new Error(
-      `Dispatcharr user enabled but local DB write failed (state may be inconsistent): ${err instanceof Error ? err.message : String(err)}`,
+      `Dispatcharr user verified but local DB write failed (state may be inconsistent): ${err instanceof Error ? err.message : String(err)}`,
     );
   }
 }
@@ -345,25 +359,20 @@ export async function reconcileSync(
             verificationFailed = true;
           }
         } else {
-          // Reconcile drift — Dispatcharr is source of truth for groups and active status
+          // User exists on Dispatcharr — reconcile username drift if changed
           try {
             const dispatcharrUser = userResult.data;
-            const localGroups = JSON.parse(mapping.dispatcharr_group_ids) as number[];
-            const remoteGroups = dispatcharrUser.groups;
-            const groupsDrift =
-              JSON.stringify([...localGroups].sort((a, b) => a - b)) !==
-              JSON.stringify([...remoteGroups].sort((a, b) => a - b));
-            const activeDrift = (mapping.is_active === 1) !== dispatcharrUser.is_active;
-
-            if (groupsDrift || activeDrift) {
+            if (
+              dispatcharrUser.username &&
+              dispatcharrUser.username !== mapping.dispatcharr_username
+            ) {
               updateUserMapping(mapping.id, {
-                dispatcharr_group_ids: JSON.stringify(remoteGroups),
-                is_active: dispatcharrUser.is_active ? 1 : 0,
+                dispatcharr_username: dispatcharrUser.username,
               });
             }
           } catch (err) {
             report.errors.push(
-              `Failed to reconcile groups for user ${mapping.dispatcharr_username}: ${err instanceof Error ? err.message : String(err)}`,
+              `Failed to reconcile username for user ${mapping.dispatcharr_username}: ${err instanceof Error ? err.message : String(err)}`,
             );
             continue;
           }

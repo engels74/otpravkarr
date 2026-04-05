@@ -30,8 +30,7 @@ function makeUser(overrides: Record<string, unknown> = {}) {
     username: "testuser",
     email: "test@example.com",
     is_staff: false,
-    is_active: true,
-    groups: [],
+    is_superuser: false,
     ...overrides,
   };
 }
@@ -144,7 +143,7 @@ describe("createUser", () => {
   });
 
   it("creates a user with all optional fields", async () => {
-    const user = makeUser({ is_staff: true, groups: [1, 2] });
+    const user = makeUser({ is_staff: true });
     mockOfetch.mockResolvedValueOnce(user);
     const client = createClient();
 
@@ -153,8 +152,6 @@ describe("createUser", () => {
       password: "pass",
       email: "admin@example.com",
       is_staff: true,
-      is_active: true,
-      groups: [1, 2],
     };
 
     const result = await createUser(client, data);
@@ -164,6 +161,28 @@ describe("createUser", () => {
       expect.any(String),
       expect.objectContaining({ body: data }),
     );
+  });
+
+  it("accepts create response with extra API fields via passthrough", async () => {
+    mockOfetch.mockResolvedValueOnce({
+      id: 10,
+      username: "newuser",
+      email: "new@test.com",
+      is_staff: false,
+      api_key: "abc123",
+      user_level: 0,
+      channel_profiles: [1],
+      stream_limit: 1,
+    });
+    const client = createClient();
+
+    const result = await createUser(client, { username: "newuser", password: "pass" });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.id).toBe(10);
+      expect(result.data.username).toBe("newuser");
+    }
   });
 
   it("validates response schema", async () => {
@@ -214,7 +233,7 @@ describe("getUser", () => {
 });
 
 describe("updateUser", () => {
-  it("updates user fields via PUT", async () => {
+  it("updates user fields via PATCH", async () => {
     const user = makeUser({ email: "new@example.com" });
     mockOfetch.mockResolvedValueOnce(user);
     const client = createClient();
@@ -228,7 +247,7 @@ describe("updateUser", () => {
     expect(mockOfetch).toHaveBeenCalledWith(
       "https://dispatch.example.com/api/accounts/users/1/",
       expect.objectContaining({
-        method: "PUT",
+        method: "PATCH",
         body: { email: "new@example.com" },
       }),
     );
@@ -238,7 +257,7 @@ describe("updateUser", () => {
     mockOfetch.mockResolvedValueOnce({ invalid: true });
     const client = createClient();
 
-    const result = await updateUser(client, 1, { is_active: false });
+    const result = await updateUser(client, 1, { email: "new@test.com" });
 
     expect(result.ok).toBe(false);
     if (!result.ok) {

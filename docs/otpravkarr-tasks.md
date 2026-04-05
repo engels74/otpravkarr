@@ -1016,7 +1016,7 @@ These components should accept server-derived props first. If multiple children 
 
 ### 16.1 — Root layout (`src/routes/+layout.svelte`)
 
-- [ ] Minimal root layout:
+- [x] Minimal root layout:
   ```svelte
   <script lang="ts">
     let { children } = $props();
@@ -1025,14 +1025,14 @@ These components should accept server-derived props first. If multiple children 
     {@render children()}
   </div>
   ```
-- [ ] No UnoCSS import here (imported in `hooks.client.ts` per Safari-safe pattern)
-- [ ] Keep the root layout stateless; hydrate any Phase 14 client mirrors inside route/layout `.svelte` files that already receive `load` data, not in the root layout or server hooks
+- [x] No UnoCSS import here (imported in `hooks.client.ts` per Safari-safe pattern)
+- [x] Keep the root layout stateless; hydrate any Phase 14 client mirrors inside route/layout `.svelte` files that already receive `load` data, not in the root layout or server hooks
 
 ### 16.2 — Error page (`src/routes/+error.svelte`)
 
-- [ ] Display error status code and message
-- [ ] Use shadcn-svelte `Card` for styling
-- [ ] Link back to home/dashboard as appropriate
+- [x] Display error status code and message
+- [x] Use shadcn-svelte `Card` for styling
+- [x] Link back to home/dashboard as appropriate
 
 ---
 

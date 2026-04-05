@@ -946,26 +946,26 @@ All sensitive data handling depends on this module. It must be built and tested 
 
 ### 14.1 — Admin session state (`src/lib/state/admin-session.svelte.ts`)
 
-- [ ] Export proxy object pattern (per coding guidelines):
+- [x] Export proxy object pattern (per coding guidelines):
   ```ts
   export const adminSession = $state<{ username: string | null; loggedIn: boolean }>({
     username: null,
     loggedIn: false
   });
   ```
-- [ ] Export `setAdminSession()` and `clearAdminSession()` mutator functions
-- [ ] Never reassign the exported binding — mutate properties only
+- [x] Export `setAdminSession()` and `clearAdminSession()` mutator functions
+- [x] Never reassign the exported binding — mutate properties only
 
 ### 14.2 — User session state (`src/lib/state/user-session.svelte.ts`)
 
-- [ ] Export proxy object for user portal session
-- [ ] Track Plex identity, provisioning mode, active status
+- [x] Export proxy object for user portal session
+- [x] Track Plex identity, provisioning mode, active status
 
 ### 14.3 — Health status state (`src/lib/state/health.svelte.ts`)
 
-- [ ] Export proxy object for system health indicators
-- [ ] Updated by health check job results (passed from server to client via load functions)
-- [ ] Use `$state.raw` for large immutable data (e.g., friend lists) to avoid deep-proxy overhead
+- [x] Export proxy object for system health indicators
+- [x] Updated by health check job results (passed from server to client via load functions)
+- [x] Use `$state.raw` for large immutable data (e.g., friend lists) to avoid deep-proxy overhead
 
 ---
 

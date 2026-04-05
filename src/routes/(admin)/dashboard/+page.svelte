@@ -1,4 +1,5 @@
 <script lang="ts">
+import HealthBadge from "$lib/components/HealthBadge.svelte";
 import * as Avatar from "$lib/components/ui/avatar";
 import { Badge } from "$lib/components/ui/badge";
 import * as Card from "$lib/components/ui/card";
@@ -8,7 +9,7 @@ import type { AuditEntry, ProvisioningMode } from "$lib/db/types";
 import type { PlexFriend } from "$lib/plex/types";
 import type { HealthStatus } from "$lib/scheduler/jobs/health";
 import type { JobStatus } from "$lib/scheduler/runner";
-import { cn } from "$lib/utils";
+import { setHealthStatus } from "$lib/state/health.svelte";
 import { normalizeSqliteDatetime } from "$lib/utils/datetime";
 
 interface Props {
@@ -30,6 +31,10 @@ interface Props {
 
 let { data }: Props = $props();
 
+$effect(() => {
+  setHealthStatus(data.health);
+});
+
 function formatRelativeTime(isoString: string | null): string {
   if (!isoString) return "never";
   const date = new Date(normalizeSqliteDatetime(isoString));
@@ -49,42 +54,6 @@ function formatRelativeTime(isoString: string | null): string {
 function formatTimestamp(ts: number | null): string {
   if (ts == null) return "never";
   return formatRelativeTime(new Date(ts).toISOString());
-}
-
-function plexStatusBadge(status: string): { label: string; class: string } {
-  switch (status) {
-    case "healthy":
-      return { label: "Healthy", class: "bg-green-500/15 text-green-700 dark:text-green-400" };
-    case "unauthorized":
-      return { label: "Unauthorized", class: "bg-red-500/15 text-red-700 dark:text-red-400" };
-    case "server_changed":
-      return {
-        label: "Server Changed",
-        class: "bg-amber-500/15 text-amber-700 dark:text-amber-400",
-      };
-    default:
-      return { label: "Unreachable", class: "bg-red-500/15 text-red-700 dark:text-red-400" };
-  }
-}
-
-function dispatcharrStatusBadge(d: { reachable: boolean; authValid: boolean }): {
-  label: string;
-  class: string;
-} {
-  if (d.reachable && d.authValid) {
-    return { label: "Healthy", class: "bg-green-500/15 text-green-700 dark:text-green-400" };
-  }
-  if (d.reachable && !d.authValid) {
-    return { label: "Auth Invalid", class: "bg-red-500/15 text-red-700 dark:text-red-400" };
-  }
-  return { label: "Unreachable", class: "bg-red-500/15 text-red-700 dark:text-red-400" };
-}
-
-function dbStatusBadge(status: string): { label: string; class: string } {
-  if (status === "healthy") {
-    return { label: "Healthy", class: "bg-green-500/15 text-green-700 dark:text-green-400" };
-  }
-  return { label: "Unhealthy", class: "bg-red-500/15 text-red-700 dark:text-red-400" };
 }
 
 function auditActionBadge(action: string): {
@@ -115,11 +84,8 @@ function friendInitials(f: PlexFriend): string {
         <Card.Description>Plex</Card.Description>
       </Card.Header>
       <Card.Content>
-        {@const badge = plexStatusBadge(data.health.plex.status)}
         <div class="flex items-center justify-between">
-          <span class={cn("inline-flex items-center rounded-md px-2 py-1 text-xs font-medium", badge.class)}>
-            {badge.label}
-          </span>
+          <HealthBadge type="plex" status={data.health.plex.status} />
           <span class="text-xs text-muted-foreground">
             {formatRelativeTime(data.health.plex.lastChecked)}
           </span>
@@ -133,11 +99,8 @@ function friendInitials(f: PlexFriend): string {
         <Card.Description>Dispatcharr</Card.Description>
       </Card.Header>
       <Card.Content>
-        {@const badge = dispatcharrStatusBadge(data.health.dispatcharr)}
         <div class="flex items-center justify-between">
-          <span class={cn("inline-flex items-center rounded-md px-2 py-1 text-xs font-medium", badge.class)}>
-            {badge.label}
-          </span>
+          <HealthBadge type="dispatcharr" status="" reachable={data.health.dispatcharr.reachable} authValid={data.health.dispatcharr.authValid} />
           <span class="text-xs text-muted-foreground">
             {formatRelativeTime(data.health.dispatcharr.lastChecked)}
           </span>
@@ -151,11 +114,8 @@ function friendInitials(f: PlexFriend): string {
         <Card.Description>SQLite</Card.Description>
       </Card.Header>
       <Card.Content>
-        {@const badge = dbStatusBadge(data.health.database.status)}
         <div class="flex items-center justify-between">
-          <span class={cn("inline-flex items-center rounded-md px-2 py-1 text-xs font-medium", badge.class)}>
-            {badge.label}
-          </span>
+          <HealthBadge type="database" status={data.health.database.status} />
           <span class="text-xs text-muted-foreground">
             {formatRelativeTime(data.health.database.lastChecked)}
           </span>

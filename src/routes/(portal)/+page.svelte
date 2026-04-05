@@ -6,13 +6,13 @@ import RefreshCwIcon from "lucide-svelte/icons/refresh-cw";
 import ShieldAlertIcon from "lucide-svelte/icons/shield-alert";
 import { enhance } from "$app/forms";
 import { invalidateAll } from "$app/navigation";
+import ConfirmDialog from "$lib/components/ConfirmDialog.svelte";
 import CopyableField from "$lib/components/CopyableField.svelte";
 import QRCodeDisplay from "$lib/components/QRCodeDisplay.svelte";
 import * as Alert from "$lib/components/ui/alert";
 import { Badge } from "$lib/components/ui/badge";
 import { Button } from "$lib/components/ui/button";
 import * as Card from "$lib/components/ui/card";
-import * as Dialog from "$lib/components/ui/dialog";
 import * as Tabs from "$lib/components/ui/tabs";
 import type { PlatformUrlResult } from "$lib/url/platforms";
 
@@ -293,34 +293,25 @@ function enhanceDownload() {
               </Button>
             </form>
 
-            <Dialog.Root bind:open={confirmRefreshOpen}>
-              <Dialog.Trigger>
-                {#snippet child({ props })}
-                  <Button variant="outline" {...props}>
-                    <RefreshCwIcon class="mr-2 h-4 w-4" />
-                    Refresh Credentials
+            <ConfirmDialog
+              bind:open={confirmRefreshOpen}
+              title="Refresh Credentials?"
+              description="This will generate a new password for your streaming account. Your current URLs will stop working and you'll need to update your players with the new credentials."
+            >
+              {#snippet trigger({ props })}
+                <Button variant="outline" {...props}>
+                  <RefreshCwIcon class="mr-2 h-4 w-4" />
+                  Refresh Credentials
+                </Button>
+              {/snippet}
+              {#snippet confirm()}
+                <form method="POST" action="?/refreshCredentials" use:enhance={enhanceRefresh}>
+                  <Button variant="destructive" type="submit" disabled={refreshing}>
+                    {refreshing ? "Refreshing…" : "Confirm Refresh"}
                   </Button>
-                {/snippet}
-              </Dialog.Trigger>
-              <Dialog.Content>
-                <Dialog.Header>
-                  <Dialog.Title>Refresh Credentials?</Dialog.Title>
-                  <Dialog.Description>
-                    This will generate a new password for your streaming account. Your current URLs will stop working and you'll need to update your players with the new credentials.
-                  </Dialog.Description>
-                </Dialog.Header>
-                <Dialog.Footer>
-                  <Button variant="outline" onclick={() => (confirmRefreshOpen = false)}>
-                    Cancel
-                  </Button>
-                  <form method="POST" action="?/refreshCredentials" use:enhance={enhanceRefresh}>
-                    <Button variant="destructive" type="submit" disabled={refreshing}>
-                      {refreshing ? "Refreshing…" : "Confirm Refresh"}
-                    </Button>
-                  </form>
-                </Dialog.Footer>
-              </Dialog.Content>
-            </Dialog.Root>
+                </form>
+              {/snippet}
+            </ConfirmDialog>
           </div>
         </Tabs.Content>
 

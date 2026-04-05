@@ -10,6 +10,7 @@ export const load: LayoutServerLoad = async ({ locals }) => {
       plexUsername: locals.user.plex_username,
       plexThumb: locals.user.plex_thumb,
       provisioningMode: locals.user.provisioning_mode,
+      isActive: locals.user.is_active === 1,
     },
   };
 };

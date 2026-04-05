@@ -8,8 +8,8 @@ import UsersIcon from "lucide-svelte/icons/users";
 import { enhance } from "$app/forms";
 import { goto } from "$app/navigation";
 import { page } from "$app/state";
+import StatusBadge from "$lib/components/StatusBadge.svelte";
 import * as Avatar from "$lib/components/ui/avatar";
-import { Badge } from "$lib/components/ui/badge";
 import { Button } from "$lib/components/ui/button";
 import * as Dialog from "$lib/components/ui/dialog";
 import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
@@ -83,19 +83,7 @@ function getStatus(m: UserMapping): "active" | "inactive" | "orphaned" {
   return "active";
 }
 
-function statusBadgeVariant(status: "active" | "inactive" | "orphaned") {
-  if (status === "active") return "default" as const;
-  if (status === "inactive") return "secondary" as const;
-  return "destructive" as const;
-}
-
-function modeBadgeVariant(mode: ProvisioningMode) {
-  if (mode === "automatic") return "default" as const;
-  if (mode === "self_managed") return "outline" as const;
-  return "secondary" as const;
-}
-
-function modeLabel(mode: ProvisioningMode): string {
+function modeLabelText(mode: ProvisioningMode): string {
   if (mode === "automatic") return "Automatic";
   if (mode === "self_managed") return "Self-managed";
   return "Staff";
@@ -179,7 +167,7 @@ function makeActionEnhance() {
     >
       <Select.Trigger class="w-[160px]">
         <span data-slot="select-value">
-          {data.filters.mode === "all" ? "All modes" : modeLabel(data.filters.mode as ProvisioningMode)}
+          {data.filters.mode === "all" ? "All modes" : modeLabelText(data.filters.mode as ProvisioningMode)}
         </span>
       </Select.Trigger>
       <Select.Content>
@@ -237,14 +225,10 @@ function makeActionEnhance() {
                 {m.dispatcharr_username ?? "\u2014"}
               </Table.Cell>
               <Table.Cell>
-                <Badge variant={modeBadgeVariant(m.provisioning_mode)} class="text-xs">
-                  {modeLabel(m.provisioning_mode)}
-                </Badge>
+                <StatusBadge mode={m.provisioning_mode} />
               </Table.Cell>
               <Table.Cell>
-                <Badge variant={statusBadgeVariant(status)} class="text-xs capitalize">
-                  {status}
-                </Badge>
+                <StatusBadge {status} />
               </Table.Cell>
               <Table.Cell class="text-xs text-muted-foreground whitespace-nowrap">
                 {formatRelativeTime(m.last_accessed_at)}
@@ -408,7 +392,7 @@ function makeActionEnhance() {
 
         <div class="grid grid-cols-[140px_1fr] gap-x-3 gap-y-2">
           <span class="text-muted-foreground">Provisioning Mode</span>
-          <Badge variant={modeBadgeVariant(m.provisioning_mode)} class="w-fit text-xs">{modeLabel(m.provisioning_mode)}</Badge>
+          <StatusBadge mode={m.provisioning_mode} class="w-fit" />
 
           <span class="text-muted-foreground">Active</span>
           <span>{m.is_active === 1 ? "Yes" : "No"}</span>

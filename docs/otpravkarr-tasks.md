@@ -1072,30 +1072,30 @@ These components should accept server-derived props first. If multiple children 
 
 ### 18.1 — Unit tests (Vitest)
 
-- [ ] `src/lib/crypto/__tests__/` — encryption round-trips, key derivation, password hashing, bootstrap tokens
-- [ ] `src/lib/db/__tests__/` — repository functions with in-memory SQLite
-- [ ] `src/lib/plex/__tests__/` — client wrapper with mocked `@ctrl/plex`
-- [ ] `src/lib/dispatcharr/__tests__/` — REST client with mocked `ofetch`
-- [ ] `src/lib/bridge/__tests__/` — provisioning and lifecycle logic with mocked dependencies
-- [ ] `src/lib/url/__tests__/` — URL generation, M3U output, template substitution
-- [ ] `src/lib/server/__tests__/` — CSRF validation, rate limiting
-- [ ] `src/lib/scheduler/__tests__/` — job runner with mock jobs
+- [x] `src/lib/crypto/__tests__/` — encryption round-trips, key derivation, password hashing, bootstrap tokens
+- [x] `src/lib/db/__tests__/` — repository functions with in-memory SQLite
+- [x] `src/lib/plex/__tests__/` — client wrapper with mocked `@ctrl/plex`
+- [x] `src/lib/dispatcharr/__tests__/` — REST client with mocked `ofetch`
+- [x] `src/lib/bridge/__tests__/` — provisioning and lifecycle logic with mocked dependencies
+- [x] `src/lib/url/__tests__/` — URL generation, M3U output, template substitution
+- [x] `src/lib/server/__tests__/` — CSRF validation, rate limiting
+- [x] `src/lib/scheduler/__tests__/` — job runner with mock jobs
 
 ### 18.2 — Component tests (Vitest + Testing Library)
 
-- [ ] Test shadcn-svelte wrapper components render correctly
-- [ ] Test `CopyableField` copies to clipboard
-- [ ] Test `SetupWizard` step navigation
-- [ ] Test form components validate input
+- [x] Test shadcn-svelte wrapper components render correctly
+- [x] Test `CopyableField` copies to clipboard
+- [x] Test `SetupWizard` step navigation
+- [x] Test form components validate input
 
 ### 18.3 — E2E tests (Playwright)
 
-- [ ] `e2e/setup.spec.ts` — full first-run onboarding flow
-- [ ] `e2e/admin-login.spec.ts` — admin authentication
-- [ ] `e2e/admin-dashboard.spec.ts` — dashboard loads with health data
-- [ ] `e2e/admin-users.spec.ts` — user management CRUD
-- [ ] `e2e/portal-oauth.spec.ts` — Plex OAuth login flow (mocked Plex endpoints)
-- [ ] `e2e/portal-urls.spec.ts` — streaming URL display and copy
+- [x] `e2e/setup.spec.ts` — full first-run onboarding flow
+- [x] `e2e/admin-login.spec.ts` — admin authentication
+- [x] `e2e/admin-dashboard.spec.ts` — dashboard loads with health data
+- [x] `e2e/admin-users.spec.ts` — user management CRUD
+- [x] `e2e/portal-oauth.spec.ts` — Plex OAuth login flow (mocked Plex endpoints)
+- [x] `e2e/portal-urls.spec.ts` — streaming URL display and copy
 
 ---
 

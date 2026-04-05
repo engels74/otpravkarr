@@ -37,10 +37,13 @@ export const GET: RequestHandler = async () => {
           health.dispatcharr.reachable && health.dispatcharr.authValid
             ? "connected"
             : "disconnected",
+        reachable: health.dispatcharr.reachable,
+        authValid: health.dispatcharr.authValid,
         lastChecked: health.dispatcharr.lastChecked,
       },
       database: {
         status: health.database.status,
+        lastChecked: health.database.lastChecked,
       },
     },
     uptime,

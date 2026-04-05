@@ -65,7 +65,10 @@ describe("GET /api/health", () => {
     expect(body.uptime).toBeGreaterThanOrEqual(0);
     expect(body.checks.plex.status).toBe("healthy");
     expect(body.checks.dispatcharr.status).toBe("connected");
+    expect(body.checks.dispatcharr.reachable).toBe(true);
+    expect(body.checks.dispatcharr.authValid).toBe(true);
     expect(body.checks.database.status).toBe("healthy");
+    expect(body.checks.database.lastChecked).toBe("2026-01-01T00:00:00.000Z");
   });
 
   it("returns degraded when plex is unreachable", async () => {
@@ -110,6 +113,8 @@ describe("GET /api/health", () => {
     expect(response.status).toBe(200);
     expect(body.status).toBe("degraded");
     expect(body.checks.dispatcharr.status).toBe("disconnected");
+    expect(body.checks.dispatcharr.reachable).toBe(true);
+    expect(body.checks.dispatcharr.authValid).toBe(false);
   });
 
   it("computes uptime from server start time", async () => {

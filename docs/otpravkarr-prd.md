@@ -2,7 +2,7 @@
 
 > **Status:** Draft v0.2 — Qualified against `@ctrl/plex` and Dispatcharr REST API documentation
 > **License:** AGPL-3.0
-> **Last updated:** 2026-03-30
+> **Last updated:** 2026-04-05
 
 ---
 
@@ -38,6 +38,8 @@ The application is a single SvelteKit server that handles three concerns:
 3. **Persistence** — all state lives in a single SQLite database file, with field-level encryption for sensitive values
 
 Deployment is a single Docker container or a bare `bun run build && bun run start`. No orchestration required.
+
+Request-scoped auth and health remain server-authoritative. Admin/user identity is resolved in `hooks.server.ts` and exposed through `event.locals` plus server `load` functions, while health is produced by in-process scheduler jobs. Any shared Svelte 5 state modules under `src/lib/state/` are client-side mirrors hydrated from `load` data for extracted UI components; they do not replace auth guards, `event.locals`, or scheduler-owned state.
 
 ---
 
@@ -174,6 +176,16 @@ Pure functions for URL and playlist generation:
 
 No side effects, no network calls. Takes credentials + config + channel list in, returns strings out.
 
+### `lib/state`
+
+Client-side shared Svelte 5 state modules for extracted UI and layout-group composition:
+
+- Mirror small server-derived snapshots such as current admin identity, current portal user identity, or current dashboard health data
+- Hydrate from `+layout.svelte` / `+page.svelte` using existing `load` output
+- Reduce prop drilling across extracted components inside a single client tree when plain props become awkward
+
+These modules are never the source of truth for authentication, authorization, or scheduler results. Do not use them to carry request-specific data across requests, and do not import them into `hooks.server.ts` or `+*.server.ts` as an authority layer.
+
 ### `lib/server`
 
 Shared server-side utilities:
@@ -199,6 +211,7 @@ Two distinct auth contexts, strictly separated.
 - Session: secure, httpOnly, sameSite cookie containing a short-lived JWT
 - Managed in SvelteKit's `hooks.server.ts`
 - Has full access to all settings, user mappings, audit logs, and system health
+- Client-side admin UI may mirror the current username for presentation, but `hooks.server.ts`, `event.locals.admin`, and `requireAdmin()` remain authoritative
 
 ### 6.2 User Auth
 
@@ -213,6 +226,7 @@ Two distinct auth contexts, strictly separated.
   7. User sees their portal with ready-to-use streaming URLs
 - Users never create a password on otpravkarr. Their identity is their Plex identity
 - The only password associated with them (for "automatic" type users) is the auto-generated XC credential on Dispatcharr, which they never type — they just copy a URL
+- Client-side portal UI may mirror the current Plex identity for presentation, but `event.locals.user`, `requireUser()`, and server `load` functions remain authoritative
 
 ### 6.3 Dispatcharr Account Provisioning Modes
 
@@ -298,6 +312,7 @@ Separate from sync, on a shorter interval (default: 5 minutes):
 - **SQLite health:** Attempt a simple write-and-read cycle to confirm the database is not locked or corrupted.
 
 Results exposed on the admin dashboard and via a `/api/health` endpoint.
+Client-side dashboard components may mirror a health snapshot after a `load` function runs, but the scheduler job state remains the source of truth.
 
 ---
 
@@ -415,6 +430,7 @@ src/
 │   │   ├── m3u.ts              # M3U playlist generation (consumes channel list from lib/dispatcharr)
 │   │   ├── platforms.ts        # Platform-specific variants
 │   │   └── discover.ts         # XC surface discovery probe (used during setup)
+│   ├── state/              # Client-side shared state mirrors for extracted UI
 │   └── server/             # Shared server utilities
 │       ├── auth.ts             # Auth guards (admin, user, setup-gate)
 │       ├── csrf.ts             # CSRF origin validation
@@ -444,6 +460,8 @@ src/
 ```
 
 Two SvelteKit layout groups (`(admin)` and `(portal)`) enforce different auth guards, navigation, and visual treatment while sharing the same component library and build output.
+
+Server-derived data should continue to enter those layout groups through `load` functions and props by default. If extracted components inside a layout group start sharing the same small client-side snapshot, the parent layout or page may hydrate a `lib/state` mirror for that client tree.
 
 The `setup/` route lives outside both layout groups and is only accessible when no admin account exists.
 

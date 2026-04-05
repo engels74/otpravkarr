@@ -16,5 +16,6 @@
     "verbatimModuleSyntax": true,
     "moduleResolution": "bundler",
     "types": ["bun-types"]
-  }
+  },
+  "exclude": ["src/**/__tests__/**"]
 }

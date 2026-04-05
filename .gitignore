@@ -24,3 +24,9 @@ vite.config.ts.timestamp-*
 
 # SQLite data
 /data
+
+# Playwright auth state
+e2e/.auth/
+
+# Playwright test results
+test-results/

@@ -1103,33 +1103,30 @@ These components should accept server-derived props first. If multiple children 
 
 ### 19.1 — README.md
 
-- [ ] Project overview and purpose
-- [ ] Prerequisites (Bun ≥ 1.2, Docker optional)
-- [ ] Quick start: `bun install`, set `OTPRAVKARR_SECRET`, `bun --bun run dev`
-- [ ] Environment variables reference table
-- [ ] First-run onboarding instructions
-- [ ] Docker deployment instructions
-- [ ] Architecture overview referencing PRD
-- [ ] API reference (health endpoint)
-- [ ] License (AGPL-3.0)
+- [x] Project overview and purpose
+- [x] Prerequisites (Bun ≥ 1.2, Docker optional)
+- [x] Quick start: `bun install`, set `OTPRAVKARR_SECRET`, `bun --bun run dev`
+- [x] Environment variables reference table
+- [x] First-run onboarding instructions
+- [x] Docker deployment instructions
+- [x] Architecture overview referencing PRD
+- [x] API reference (health endpoint)
+- [x] License (AGPL-3.0)
 
 ### 19.2 — CONTRIBUTING.md
 
-- [ ] Development setup steps
-- [ ] Coding standards reference (link to `bun-svelte-pro.md`)
-- [ ] Testing commands (`bun run test`, `bun run test:e2e`)
-- [ ] PR guidelines
+- [x] ~~Skipped per user request~~ — no CONTRIBUTING.md
 
 ### 19.3 — Production deployment checklist
 
-- [ ] Set strong `OTPRAVKARR_SECRET` (≥ 32 random bytes, base64 encoded)
-- [ ] Configure `ORIGIN` to match actual deployment URL
-- [ ] Mount persistent volume for `./data` directory (SQLite file)
-- [ ] Place behind reverse proxy with TLS termination
-- [ ] Configure reverse proxy to pass `X-Forwarded-For` for rate limiting
-- [ ] Set `PROTOCOL_HEADER` and `HOST_HEADER` for adapter-bun behind a proxy
-- [ ] Verify bootstrap token appears in container logs on first run
-- [ ] Complete setup wizard immediately after first start
+- [x] Set strong `OTPRAVKARR_SECRET` (≥ 32 random bytes, base64 encoded)
+- [x] Configure `ORIGIN` to match actual deployment URL
+- [x] Mount persistent volume for `./data` directory (SQLite file)
+- [x] Place behind reverse proxy with TLS termination
+- [x] Configure reverse proxy to pass `X-Forwarded-For` for rate limiting
+- [x] Set `PROTOCOL_HEADER` and `HOST_HEADER` for adapter-bun behind a proxy
+- [x] Verify bootstrap token appears in container logs on first run
+- [x] Complete setup wizard immediately after first start
 
 ---
 

@@ -944,39 +944,52 @@ All sensitive data handling depends on this module. It must be built and tested 
 
 ## Phase 14 — Shared Svelte 5 State Modules (`src/lib/state/`)
 
+This phase is an extraction/enablement phase for shared client-side UI state, not a replacement for server-owned auth or health state.
+
+- `event.locals`, `requireAdmin()`, `requireUser()`, and server `load` functions remain authoritative for sessions and user identity
+- Scheduler job state remains authoritative for system health; `src/lib/state/health.svelte.ts` only mirrors snapshots already sent to the client
+- Prefer props first. Use these modules when extracted components inside a layout/page client tree would otherwise need repeated prop drilling
+
 ### 14.1 — Admin session state (`src/lib/state/admin-session.svelte.ts`)
 
-- [ ] Export proxy object pattern (per coding guidelines):
+- [x] Export proxy object pattern (per coding guidelines):
   ```ts
   export const adminSession = $state<{ username: string | null; loggedIn: boolean }>({
     username: null,
     loggedIn: false
   });
   ```
-- [ ] Export `setAdminSession()` and `clearAdminSession()` mutator functions
-- [ ] Never reassign the exported binding — mutate properties only
+- [x] Export `setAdminSession()` and `clearAdminSession()` mutator functions
+- [x] Never reassign the exported binding — mutate properties only
+- [ ] Hydrate from `(admin)` layout/page `data` inside client `.svelte` files only when extracted admin UI needs shared client access
+- [ ] Do not use this module as the authority for auth; `requireAdmin()`, `event.locals.admin`, and server `load` data remain authoritative
 
 ### 14.2 — User session state (`src/lib/state/user-session.svelte.ts`)
 
-- [ ] Export proxy object for user portal session
-- [ ] Track Plex identity, provisioning mode, active status
+- [x] Export proxy object for user portal session
+- [x] Track Plex identity, provisioning mode, active status
+- [ ] Hydrate from `(portal)` layout `data` inside client `.svelte` files only when extracted portal UI needs shared client access
+- [ ] Do not use this module as the authority for auth; `requireUser()`, `event.locals.user`, and server `load` data remain authoritative
 
 ### 14.3 — Health status state (`src/lib/state/health.svelte.ts`)
 
-- [ ] Export proxy object for system health indicators
-- [ ] Updated by health check job results (passed from server to client via load functions)
-- [ ] Use `$state.raw` for large immutable data (e.g., friend lists) to avoid deep-proxy overhead
+- [x] Export proxy object for system health indicators
+- [ ] Mirror health snapshots from admin dashboard `load` data inside client `.svelte` files when shared health UI is extracted
+- [ ] Keep scheduler job state as the source of truth; do not wire the health job directly to `src/lib/state/health.svelte.ts`
+- [ ] Use `$state.raw` only for future large immutable client-side collections (e.g., friend lists), not the current small health snapshot store
 
 ---
 
 ## Phase 15 — Shared UI Components (`src/lib/components/`)
 
+These components should accept server-derived props first. If multiple children inside the same client layout/page need the same small snapshot, hydrate the relevant Phase 14 mirror in the parent `.svelte` file and let the extracted components read from it there.
+
 ### 15.1 — Application shell components
 
 - [ ] `AppLogo.svelte` — application logo/wordmark
-- [ ] `AdminSidebar.svelte` — admin navigation sidebar using shadcn-svelte Sidebar
-- [ ] `PortalHeader.svelte` — user portal top bar
-- [ ] `HealthBadge.svelte` — color-coded health status indicator
+- [ ] `AdminSidebar.svelte` — admin navigation sidebar using shadcn-svelte Sidebar; accepts server-derived props first and may optionally read hydrated `adminSession` within the `(admin)` client tree
+- [ ] `PortalHeader.svelte` — user portal top bar; accepts server-derived props first and may optionally read hydrated `userSession` within the `(portal)` client tree
+- [ ] `HealthBadge.svelte` — color-coded health status indicator; accepts health/status props first and may optionally read hydrated `healthStatus` within a shared dashboard client tree
 - [ ] `StatusBadge.svelte` — user status badge (active/inactive/orphaned)
 
 ### 15.2 — Feature components
@@ -994,6 +1007,8 @@ All sensitive data handling depends on this module. It must be built and tested 
 - [ ] All components use snippets (`Snippet` from `svelte`) instead of slots
 - [ ] All components use `cn()` for class composition
 - [ ] Follow shadcn-svelte component patterns — `class` prop via `$props`, `{@render children?.()}`
+- [ ] Prefer props for server-derived data; introduce Phase 14 shared state only to reduce prop drilling inside a client layout/page subtree
+- [ ] Never make `src/lib/state/*.svelte.ts` authoritative for request-scoped auth, `event.locals`, or scheduler-owned health data
 
 ---
 
@@ -1011,6 +1026,7 @@ All sensitive data handling depends on this module. It must be built and tested 
   </div>
   ```
 - [ ] No UnoCSS import here (imported in `hooks.client.ts` per Safari-safe pattern)
+- [ ] Keep the root layout stateless; hydrate any Phase 14 client mirrors inside route/layout `.svelte` files that already receive `load` data, not in the root layout or server hooks
 
 ### 16.2 — Error page (`src/routes/+error.svelte`)
 
@@ -1135,7 +1151,7 @@ The phases above are ordered by dependency. The recommended implementation seque
 12. **Phase 11** — Admin dashboard
 13. **Phase 12** — User portal
 14. **Phase 13** — API routes
-15. **Phase 14-16** — Shared state, components, layout
+15. **Phase 14-16** — Shared client-state mirrors, components, layout
 16. **Phase 17** — Security hardening
 17. **Phase 18** — Testing (tests written alongside each phase, full suite assembled here)
 18. **Phase 19** — Documentation and deployment

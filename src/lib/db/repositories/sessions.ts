@@ -49,6 +49,20 @@ export function deleteSession(id: string): void {
 }
 
 /**
+ * Refresh a session's expiry by extending it from now.
+ * Used for sliding session refresh on each valid request.
+ */
+export function refreshSession(id: string, ttlSeconds: number): void {
+  const db = getDb();
+  const expiresAt = new Date(Date.now() + ttlSeconds * 1000)
+    .toISOString()
+    .replace("T", " ")
+    .replace(/\.\d{3}Z$/, "");
+
+  db.prepare("UPDATE sessions SET expires_at = ? WHERE id = ?").run(expiresAt, id);
+}
+
+/**
  * Delete all expired sessions.
  * Returns the number of sessions deleted.
  */

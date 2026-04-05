@@ -7,14 +7,21 @@ import { createBootstrapToken } from "$lib/crypto/bootstrap";
 import { initializeDatabase } from "$lib/db/connection";
 import { getAdminByUsername } from "$lib/db/repositories/admin";
 import { getConfig } from "$lib/db/repositories/config";
-import { getSession } from "$lib/db/repositories/sessions";
+import { getSession, refreshSession } from "$lib/db/repositories/sessions";
 import { getUserMappingById } from "$lib/db/repositories/users";
 import { createAuditRotationJob } from "$lib/scheduler/jobs/audit-rotation";
 import { createCleanupJob } from "$lib/scheduler/jobs/cleanup";
 import { createHealthJob } from "$lib/scheduler/jobs/health";
 import { createSyncJob } from "$lib/scheduler/jobs/sync";
 import { scheduler } from "$lib/scheduler/runner";
-import { isSetupComplete, SESSION_COOKIE_NAME } from "$lib/server/auth";
+import {
+  ADMIN_COOKIE_OPTIONS,
+  ADMIN_SESSION_TTL,
+  isSetupComplete,
+  SESSION_COOKIE_NAME,
+  USER_COOKIE_OPTIONS,
+  USER_SESSION_TTL,
+} from "$lib/server/auth";
 import { validateOrigin } from "$lib/server/csrf";
 import { validateEnv } from "$lib/server/env";
 import { createRequestLogger } from "$lib/server/logging";
@@ -145,12 +152,16 @@ const sessionResolver: Handle = async ({ event, resolve }) => {
     const admin = getAdminByUsername(session.user_ref);
     event.locals.admin = admin ? { id: admin.id, username: admin.username } : null;
     event.locals.user = null;
+    refreshSession(session.id, ADMIN_SESSION_TTL);
+    event.cookies.set(SESSION_COOKIE_NAME, sessionId, ADMIN_COOKIE_OPTIONS);
   } else if (session.session_type === "user") {
     const userId = /^\d+$/.test(session.user_ref)
       ? Number.parseInt(session.user_ref, 10)
       : Number.NaN;
     event.locals.user = Number.isNaN(userId) ? null : getUserMappingById(userId);
     event.locals.admin = null;
+    refreshSession(session.id, USER_SESSION_TTL);
+    event.cookies.set(SESSION_COOKIE_NAME, sessionId, USER_COOKIE_OPTIONS);
   } else {
     event.locals.session = null;
     event.locals.admin = null;
@@ -203,6 +214,15 @@ const csrfValidator: Handle = async ({ event, resolve }) => {
   return resolve(event);
 };
 
+const securityHeaders: Handle = async ({ event, resolve }) => {
+  const response = await resolve(event);
+  response.headers.set("X-Frame-Options", "DENY");
+  response.headers.set("X-Content-Type-Options", "nosniff");
+  response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  response.headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  return response;
+};
+
 const requestLogger = createRequestLogger();
 
 export const handle = sequence(
@@ -212,4 +232,5 @@ export const handle = sequence(
   setupGate,
   sessionResolver,
   csrfValidator,
+  securityHeaders,
 );

@@ -1040,31 +1040,31 @@ These components should accept server-derived props first. If multiple children 
 
 ### 17.1 — Cookie configuration
 
-- [ ] Admin session cookie: `secure: true`, `httpOnly: true`, `sameSite: 'strict'`, `path: '/'`, `maxAge: 3600` (1 hour)
-- [ ] User session cookie: `secure: true`, `httpOnly: true`, `sameSite: 'lax'` (Plex OAuth callback may be cross-origin), `path: '/'`, `maxAge: 14400` (4 hours)
-- [ ] Session sliding refresh: extend on each valid request
+- [x] Admin session cookie: `secure: true`, `httpOnly: true`, `sameSite: 'strict'`, `path: '/'`, `maxAge: 3600` (1 hour)
+- [x] User session cookie: `secure: true`, `httpOnly: true`, `sameSite: 'lax'` (Plex OAuth callback may be cross-origin), `path: '/'`, `maxAge: 14400` (4 hours)
+- [x] Session sliding refresh: extend on each valid request
 
 ### 17.2 — Content Security Policy
 
-- [ ] Set CSP headers via SvelteKit hooks or adapter config
-- [ ] Allow scripts from self, styles from self, images from Plex CDN (user avatars)
-- [ ] Block inline scripts (may need nonce strategy for SvelteKit hydration)
+- [x] Set CSP headers via SvelteKit hooks or adapter config
+- [x] Allow scripts from self, styles from self, images from Plex CDN (user avatars)
+- [x] Block inline scripts (may need nonce strategy for SvelteKit hydration)
 
 ### 17.3 — Master key rotation CLI
 
-- [ ] Implement `scripts/rotate-key.ts`:
-  - [ ] Accept old and new `OTPRAVKARR_SECRET` values
-  - [ ] Open database, read all encrypted fields
-  - [ ] Decrypt with old key, re-encrypt with new key
-  - [ ] Write back to database in a transaction
+- [x] Implement `scripts/rotate-key.ts`:
+  - [x] Accept old and new `OTPRAVKARR_SECRET` values
+  - [x] Open database, read all encrypted fields
+  - [x] Decrypt with old key, re-encrypt with new key
+  - [x] Write back to database in a transaction
 - [ ] Document in README
 
 ### 17.4 — Input validation
 
-- [ ] Use Zod schemas for all form inputs (via Superforms)
-- [ ] Validate Dispatcharr API responses defensively with Zod
-- [ ] Validate Plex friend list response shape with Zod
-- [ ] Sanitize all user-provided strings before database insertion
+- [x] Use Zod schemas for all form inputs (via Superforms)
+- [x] Validate Dispatcharr API responses defensively with Zod
+- [x] Validate Plex friend list response shape with Zod
+- [x] Sanitize all user-provided strings before database insertion
 
 ---
 

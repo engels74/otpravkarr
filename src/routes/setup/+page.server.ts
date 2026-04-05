@@ -25,10 +25,16 @@ import {
 } from "$lib/server/auth";
 import { parseAndNormalizeOrigins } from "$lib/server/origins";
 import { setupLimiter } from "$lib/server/ratelimit";
+import {
+  CreateAdminSchema,
+  DefaultsSchema,
+  DispatcharrConfigSchema,
+  OriginsSchema,
+  PlexTokenSchema,
+  sanitizeString,
+} from "$lib/server/validation";
 import { probeXcSurface } from "$lib/url/discover";
 
-const USERNAME_PATTERN = /^[a-zA-Z0-9_-]{3,32}$/;
-const MIN_PASSWORD_LENGTH = 12;
 const SETUP_CLAIMED_CONFIG_KEY = "setup_claimed";
 const SETUP_CLAIM_PROOF_CONFIG_KEY = "setup_claim_proof";
 const SETUP_CLAIMED_AT_CONFIG_KEY = "setup_claimed_at";
@@ -255,30 +261,22 @@ export const actions: Actions = {
     }
 
     const formData = await request.formData();
-    const username = String(formData.get("username") ?? "").trim();
-    const password = String(formData.get("password") ?? "");
-    const confirmPassword = String(formData.get("confirmPassword") ?? "");
+    const parsed = CreateAdminSchema.safeParse({
+      username: sanitizeString(String(formData.get("username") ?? "")),
+      password: String(formData.get("password") ?? ""),
+      confirmPassword: String(formData.get("confirmPassword") ?? ""),
+    });
 
-    if (!USERNAME_PATTERN.test(username)) {
+    if (!parsed.success) {
+      const issue = parsed.error.issues[0];
+      const field = issue?.path[0] as string | undefined;
       return fail(400, {
-        error: "Username must be 3-32 characters (letters, numbers, underscore, dash)",
-        field: "username",
+        error: issue?.message ?? "Invalid input",
+        field: field ?? "username",
       });
     }
 
-    if (password.length < MIN_PASSWORD_LENGTH) {
-      return fail(400, {
-        error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters`,
-        field: "password",
-      });
-    }
-
-    if (password !== confirmPassword) {
-      return fail(400, {
-        error: "Passwords do not match",
-        field: "confirmPassword",
-      });
-    }
+    const { username, password } = parsed.data;
 
     const adminPasswordHash = await hashAdminPassword(password);
     try {
@@ -309,13 +307,18 @@ export const actions: Actions = {
 
     try {
       if (plexMode === "token") {
-        const plexToken = String(formData.get("plexToken") ?? "").trim();
-        const plexServerUrl = String(formData.get("plexServerUrl") ?? "").trim();
+        const tokenResult = PlexTokenSchema.safeParse({
+          plexToken: sanitizeString(String(formData.get("plexToken") ?? "")),
+          plexServerUrl: sanitizeString(String(formData.get("plexServerUrl") ?? "")),
+        });
 
-        if (!plexToken || !plexServerUrl) {
-          return fail(400, { error: "Plex token and server URL are required" });
+        if (!tokenResult.success) {
+          return fail(400, {
+            error: tokenResult.error.issues[0]?.message ?? "Plex token and server URL are required",
+          });
         }
 
+        const { plexToken, plexServerUrl } = tokenResult.data;
         const serverInfo = await validateServerToken(plexServerUrl, plexToken);
 
         await Promise.all([
@@ -391,13 +394,18 @@ export const actions: Actions = {
     }
 
     const formData = await request.formData();
-    const dispatcharrUrl = String(formData.get("dispatcharrUrl") ?? "").trim();
-    const dispatcharrApiKey = String(formData.get("dispatcharrApiKey") ?? "").trim();
+    const dcResult = DispatcharrConfigSchema.safeParse({
+      dispatcharrUrl: sanitizeString(String(formData.get("dispatcharrUrl") ?? "")),
+      dispatcharrApiKey: sanitizeString(String(formData.get("dispatcharrApiKey") ?? "")),
+    });
 
-    if (!dispatcharrUrl || !dispatcharrApiKey) {
-      return fail(400, { error: "Dispatcharr URL and API key are required" });
+    if (!dcResult.success) {
+      return fail(400, {
+        error: dcResult.error.issues[0]?.message ?? "Dispatcharr URL and API key are required",
+      });
     }
 
+    const { dispatcharrUrl, dispatcharrApiKey } = dcResult.data;
     const client = new DispatcharrClient(dispatcharrUrl, dispatcharrApiKey);
 
     const healthResult = await createHealthEndpoints(client).checkHealth();
@@ -443,9 +451,20 @@ export const actions: Actions = {
     }
 
     const formData = await request.formData();
-    const rawOrigins = String(formData.get("allowedOrigins") ?? "");
+    const originsResult = OriginsSchema.safeParse({
+      allowedOrigins: sanitizeString(String(formData.get("allowedOrigins") ?? "")),
+    });
 
-    const { origins: normalizedOrigins, invalidOrigin } = parseAndNormalizeOrigins(rawOrigins, ",");
+    if (!originsResult.success) {
+      return fail(400, {
+        error: originsResult.error.issues[0]?.message ?? "At least one origin is required",
+      });
+    }
+
+    const { origins: normalizedOrigins, invalidOrigin } = parseAndNormalizeOrigins(
+      originsResult.data.allowedOrigins,
+      ",",
+    );
     if (invalidOrigin) {
       return fail(400, { error: `Invalid origin: ${invalidOrigin}` });
     }
@@ -483,29 +502,34 @@ export const actions: Actions = {
     }
 
     const formData = await request.formData();
-    const defaultGroupId = String(formData.get("defaultGroupId") ?? "").trim();
-    const defaultProfileId = String(formData.get("defaultProfileId") ?? "").trim();
-    const syncInterval = String(formData.get("syncInterval") ?? "").trim();
-    const defaultProvisioningMode = String(formData.get("defaultProvisioningMode") ?? "").trim();
+    const defaultsResult = DefaultsSchema.safeParse({
+      defaultGroupId: sanitizeString(String(formData.get("defaultGroupId") ?? "")),
+      defaultProfileId: sanitizeString(String(formData.get("defaultProfileId") ?? "")),
+      syncInterval: sanitizeString(String(formData.get("syncInterval") ?? "")),
+      defaultProvisioningMode: sanitizeString(
+        String(formData.get("defaultProvisioningMode") ?? ""),
+      ),
+    });
 
-    const syncMinutes = Number(syncInterval);
-    if (!Number.isFinite(syncMinutes) || syncMinutes < 1 || syncMinutes > 1440) {
+    if (!defaultsResult.success) {
+      const issue = defaultsResult.error.issues[0];
+      const field = issue?.path[0] as string | undefined;
       return fail(400, {
-        error: "Sync interval must be a number between 1 and 1440",
-        field: "syncInterval",
+        error: issue?.message ?? "Invalid input",
+        field: field ?? "syncInterval",
       });
     }
 
-    if (defaultProvisioningMode !== "automatic" && defaultProvisioningMode !== "self_managed") {
-      return fail(400, {
-        error: "Provisioning mode must be 'automatic' or 'self_managed'",
-        field: "defaultProvisioningMode",
-      });
-    }
+    const {
+      defaultGroupId,
+      defaultProfileId,
+      syncInterval: syncMinutes,
+      defaultProvisioningMode,
+    } = defaultsResult.data;
 
     await Promise.all([
-      setConfig("default_group_id", defaultGroupId),
-      setConfig("default_profile_id", defaultProfileId),
+      setConfig("default_group_id", defaultGroupId ?? ""),
+      setConfig("default_profile_id", defaultProfileId ?? ""),
       setConfig("sync_interval_minutes", String(syncMinutes)),
       setConfig("default_provisioning_mode", defaultProvisioningMode),
       setConfig(SETUP_COMPLETED_CONFIG_KEY, SETUP_COMPLETED_VALUE),

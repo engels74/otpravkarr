@@ -77,7 +77,7 @@ async function seed() {
     ["plex_machine_id", "e2e-machine-id"],
     ["dispatcharr_url", "http://localhost:5001"],
     ["dispatcharr_api_key", "fake-dispatcharr-key-for-e2e"],
-    ["allowed_origins", "http://localhost:4173"],
+    ["allowed_origins", JSON.stringify(["http://localhost:4173"])],
     ["default_group_id", "1"],
     ["default_profile_id", ""],
     ["sync_interval_minutes", "15"],

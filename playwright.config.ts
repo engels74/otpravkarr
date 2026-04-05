@@ -59,7 +59,9 @@ export default defineConfig({
       "bun ./build/index.js",
     ].join(" && "),
     port: E2E_PORT,
-    reuseExistingServer: !process.env.CI,
+    // Always launch a fresh E2E server so each run uses its seeded temp DB
+    // and never attaches to an arbitrary pre-existing process on 4173.
+    reuseExistingServer: false,
     env: {
       OTPRAVKARR_SECRET: "e2e-test-secret-that-is-at-least-32-characters-long",
       DATABASE_PATH: testDbPath,

@@ -1,0 +1,29 @@
+<script lang="ts">
+import LogOutIcon from "lucide-svelte/icons/log-out";
+import AppLogo from "$lib/components/AppLogo.svelte";
+import PlexAvatar from "$lib/components/PlexAvatar.svelte";
+import { Button } from "$lib/components/ui/button";
+
+interface Props {
+  plexUsername: string;
+  plexThumb: string | null;
+  class?: string;
+}
+
+let { plexUsername, plexThumb, class: className }: Props = $props();
+</script>
+
+<header class="flex h-14 items-center justify-between border-b border-[hsl(var(--border))] px-4 {className ?? ''}">
+  <AppLogo />
+
+  <div class="flex items-center gap-3">
+    <PlexAvatar thumbUrl={plexThumb} username={plexUsername} size="sm" />
+    <span class="text-sm text-[hsl(var(--muted-foreground))]">{plexUsername}</span>
+
+    <form method="POST" action="/api/internal/signout">
+      <Button variant="ghost" size="icon" type="submit" aria-label="Sign out">
+        <LogOutIcon class="h-4 w-4" />
+      </Button>
+    </form>
+  </div>
+</header>

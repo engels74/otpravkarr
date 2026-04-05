@@ -961,22 +961,22 @@ This phase is an extraction/enablement phase for shared client-side UI state, no
   ```
 - [x] Export `setAdminSession()` and `clearAdminSession()` mutator functions
 - [x] Never reassign the exported binding — mutate properties only
-- [ ] Hydrate from `(admin)` layout/page `data` inside client `.svelte` files only when extracted admin UI needs shared client access
-- [ ] Do not use this module as the authority for auth; `requireAdmin()`, `event.locals.admin`, and server `load` data remain authoritative
+- [x] Hydrate from `(admin)` layout/page `data` inside client `.svelte` files only when extracted admin UI needs shared client access
+- [x] Do not use this module as the authority for auth; `requireAdmin()`, `event.locals.admin`, and server `load` data remain authoritative
 
 ### 14.2 — User session state (`src/lib/state/user-session.svelte.ts`)
 
 - [x] Export proxy object for user portal session
 - [x] Track Plex identity, provisioning mode, active status
-- [ ] Hydrate from `(portal)` layout `data` inside client `.svelte` files only when extracted portal UI needs shared client access
-- [ ] Do not use this module as the authority for auth; `requireUser()`, `event.locals.user`, and server `load` data remain authoritative
+- [x] Hydrate from `(portal)` layout `data` inside client `.svelte` files only when extracted portal UI needs shared client access
+- [x] Do not use this module as the authority for auth; `requireUser()`, `event.locals.user`, and server `load` data remain authoritative
 
 ### 14.3 — Health status state (`src/lib/state/health.svelte.ts`)
 
 - [x] Export proxy object for system health indicators
-- [ ] Mirror health snapshots from admin dashboard `load` data inside client `.svelte` files when shared health UI is extracted
-- [ ] Keep scheduler job state as the source of truth; do not wire the health job directly to `src/lib/state/health.svelte.ts`
-- [ ] Use `$state.raw` only for future large immutable client-side collections (e.g., friend lists), not the current small health snapshot store
+- [x] Mirror health snapshots from admin dashboard `load` data inside client `.svelte` files when shared health UI is extracted
+- [x] Keep scheduler job state as the source of truth; do not wire the health job directly to `src/lib/state/health.svelte.ts`
+- [x] Use `$state.raw` only for future large immutable client-side collections (e.g., friend lists), not the current small health snapshot store
 
 ---
 
@@ -986,29 +986,29 @@ These components should accept server-derived props first. If multiple children 
 
 ### 15.1 — Application shell components
 
-- [ ] `AppLogo.svelte` — application logo/wordmark
-- [ ] `AdminSidebar.svelte` — admin navigation sidebar using shadcn-svelte Sidebar; accepts server-derived props first and may optionally read hydrated `adminSession` within the `(admin)` client tree
-- [ ] `PortalHeader.svelte` — user portal top bar; accepts server-derived props first and may optionally read hydrated `userSession` within the `(portal)` client tree
-- [ ] `HealthBadge.svelte` — color-coded health status indicator; accepts health/status props first and may optionally read hydrated `healthStatus` within a shared dashboard client tree
-- [ ] `StatusBadge.svelte` — user status badge (active/inactive/orphaned)
+- [x] `AppLogo.svelte` — application logo/wordmark
+- [x] `AdminSidebar.svelte` — admin navigation sidebar using shadcn-svelte Sidebar; accepts server-derived props first and may optionally read hydrated `adminSession` within the `(admin)` client tree
+- [x] `PortalHeader.svelte` — user portal top bar; accepts server-derived props first and may optionally read hydrated `userSession` within the `(portal)` client tree
+- [x] `HealthBadge.svelte` — color-coded health status indicator; accepts health/status props first and may optionally read hydrated `healthStatus` within a shared dashboard client tree
+- [x] `StatusBadge.svelte` — user status badge (active/inactive/orphaned)
 
 ### 15.2 — Feature components
 
-- [ ] `CopyableField.svelte` — text field with "Copy to clipboard" button (for streaming URLs)
-- [ ] `QRCodeDisplay.svelte` — renders QR code from URL string (client-side generation)
-- [ ] `PlexAvatar.svelte` — user avatar from Plex thumb URL with fallback
-- [ ] `SetupWizard.svelte` — multi-step wizard container with step indicators
-- [ ] `ConfirmDialog.svelte` — confirmation modal for destructive actions (wraps shadcn Dialog)
+- [x] `CopyableField.svelte` — text field with "Copy to clipboard" button (for streaming URLs)
+- [x] `QRCodeDisplay.svelte` — renders QR code from URL string (client-side generation)
+- [x] `PlexAvatar.svelte` — user avatar from Plex thumb URL with fallback
+- [x] `SetupWizard.svelte` — multi-step wizard container with step indicators
+- [x] `ConfirmDialog.svelte` — confirmation modal for destructive actions (wraps shadcn Dialog)
 
 ### 15.3 — Component patterns
 
-- [ ] All components use Svelte 5 runes only (`$props`, `$state`, `$derived`, `$effect`)
-- [ ] All components use `interface Props` and `$props<Props>()` for typed props
-- [ ] All components use snippets (`Snippet` from `svelte`) instead of slots
-- [ ] All components use `cn()` for class composition
-- [ ] Follow shadcn-svelte component patterns — `class` prop via `$props`, `{@render children?.()}`
-- [ ] Prefer props for server-derived data; introduce Phase 14 shared state only to reduce prop drilling inside a client layout/page subtree
-- [ ] Never make `src/lib/state/*.svelte.ts` authoritative for request-scoped auth, `event.locals`, or scheduler-owned health data
+- [x] All components use Svelte 5 runes only (`$props`, `$state`, `$derived`, `$effect`)
+- [x] All components use `interface Props` and `$props<Props>()` for typed props
+- [x] All components use snippets (`Snippet` from `svelte`) instead of slots
+- [x] All components use `cn()` for class composition
+- [x] Follow shadcn-svelte component patterns — `class` prop via `$props`, `{@render children?.()}`
+- [x] Prefer props for server-derived data; introduce Phase 14 shared state only to reduce prop drilling inside a client layout/page subtree
+- [x] Never make `src/lib/state/*.svelte.ts` authoritative for request-scoped auth, `event.locals`, or scheduler-owned health data
 
 ---
 

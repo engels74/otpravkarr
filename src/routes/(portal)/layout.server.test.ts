@@ -50,6 +50,7 @@ describe("portal layout server load", () => {
         plexUsername: "testuser",
         plexThumb: "https://plex.tv/users/abc/avatar",
         provisioningMode: "automatic",
+        isActive: true,
       },
     });
   });
@@ -67,6 +68,7 @@ describe("portal layout server load", () => {
         plexUsername: "testuser",
         plexThumb: "https://plex.tv/users/abc/avatar",
         provisioningMode: "self_managed",
+        isActive: true,
       },
     });
   });

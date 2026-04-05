@@ -20,9 +20,7 @@ import * as Card from "$lib/components/ui/card";
       </p>
     </Card.Content>
     <Card.Footer>
-      <a href="/" class="w-full">
-        <Button variant="outline" class="w-full">Go home</Button>
-      </a>
+      <Button href="/" variant="outline" class="w-full">Go home</Button>
     </Card.Footer>
   </Card.Root>
 </div>

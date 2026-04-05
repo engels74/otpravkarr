@@ -20,8 +20,8 @@ vi.mock("@sveltejs/kit", () => ({
   redirect: (status: number, location: string) => {
     throw { type: "redirect", status, location };
   },
-  error: (status: number) => {
-    throw { type: "error", status };
+  error: (status: number, body?: unknown) => {
+    throw { type: "error", status, body };
   },
 }));
 
@@ -30,12 +30,12 @@ vi.mock("@sveltejs/kit", () => ({
 // ---------------------------------------------------------------------------
 
 vi.mock("$lib/db/repositories/sessions", () => ({
-  getSession: (id: string) => mockSession,
+  getSession: (_id: string) => mockSession,
 }));
 
 vi.mock("$lib/db/repositories/admin", () => ({
   adminExists: () => mockAdminExists,
-  getAdminByUsername: (username: string) => mockAdmin,
+  getAdminByUsername: (_username: string) => mockAdmin,
 }));
 
 vi.mock("$lib/db/repositories/config", () => ({
@@ -43,7 +43,7 @@ vi.mock("$lib/db/repositories/config", () => ({
 }));
 
 vi.mock("$lib/db/repositories/users", () => ({
-  getUserMappingById: (id: number) => mockUser,
+  getUserMappingById: (_id: number) => mockUser,
 }));
 
 vi.mock("$app/environment", () => ({
@@ -57,6 +57,7 @@ vi.mock("$app/environment", () => ({
 
 const {
   requireAdmin,
+  requireAdminApi,
   requireUser,
   requireSetupIncomplete,
   isSetupComplete,
@@ -277,6 +278,100 @@ describe("auth guards", () => {
 
       try {
         await requireAdmin(event);
+      } catch {
+        // expected
+      }
+
+      expect(deleteSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // requireAdminApi
+  // -----------------------------------------------------------------------
+
+  describe("requireAdminApi", () => {
+    it("throws error(401) when no cookie", async () => {
+      const { event } = createMockEvent(undefined);
+
+      try {
+        await requireAdminApi(event);
+        expect.unreachable("should have thrown");
+      } catch (e: unknown) {
+        const err = e as { type: string; status: number; body: { message: string } };
+        expect(err.type).toBe("error");
+        expect(err.status).toBe(401);
+        expect(err.body).toEqual({ message: "Unauthorized" });
+      }
+    });
+
+    it("throws error(401) when session not found", async () => {
+      mockSession = null;
+      const { event, deleteSpy } = createMockEvent("bad-session-id");
+
+      try {
+        await requireAdminApi(event);
+        expect.unreachable("should have thrown");
+      } catch (e: unknown) {
+        const err = e as { type: string; status: number; body: { message: string } };
+        expect(err.type).toBe("error");
+        expect(err.status).toBe(401);
+        expect(err.body).toEqual({ message: "Unauthorized" });
+      }
+
+      expect(deleteSpy).not.toHaveBeenCalled();
+    });
+
+    it("throws error(401) when session type is 'user' not 'admin'", async () => {
+      mockSession = { ...validUserSession };
+      const { event, deleteSpy } = createMockEvent("sess-user-1");
+
+      try {
+        await requireAdminApi(event);
+        expect.unreachable("should have thrown");
+      } catch (e: unknown) {
+        const err = e as { type: string; status: number; body: { message: string } };
+        expect(err.type).toBe("error");
+        expect(err.status).toBe(401);
+        expect(err.body).toEqual({ message: "Unauthorized" });
+      }
+
+      expect(deleteSpy).not.toHaveBeenCalled();
+    });
+
+    it("throws error(401) when admin not found by username", async () => {
+      mockSession = { ...validAdminSession };
+      mockAdmin = null;
+      const { event, deleteSpy } = createMockEvent("sess-admin-1");
+
+      try {
+        await requireAdminApi(event);
+        expect.unreachable("should have thrown");
+      } catch (e: unknown) {
+        const err = e as { type: string; status: number; body: { message: string } };
+        expect(err.type).toBe("error");
+        expect(err.status).toBe(401);
+        expect(err.body).toEqual({ message: "Unauthorized" });
+      }
+
+      expect(deleteSpy).not.toHaveBeenCalled();
+    });
+
+    it("returns AdminAccount on valid admin session", async () => {
+      mockSession = { ...validAdminSession };
+      mockAdmin = { ...validAdmin };
+      const { event } = createMockEvent("sess-admin-1");
+
+      const result = await requireAdminApi(event);
+
+      expect(result).toEqual(validAdmin);
+    });
+
+    it("does not delete cookie on any failure path", async () => {
+      const { event, deleteSpy } = createMockEvent(undefined);
+
+      try {
+        await requireAdminApi(event);
       } catch {
         // expected
       }

@@ -18,13 +18,18 @@ import { isSetupComplete, SESSION_COOKIE_NAME } from "$lib/server/auth";
 import { validateOrigin } from "$lib/server/csrf";
 import { validateEnv } from "$lib/server/env";
 import { createRequestLogger } from "$lib/server/logging";
+import { markServerStarted } from "$lib/server/uptime";
 
 let runtimeInitialization: Promise<void> | null = null;
 
 async function registerSchedulerJobs(): Promise<void> {
   const syncJob = await createSyncJob();
+  const healthJob = createHealthJob();
+
+  await healthJob.fn();
+
   scheduler.register(syncJob);
-  scheduler.register(createHealthJob());
+  scheduler.register(healthJob);
   scheduler.register(createCleanupJob());
   scheduler.register(createAuditRotationJob());
   scheduler.start();
@@ -62,6 +67,7 @@ async function ensureRuntimeInitialized(): Promise<void> {
       if (!building) {
         await registerSchedulerJobs();
         await printBootstrapBanner();
+        markServerStarted();
       }
     })();
   }

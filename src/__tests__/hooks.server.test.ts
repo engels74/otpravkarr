@@ -89,7 +89,11 @@ vi.mock("$lib/scheduler/jobs/cleanup", () => ({
 }));
 
 vi.mock("$lib/scheduler/jobs/health", () => ({
-  createHealthJob: () => ({ id: "health" }),
+  createHealthJob: () => ({
+    name: "health-check",
+    interval: 5 * 60 * 1000,
+    fn: vi.fn(async () => {}),
+  }),
 }));
 
 vi.mock("$lib/scheduler/jobs/sync", () => ({

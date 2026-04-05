@@ -52,6 +52,25 @@ export async function requireAdmin(event: RequestEvent): Promise<AdminAccount> {
   return admin;
 }
 
+export async function requireAdminApi(event: RequestEvent): Promise<AdminAccount> {
+  const sessionId = event.cookies.get(SESSION_COOKIE_NAME);
+  if (!sessionId) {
+    throw error(401, { message: "Unauthorized" });
+  }
+
+  const session = getSession(sessionId);
+  if (!session || session.session_type !== "admin") {
+    throw error(401, { message: "Unauthorized" });
+  }
+
+  const admin = getAdminByUsername(session.user_ref);
+  if (!admin) {
+    throw error(401, { message: "Unauthorized" });
+  }
+
+  return admin;
+}
+
 export async function requireUser(event: RequestEvent): Promise<UserMapping> {
   const sessionId = event.cookies.get(SESSION_COOKIE_NAME);
   if (!sessionId) {

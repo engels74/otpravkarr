@@ -917,8 +917,8 @@ All sensitive data handling depends on this module. It must be built and tested 
 
 ### 13.1 — Health endpoint (`src/routes/api/health/+server.ts`)
 
-- [ ] `GET /api/health` — public endpoint (no auth required)
-- [ ] Returns JSON:
+- [x] `GET /api/health` — public endpoint (no auth required)
+- [x] Returns JSON:
   ```ts
   {
     status: 'ok' | 'degraded' | 'unhealthy',
@@ -931,14 +931,14 @@ All sensitive data handling depends on this module. It must be built and tested 
     version: string
   }
   ```
-- [ ] Read health state from scheduler job results
+- [x] Read health state from scheduler job results
 
 ### 13.2 — Internal API endpoints (`src/routes/api/internal/`)
 
-- [ ] `POST /api/internal/sync` — trigger immediate sync (admin auth required)
-- [ ] `POST /api/internal/rotate-credentials/[id]` — rotate a specific user's credentials (admin auth required)
-- [ ] `GET /api/internal/plex-friends` — return current Plex friend list (admin auth required)
-- [ ] All internal endpoints require admin session validation
+- [x] `POST /api/internal/sync` — trigger immediate sync (admin auth required)
+- [x] `POST /api/internal/rotate-credentials/[id]` — rotate a specific user's credentials (admin auth required)
+- [x] `GET /api/internal/plex-friends` — return current Plex friend list (admin auth required)
+- [x] All internal endpoints require admin session validation
 
 ---
 

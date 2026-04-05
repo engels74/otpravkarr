@@ -73,6 +73,17 @@ class MockStatement {
       return { changes: before - sessionRows.length };
     }
 
+    if (sql.includes("UPDATE sessions SET expires_at")) {
+      const newExpiry = params[0] as string;
+      const id = params[1] as string;
+      const row = sessionRows.find((r) => r.id === id);
+      if (row) {
+        row.expires_at = newExpiry;
+        return { changes: 1 };
+      }
+      return { changes: 0 };
+    }
+
     return { changes: 0 };
   }
 }
@@ -102,9 +113,8 @@ vi.mock("../connection", () => ({
   getDb: () => mockDb,
 }));
 
-const { createSession, getSession, deleteSession, deleteExpiredSessions } = await import(
-  "../repositories/sessions"
-);
+const { createSession, getSession, deleteSession, deleteExpiredSessions, refreshSession } =
+  await import("../repositories/sessions");
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -190,6 +200,38 @@ describe("sessions repository", () => {
 
     it("does not throw for non-existent session", () => {
       expect(() => deleteSession("nope")).not.toThrow();
+    });
+  });
+
+  describe("refreshSession", () => {
+    it("extends the session expiry from now", () => {
+      const id = createSession("ref", "admin", 60);
+      const rowBefore = sessionRows.find((r) => r.id === id);
+      const expiryBefore = rowBefore?.expires_at;
+
+      const before = Date.now();
+      refreshSession(id, 7200);
+      const after = Date.now();
+
+      const rowAfter = sessionRows.find((r) => r.id === id);
+      expect(rowAfter?.expires_at).not.toBe(expiryBefore);
+
+      const expiresMs = new Date(`${(rowAfter?.expires_at ?? "").replace(" ", "T")}Z`).getTime();
+      expect(expiresMs).toBeGreaterThanOrEqual(before + 7200 * 1000 - 1000);
+      expect(expiresMs).toBeLessThanOrEqual(after + 7200 * 1000 + 1000);
+    });
+
+    it("does not throw for non-existent session", () => {
+      expect(() => refreshSession("does-not-exist", 3600)).not.toThrow();
+    });
+
+    it("keeps session retrievable after refresh", () => {
+      const id = createSession("ref", "user", 3600);
+      refreshSession(id, 7200);
+
+      const session = getSession(id);
+      expect(session).not.toBeNull();
+      expect(session?.id).toBe(id);
     });
   });
 

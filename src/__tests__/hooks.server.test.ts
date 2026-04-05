@@ -74,6 +74,7 @@ vi.mock("$lib/db/repositories/config", () => ({
 
 vi.mock("$lib/db/repositories/sessions", () => ({
   getSession: () => mockSession,
+  refreshSession: vi.fn(),
 }));
 
 vi.mock("$lib/db/repositories/users", () => ({
@@ -109,6 +110,22 @@ vi.mock("$lib/scheduler/runner", () => ({
 
 vi.mock("$lib/server/auth", () => ({
   SESSION_COOKIE_NAME: "otpravkarr_session",
+  ADMIN_SESSION_TTL: 3600,
+  USER_SESSION_TTL: 14400,
+  ADMIN_COOKIE_OPTIONS: {
+    path: "/",
+    httpOnly: true,
+    secure: true,
+    sameSite: "strict",
+    maxAge: 3600,
+  },
+  USER_COOKIE_OPTIONS: {
+    path: "/",
+    httpOnly: true,
+    secure: true,
+    sameSite: "lax",
+    maxAge: 14400,
+  },
   isSetupComplete: () => true,
 }));
 
@@ -155,6 +172,7 @@ function createMockEvent(sessionId: string | undefined = undefined) {
   return {
     cookies: {
       get: (name: string) => (name === "otpravkarr_session" ? sessionId : undefined),
+      set: vi.fn(),
     },
     locals: {} as App.Locals,
     request: new Request("http://localhost/dashboard", { method: "GET" }),

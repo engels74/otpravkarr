@@ -7,6 +7,7 @@ import { createSession } from "$lib/db/repositories/sessions";
 import { AuditAction } from "$lib/db/types";
 import { ADMIN_COOKIE_OPTIONS, ADMIN_SESSION_TTL, SESSION_COOKIE_NAME } from "$lib/server/auth";
 import { loginLimiter } from "$lib/server/ratelimit";
+import { LoginSchema, sanitizeString } from "$lib/server/validation";
 
 const DASHBOARD_PATH = "/dashboard";
 
@@ -27,12 +28,16 @@ export const actions: Actions = {
     }
 
     const formData = await request.formData();
-    const username = String(formData.get("username") ?? "").trim();
-    const password = String(formData.get("password") ?? "");
+    const result = LoginSchema.safeParse({
+      username: sanitizeString(String(formData.get("username") ?? "")),
+      password: String(formData.get("password") ?? ""),
+    });
 
-    if (!username || !password) {
+    if (!result.success) {
       return fail(400, { error: "missing_credentials" });
     }
+
+    const { username, password } = result.data;
 
     const admin = getAdminByUsername(username);
     if (!admin) {

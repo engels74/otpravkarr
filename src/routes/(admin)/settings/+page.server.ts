@@ -10,9 +10,8 @@ import { createSyncJob } from "$lib/scheduler/jobs/sync";
 import { scheduler } from "$lib/scheduler/runner";
 import { requireAdmin } from "$lib/server/auth";
 import { parseAndNormalizeOrigins } from "$lib/server/origins";
+import { AuditRetentionSchema, SyncIntervalSchema, sanitizeString } from "$lib/server/validation";
 import type { Actions, PageServerLoad } from "./$types";
-
-const MAX_SYNC_INTERVAL_MINUTES = 1440;
 
 export const load: PageServerLoad = async (event) => {
   await requireAdmin(event);
@@ -76,8 +75,8 @@ export const actions: Actions = {
     await requireAdmin(event);
     const { request, locals, getClientAddress } = event;
     const fd = await request.formData();
-    const serverUrl = String(fd.get("plex_server_url") ?? "").trim();
-    const newToken = String(fd.get("plex_admin_token") ?? "").trim();
+    const serverUrl = sanitizeString(String(fd.get("plex_server_url") ?? ""));
+    const newToken = sanitizeString(String(fd.get("plex_admin_token") ?? ""));
     const [currentServerUrl, currentToken, currentMachineId] = await Promise.all([
       getConfig("plex_server_url"),
       getConfig("plex_admin_token"),
@@ -132,8 +131,8 @@ export const actions: Actions = {
     await requireAdmin(event);
     const { request, locals, getClientAddress } = event;
     const fd = await request.formData();
-    const url = String(fd.get("dispatcharr_url") ?? "").trim();
-    const newKey = String(fd.get("dispatcharr_api_key") ?? "").trim();
+    const url = sanitizeString(String(fd.get("dispatcharr_url") ?? ""));
+    const newKey = sanitizeString(String(fd.get("dispatcharr_api_key") ?? ""));
     const [currentUrl, currentKey] = await Promise.all([
       getConfig("dispatcharr_url"),
       getConfig("dispatcharr_api_key"),
@@ -187,15 +186,19 @@ export const actions: Actions = {
     await requireAdmin(event);
     const { request, locals, getClientAddress } = event;
     const fd = await request.formData();
-    const raw = String(fd.get("sync_interval_minutes") ?? "").trim();
-    const interval = Number.parseInt(raw, 10);
+    const syncResult = SyncIntervalSchema.safeParse({
+      interval: sanitizeString(String(fd.get("sync_interval_minutes") ?? "")),
+    });
 
-    if (!Number.isFinite(interval) || interval < 1 || interval > MAX_SYNC_INTERVAL_MINUTES) {
+    if (!syncResult.success) {
       return fail(400, {
-        error: `Sync interval must be a number between 1 and ${MAX_SYNC_INTERVAL_MINUTES}`,
+        error:
+          syncResult.error.issues[0]?.message ??
+          "Sync interval must be a number between 1 and 1440",
       });
     }
 
+    const interval = syncResult.data.interval;
     const actor = locals.admin?.username ?? "unknown";
 
     await setConfig("sync_interval_minutes", String(interval));
@@ -249,13 +252,18 @@ export const actions: Actions = {
     await requireAdmin(event);
     const { request, locals, getClientAddress } = event;
     const fd = await request.formData();
-    const raw = String(fd.get("audit_retention_days") ?? "").trim();
-    const days = Number.parseInt(raw, 10);
+    const retentionResult = AuditRetentionSchema.safeParse({
+      days: sanitizeString(String(fd.get("audit_retention_days") ?? "")),
+    });
 
-    if (!Number.isFinite(days) || days < 1) {
-      return fail(400, { error: "Retention days must be a positive integer" });
+    if (!retentionResult.success) {
+      return fail(400, {
+        error:
+          retentionResult.error.issues[0]?.message ?? "Retention days must be a positive integer",
+      });
     }
 
+    const days = retentionResult.data.days;
     const actor = locals.admin?.username ?? "unknown";
 
     await setConfig("audit_retention_days", String(days));

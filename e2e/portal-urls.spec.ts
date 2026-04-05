@@ -47,11 +47,10 @@ test.describe("Portal streaming URLs", () => {
     await expect(button).toHaveAttribute("type", "submit");
   });
 
-  test("Plex auth callback route exists", async ({ page }) => {
-    // The /auth/plex route handles the OAuth callback.
-    // Without proper OAuth state, it should error gracefully.
+  test("Plex auth callback without session returns 400", async ({ page }) => {
+    // The callback requires an OAuth session cookie.
+    // Missing session is a client error, not an internal server error.
     const response = await page.goto("/auth/plex");
-    // Should return an error status (400 or 500) since no OAuth state is present
-    expect(response?.status()).toBeGreaterThanOrEqual(400);
+    expect(response?.status()).toBe(400);
   });
 });

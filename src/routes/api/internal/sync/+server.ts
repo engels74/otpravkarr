@@ -29,12 +29,6 @@ export const POST: RequestHandler = async (event) => {
     const client = new DispatcharrClient(dispatcharrUrl, apiKey);
     const report = await reconcileSync(client, plexAdminToken);
 
-    try {
-      appendAuditLog({ action: AuditAction.SYNC_COMPLETED, detail: { report } });
-    } catch {
-      // audit log failure should not break the response
-    }
-
     return Response.json({ ok: true, report }, { status: 200 });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

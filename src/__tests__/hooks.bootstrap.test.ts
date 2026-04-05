@@ -13,6 +13,9 @@ const mocks = vi.hoisted(() => ({
   createBootstrapToken: vi.fn(() => "bootstrap-token"),
   initializeDatabase: vi.fn(async () => {}),
   validateEnv: vi.fn(),
+  runStartupHealthProbe: vi.fn(async () => {}),
+  schedulerRegister: vi.fn(),
+  schedulerStart: vi.fn(),
 }));
 
 vi.mock("@sveltejs/kit/hooks", () => ({
@@ -94,7 +97,11 @@ vi.mock("$lib/scheduler/jobs/cleanup", () => ({
 }));
 
 vi.mock("$lib/scheduler/jobs/health", () => ({
-  createHealthJob: () => ({ id: "health" }),
+  createHealthJob: () => ({
+    name: "health-check",
+    interval: 5 * 60 * 1000,
+    fn: mocks.runStartupHealthProbe,
+  }),
 }));
 
 vi.mock("$lib/scheduler/jobs/sync", () => ({
@@ -103,8 +110,8 @@ vi.mock("$lib/scheduler/jobs/sync", () => ({
 
 vi.mock("$lib/scheduler/runner", () => ({
   scheduler: {
-    register: vi.fn(),
-    start: vi.fn(),
+    register: mocks.schedulerRegister,
+    start: mocks.schedulerStart,
   },
 }));
 
@@ -150,6 +157,9 @@ beforeEach(() => {
   mocks.createBootstrapToken.mockClear();
   mocks.initializeDatabase.mockClear();
   mocks.validateEnv.mockClear();
+  mocks.runStartupHealthProbe.mockClear();
+  mocks.schedulerRegister.mockClear();
+  mocks.schedulerStart.mockClear();
   vi.resetModules();
 });
 
@@ -186,5 +196,26 @@ describe("hooks bootstrap token recovery", () => {
     } finally {
       logSpy.mockRestore();
     }
+  });
+
+  it("runs startup health probe before resolving the first request", async () => {
+    state.setupComplete = true;
+    const resolve = vi.fn(async () => new Response(null, { status: 200 }));
+
+    const { handle } = await import("../hooks.server");
+    const response = await handle({
+      event: createMockEvent("/api/health"),
+      resolve,
+    });
+
+    expect(response.status).toBe(200);
+    expect(mocks.runStartupHealthProbe).toHaveBeenCalledOnce();
+    expect(resolve).toHaveBeenCalledOnce();
+    const healthProbeCallOrder = mocks.runStartupHealthProbe.mock.invocationCallOrder[0];
+    const resolveCallOrder = resolve.mock.invocationCallOrder[0];
+
+    expect(healthProbeCallOrder).toBeDefined();
+    expect(resolveCallOrder).toBeDefined();
+    expect(healthProbeCallOrder!).toBeLessThan(resolveCallOrder!);
   });
 });

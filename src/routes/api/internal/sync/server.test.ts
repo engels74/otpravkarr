@@ -122,7 +122,7 @@ describe("POST /api/internal/sync", () => {
     expect(body).toEqual({ ok: true, report });
   });
 
-  it("appends SYNC_COMPLETED audit log on success", async () => {
+  it("does not duplicate SYNC_COMPLETED audit log on success", async () => {
     mocks.requireAdminApi.mockResolvedValueOnce({ id: 1, username: "admin" });
     mocks.getConfig.mockImplementation((key: string) => {
       const config: Record<string, string> = {
@@ -134,14 +134,22 @@ describe("POST /api/internal/sync", () => {
     });
 
     const report = { newFriends: 0, disabled: 0, orphaned: 0, refreshed: 0, errors: [] };
-    mocks.reconcileSync.mockResolvedValueOnce(report);
+    mocks.reconcileSync.mockImplementationOnce(async () => {
+      // reconcileSync writes sync.completed; route should not write another one.
+      mocks.appendAuditLog({
+        action: "sync.completed",
+        detail: report,
+      });
+      return report;
+    });
 
     const { POST } = await import("./+server");
     await POST(createEvent());
 
+    expect(mocks.appendAuditLog).toHaveBeenCalledTimes(1);
     expect(mocks.appendAuditLog).toHaveBeenCalledWith({
       action: "sync.completed",
-      detail: { report },
+      detail: report,
     });
   });
 

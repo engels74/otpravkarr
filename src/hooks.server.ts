@@ -24,8 +24,12 @@ let runtimeInitialization: Promise<void> | null = null;
 
 async function registerSchedulerJobs(): Promise<void> {
   const syncJob = await createSyncJob();
+  const healthJob = createHealthJob();
+
+  await healthJob.fn();
+
   scheduler.register(syncJob);
-  scheduler.register(createHealthJob());
+  scheduler.register(healthJob);
   scheduler.register(createCleanupJob());
   scheduler.register(createAuditRotationJob());
   scheduler.start();

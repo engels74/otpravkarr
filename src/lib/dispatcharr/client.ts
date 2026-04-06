@@ -37,8 +37,12 @@ export class DispatcharrClient {
     }
     const url = `${this.baseUrl}${normalizedPath}`;
 
+    const isIdempotent = method === "GET" || method === "HEAD";
+
     const fetchOptions: FetchOptions = {
       method,
+      timeout: 15_000,
+      retry: isIdempotent ? 1 : 0,
       headers: {
         Authorization: `ApiKey ${this.apiKey}`,
       },

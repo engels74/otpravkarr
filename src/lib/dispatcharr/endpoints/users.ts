@@ -1,8 +1,11 @@
+import { z } from "zod";
+
 import type { DispatcharrClient } from "../client";
 import { DispatcharrUserSchema, paginatedSchema } from "../schemas";
 import type { DispatcharrResult, DispatcharrUser, PaginatedResponse } from "../types";
 
 const userPageSchema = paginatedSchema(DispatcharrUserSchema);
+const flatArraySchema = z.array(DispatcharrUserSchema);
 
 /**
  * Fields accepted by POST /api/accounts/users/ per the Dispatcharr OpenAPI spec.
@@ -38,7 +41,7 @@ export type UpdateUserData = Partial<{
   last_name: string;
 }>;
 
-export function listUsers(
+export async function listUsers(
   client: DispatcharrClient,
   page?: number,
   pageSize?: number,
@@ -50,7 +53,29 @@ export function listUsers(
   const qs = params.toString();
   const path = `/api/accounts/users/${qs ? `?${qs}` : ""}`;
 
-  return client.request("GET", path, { schema: userPageSchema });
+  // When pagination params are provided, expect paginated envelope
+  if (qs) {
+    return client.request("GET", path, { schema: userPageSchema });
+  }
+
+  // No pagination params — API may return flat array or paginated envelope
+  const result = await client.request<unknown>("GET", path);
+  if (!result.ok) return result;
+
+  // Try paginated first
+  const paginated = userPageSchema.safeParse(result.data);
+  if (paginated.success) return { ok: true, data: paginated.data };
+
+  // Try flat array
+  const flat = flatArraySchema.safeParse(result.data);
+  if (flat.success) {
+    return {
+      ok: true,
+      data: { count: flat.data.length, next: null, previous: null, results: flat.data },
+    };
+  }
+
+  return { ok: false, error: "unexpected_shape" as const, message: paginated.error.message };
 }
 
 export function createUser(

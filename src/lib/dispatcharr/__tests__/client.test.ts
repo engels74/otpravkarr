@@ -95,6 +95,8 @@ describe("DispatcharrClient.request", () => {
 
     expect(mockOfetch).toHaveBeenCalledWith("https://dispatch.example.com/api/test/", {
       method: "GET",
+      timeout: 15_000,
+      retry: 1,
       headers: { Authorization: "ApiKey my-api-key" },
     });
   });
@@ -251,5 +253,89 @@ describe("DispatcharrClient.request", () => {
     const result = await client.request("GET", "/api/resource/");
 
     expect(result.ok).toBe(false);
+  });
+
+  it("passes timeout: 15_000 on all requests", async () => {
+    mockOfetch.mockResolvedValueOnce({});
+    const client = createClient();
+
+    await client.request("POST", "/api/resource/", { body: { x: 1 } });
+
+    expect(mockOfetch).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ timeout: 15_000 }),
+    );
+  });
+
+  it("passes retry: 1 for GET requests", async () => {
+    mockOfetch.mockResolvedValueOnce({});
+    const client = createClient();
+
+    await client.request("GET", "/api/resource/");
+
+    expect(mockOfetch).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ retry: 1 }),
+    );
+  });
+
+  it("passes retry: 1 for HEAD requests", async () => {
+    mockOfetch.mockResolvedValueOnce({});
+    const client = createClient();
+
+    await client.request("HEAD", "/api/resource/");
+
+    expect(mockOfetch).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ retry: 1 }),
+    );
+  });
+
+  it("passes retry: 0 for POST requests", async () => {
+    mockOfetch.mockResolvedValueOnce({});
+    const client = createClient();
+
+    await client.request("POST", "/api/resource/", { body: {} });
+
+    expect(mockOfetch).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ retry: 0 }),
+    );
+  });
+
+  it("passes retry: 0 for PATCH requests", async () => {
+    mockOfetch.mockResolvedValueOnce({});
+    const client = createClient();
+
+    await client.request("PATCH", "/api/resource/1/", { body: {} });
+
+    expect(mockOfetch).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ retry: 0 }),
+    );
+  });
+
+  it("passes retry: 0 for PUT requests", async () => {
+    mockOfetch.mockResolvedValueOnce({});
+    const client = createClient();
+
+    await client.request("PUT", "/api/resource/1/", { body: {} });
+
+    expect(mockOfetch).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ retry: 0 }),
+    );
+  });
+
+  it("passes retry: 0 for DELETE requests", async () => {
+    mockOfetch.mockResolvedValueOnce({});
+    const client = createClient();
+
+    await client.request("DELETE", "/api/resource/1/");
+
+    expect(mockOfetch).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ retry: 0 }),
+    );
   });
 });

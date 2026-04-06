@@ -63,7 +63,7 @@ beforeEach(() => {
 });
 
 describe("listUsers", () => {
-  it("fetches paginated users with default params", async () => {
+  it("handles paginated response without params", async () => {
     const user = makeUser();
     mockOfetch.mockResolvedValueOnce(makePaginatedResponse([user]));
     const client = createClient();
@@ -79,6 +79,22 @@ describe("listUsers", () => {
       "https://dispatch.example.com/api/accounts/users/",
       expect.objectContaining({ method: "GET" }),
     );
+  });
+
+  it("handles flat array response without params", async () => {
+    const user = makeUser();
+    mockOfetch.mockResolvedValueOnce([user]);
+    const client = createClient();
+
+    const result = await listUsers(client);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.results).toEqual([user]);
+      expect(result.data.count).toBe(1);
+      expect(result.data.next).toBeNull();
+      expect(result.data.previous).toBeNull();
+    }
   });
 
   it("passes page and pageSize as query params", async () => {

@@ -1,6 +1,7 @@
 <script lang="ts">
 import type { ActionResult } from "@sveltejs/kit";
 import { enhance } from "$app/forms";
+import { invalidateAll } from "$app/navigation";
 import { Badge } from "$lib/components/ui/badge";
 import { Button } from "$lib/components/ui/button";
 import * as Card from "$lib/components/ui/card";
@@ -39,23 +40,17 @@ function makeEnhance(section: string) {
   return () => {
     sectionSubmitting[section] = true;
     delete sectionMessage[section];
-    return async ({
-      result,
-      update,
-    }: {
-      result: ActionResult;
-      update: (opts?: { reset?: boolean }) => Promise<void>;
-    }) => {
+    return async ({ result }: { result: ActionResult }) => {
       sectionSubmitting[section] = false;
       if (result.type === "success") {
+        await invalidateAll();
         sectionMessage[section] = { type: "success", text: "Settings saved successfully." };
-        await update({ reset: false });
       } else if (result.type === "failure") {
         const errorMsg =
           (result.data as { error?: string } | undefined)?.error ?? "An error occurred.";
         sectionMessage[section] = { type: "error", text: errorMsg };
       } else {
-        await update({ reset: false });
+        await invalidateAll();
       }
     };
   };

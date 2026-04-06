@@ -159,7 +159,7 @@ export async function provisionUser(
       createUser(client, {
         username: sanitizedUsername,
         password,
-        is_staff: request.mode === "staff",
+        ...(request.mode === "staff" && { is_staff: true }),
       }),
     isTransientResultError,
   );

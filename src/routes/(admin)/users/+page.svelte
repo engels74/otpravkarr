@@ -134,6 +134,10 @@ function makeActionEnhance() {
 }
 </script>
 
+<svelte:head>
+  <title>Users — otpravkarr</title>
+</svelte:head>
+
 <div class="space-y-4">
   <div class="flex items-center justify-between">
     <h1 class="text-lg font-semibold text-foreground">Users</h1>
@@ -147,7 +151,7 @@ function makeActionEnhance() {
       value={data.filters.status}
       onValueChange={(v) => updateFilter("status", v ?? "all")}
     >
-      <Select.Trigger class="w-[140px]">
+      <Select.Trigger class="w-[140px] text-foreground">
         <span data-slot="select-value">
           {data.filters.status === "all" ? "All statuses" : data.filters.status.charAt(0).toUpperCase() + data.filters.status.slice(1)}
         </span>
@@ -165,7 +169,7 @@ function makeActionEnhance() {
       value={data.filters.mode}
       onValueChange={(v) => updateFilter("mode", v ?? "all")}
     >
-      <Select.Trigger class="w-[160px]">
+      <Select.Trigger class="w-[160px] text-foreground">
         <span data-slot="select-value">
           {data.filters.mode === "all" ? "All modes" : modeLabelText(data.filters.mode as ProvisioningMode)}
         </span>
@@ -180,7 +184,7 @@ function makeActionEnhance() {
 
     <Input
       placeholder="Search username..."
-      class="w-[200px]"
+      class="w-[200px] text-foreground"
       value={searchValue}
       oninput={onSearchInput}
     />

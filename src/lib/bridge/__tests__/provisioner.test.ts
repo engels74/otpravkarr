@@ -380,10 +380,10 @@ describe("provisionUser — create (automatic mode)", () => {
     }
 
     // Verify createUser was called with correct data (no is_active/groups — not in API)
+    // is_staff is omitted for non-staff users to avoid sending unnecessary fields
     expect(createUser).toHaveBeenCalledWith(mockClient, {
       username: "testuser",
       password: "generated-password-24",
-      is_staff: false,
     });
 
     // Verify password was encrypted for automatic mode
@@ -449,11 +449,11 @@ describe("provisionUser — create (self_managed mode)", () => {
       }),
     );
 
-    // is_staff should be false
-    expect(createUser).toHaveBeenCalledWith(
-      mockClient,
-      expect.objectContaining({ is_staff: false }),
-    );
+    // is_staff should be omitted for non-staff users
+    expect(createUser).toHaveBeenCalledWith(mockClient, {
+      username: "testuser",
+      password: "generated-password-24",
+    });
   });
 });
 

@@ -262,7 +262,7 @@ let rangeEnd = $derived(Math.min(data.filters.page * data.filters.limit, data.to
             {#if isExpanded && entry.detail}
               <Table.Row>
                 <Table.Cell colspan={5} class="bg-muted/50 px-4 py-3">
-                  <pre class="text-xs font-mono whitespace-pre-wrap break-all">{formatDetail(entry.detail)}</pre>
+                  <pre class="text-xs font-mono whitespace-pre-wrap break-all text-foreground">{formatDetail(entry.detail)}</pre>
                 </Table.Cell>
               </Table.Row>
             {/if}

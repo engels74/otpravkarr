@@ -81,7 +81,7 @@ function friendInitials(f: PlexFriend): string {
     <!-- Plex -->
     <Card.Root>
       <Card.Header class="pb-2">
-        <Card.Description>Plex</Card.Description>
+        <Card.Title class="text-sm font-medium">Plex</Card.Title>
       </Card.Header>
       <Card.Content>
         <div class="flex items-center justify-between">
@@ -96,7 +96,7 @@ function friendInitials(f: PlexFriend): string {
     <!-- Dispatcharr -->
     <Card.Root>
       <Card.Header class="pb-2">
-        <Card.Description>Dispatcharr</Card.Description>
+        <Card.Title class="text-sm font-medium">Dispatcharr</Card.Title>
       </Card.Header>
       <Card.Content>
         <div class="flex items-center justify-between">
@@ -111,7 +111,7 @@ function friendInitials(f: PlexFriend): string {
     <!-- SQLite -->
     <Card.Root>
       <Card.Header class="pb-2">
-        <Card.Description>SQLite</Card.Description>
+        <Card.Title class="text-sm font-medium">SQLite</Card.Title>
       </Card.Header>
       <Card.Content>
         <div class="flex items-center justify-between">

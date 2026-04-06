@@ -46,6 +46,7 @@ export class DispatcharrClient {
 
     if (options?.body !== undefined) {
       fetchOptions.body = options.body;
+      (fetchOptions.headers as Record<string, string>)["Content-Type"] = "application/json";
     }
 
     let data: unknown;
@@ -80,9 +81,14 @@ export class DispatcharrClient {
       typeof (error as Record<string, unknown>).statusCode === "number"
     ) {
       const statusCode = (error as Record<string, unknown>).statusCode as number;
-      const message =
-        (error as Record<string, unknown>).statusMessage ??
-        (error instanceof Error ? error.message : String(error));
+      // ofetch FetchError includes parsed response body as `data`
+      const responseData = (error as Record<string, unknown>).data;
+      const message = responseData
+        ? `${statusCode}: ${JSON.stringify(responseData)}`
+        : String(
+            (error as Record<string, unknown>).statusMessage ??
+              (error instanceof Error ? error.message : String(error)),
+          );
 
       if (statusCode === 401 || statusCode === 403) {
         return { ok: false, error: "auth_failure", message: String(message) };

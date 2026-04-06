@@ -24,7 +24,7 @@ import {
   SESSION_COOKIE_NAME,
   SETUP_COMPLETED_CONFIG_KEY,
 } from "$lib/server/auth";
-import { parseAndNormalizeOrigins } from "$lib/server/origins";
+import { parseAndNormalizeOrigins, selectActivePublicOrigin } from "$lib/server/origins";
 import { setupLimiter } from "$lib/server/ratelimit";
 import {
   CreateAdminSchema,
@@ -336,10 +336,8 @@ export const actions: Actions = {
       }
 
       if (plexMode === "oauth_initiate") {
-        const configuredOrigin = env.ORIGIN?.trim();
-        const forwardOrigin =
-          configuredOrigin && configuredOrigin.length > 0 ? configuredOrigin : url.origin;
-        const forwardUrl = `${forwardOrigin.replace(/\/$/, "")}/setup`;
+        const forwardOrigin = selectActivePublicOrigin(env.ORIGIN, url.origin);
+        const forwardUrl = `${forwardOrigin}/setup`;
         const result = await initiateOAuth(forwardUrl);
         return {
           success: true,

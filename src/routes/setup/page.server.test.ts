@@ -909,6 +909,35 @@ describe("configurePlex oauth initiate origin selection", () => {
     expect(oauth.initiateOAuth).toHaveBeenCalledWith("https://public.example.com/setup");
   });
 
+  it("uses request origin when ORIGIN is a stale loopback origin", async () => {
+    state.env.ORIGIN = "http://localhost:3000";
+    const { cookies } = createCookies({ [setupClaimCookie]: "proof-123" });
+
+    const body = new FormData();
+    body.set("plexMode", "oauth_initiate");
+    const request = new Request("http://127.0.0.1:5173/setup", { method: "POST", body });
+
+    const oauth = await import("$lib/plex/oauth");
+    vi.mocked(oauth.initiateOAuth).mockResolvedValue({
+      id: "oauth-id",
+      uri: "https://app.plex.tv/auth",
+    });
+
+    const { actions } = await import("./+page.server");
+    const configurePlex = actions.configurePlex;
+    if (!configurePlex) {
+      throw new Error("configurePlex action is undefined");
+    }
+
+    await configurePlex({
+      request,
+      url: new URL("http://127.0.0.1:5173/setup"),
+      cookies,
+    } as unknown as Parameters<typeof configurePlex>[0]);
+
+    expect(oauth.initiateOAuth).toHaveBeenCalledWith("http://127.0.0.1:5173/setup");
+  });
+
   it("falls back to request origin when ORIGIN is unset", async () => {
     state.env.ORIGIN = "";
     const { cookies } = createCookies({ [setupClaimCookie]: "proof-123" });

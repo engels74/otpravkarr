@@ -398,6 +398,27 @@ describe("portal page server", () => {
 
       expect(mocks.initiateOAuth).toHaveBeenCalledWith("https://public.example.com/auth/plex");
     });
+
+    it("uses request origin when ORIGIN is a stale loopback origin", async () => {
+      envState.ORIGIN = "http://localhost:3000";
+
+      const { actions } = await import("./+page.server");
+      const action = actions.signInWithPlex;
+      if (!action) throw new Error("signInWithPlex action is undefined");
+
+      const { cookies } = createCookies();
+      try {
+        await action({
+          url: new URL("http://127.0.0.1:5173"),
+          cookies,
+          getClientAddress: () => "127.0.0.1",
+        } as unknown as Parameters<typeof action>[0]);
+      } catch {
+        // redirect expected
+      }
+
+      expect(mocks.initiateOAuth).toHaveBeenCalledWith("http://127.0.0.1:5173/auth/plex");
+    });
   });
 
   // ── refreshCredentials ──

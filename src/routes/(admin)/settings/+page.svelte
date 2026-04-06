@@ -45,8 +45,11 @@ function makeEnhance(section: string) {
       sectionSubmitting[section] = false;
       if (result.type === "success") {
         await invalidateAll();
-        sectionMessage[section] = { type: "success", text: "Settings saved successfully." };
-        toast.success("Settings saved successfully.");
+        const msg =
+          (result.data as { message?: string } | undefined)?.message ??
+          "Settings saved successfully.";
+        sectionMessage[section] = { type: "success", text: msg };
+        toast.success(msg);
       } else if (result.type === "failure") {
         const errorMsg =
           (result.data as { error?: string } | undefined)?.error ?? "An error occurred.";

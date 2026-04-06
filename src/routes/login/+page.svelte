@@ -9,20 +9,53 @@ import { Label } from "$lib/components/ui/label";
 interface Props {
   form?: {
     error?: string;
+    resetAt?: number;
   };
 }
 
 const ERROR_MESSAGES: Record<string, string> = {
-  rate_limited: "Too many login attempts. Please wait and try again.",
   missing_credentials: "Username and password are required.",
   invalid_credentials: "Invalid username or password.",
 };
 
 let { form }: Props = $props();
 let submitting = $state(false);
+let countdownSeconds = $state(0);
+
+$effect(() => {
+  if (form?.error !== "rate_limited" || !form.resetAt) {
+    countdownSeconds = 0;
+    return;
+  }
+
+  const resetAt = form.resetAt;
+
+  function tick() {
+    const remaining = Math.max(0, Math.ceil((resetAt - Date.now()) / 1000));
+    countdownSeconds = remaining;
+    if (remaining <= 0) {
+      form = undefined;
+    }
+  }
+
+  tick();
+  const interval = setInterval(tick, 1000);
+  return () => clearInterval(interval);
+});
+
+function formatCountdown(totalSeconds: number): string {
+  const m = Math.floor(totalSeconds / 60);
+  const s = totalSeconds % 60;
+  if (m > 0) return `${m}m ${String(s).padStart(2, "0")}s`;
+  return `${s}s`;
+}
 
 let errorMessage = $derived(
-  form?.error ? (ERROR_MESSAGES[form.error] ?? "Unable to sign in.") : null,
+  form?.error === "rate_limited" && countdownSeconds > 0
+    ? `Too many login attempts. Try again in ${formatCountdown(countdownSeconds)}.`
+    : form?.error
+      ? (ERROR_MESSAGES[form.error] ?? "Unable to sign in.")
+      : null,
 );
 
 function enhanceHandler() {

@@ -13,14 +13,11 @@ import * as Card from "$lib/components/ui/card";
     <Card.Header>
       <Card.Title class="text-lg">Error {page.status}</Card.Title>
       <Card.Description>
-        {page.status === 404 ? "This page doesn't exist." : "Something went wrong."}
+        {page.status === 404
+          ? "This page doesn't exist."
+          : (page.error?.message ?? "Something went wrong.")}
       </Card.Description>
     </Card.Header>
-    <Card.Content>
-      <p class="text-sm text-muted-foreground">
-        {page.error?.message ?? "An unexpected error occurred."}
-      </p>
-    </Card.Content>
     <Card.Footer>
       <Button href="/" variant="outline" class="w-full">Go home</Button>
     </Card.Footer>

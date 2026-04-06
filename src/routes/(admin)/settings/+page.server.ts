@@ -109,10 +109,13 @@ export const actions: Actions = {
         changedFields.push("plex_machine_id");
       }
     } catch (err: unknown) {
-      if (err instanceof PlexAuthError || err instanceof PlexConnectionError) {
+      if (err instanceof PlexAuthError) {
         return fail(400, { error: err.message });
       }
-      throw err;
+      if (err instanceof PlexConnectionError) {
+        return fail(400, { error: "Could not connect to Plex server" });
+      }
+      return fail(400, { error: "Could not connect to Plex server" });
     }
 
     invalidateConfigCache();
@@ -124,7 +127,13 @@ export const actions: Actions = {
       ipAddress: getClientAddress(),
     });
 
-    return { success: true };
+    return {
+      success: true,
+      message:
+        changedFields.length > 0
+          ? "Plex settings saved."
+          : "Connection verified, no changes needed.",
+    };
   },
 
   updateDispatcharrConnection: async (event) => {
@@ -179,7 +188,13 @@ export const actions: Actions = {
       ipAddress: getClientAddress(),
     });
 
-    return { success: true };
+    return {
+      success: true,
+      message:
+        changedFields.length > 0
+          ? "Dispatcharr settings saved."
+          : "Connection verified, no changes needed.",
+    };
   },
 
   updateSyncSettings: async (event) => {

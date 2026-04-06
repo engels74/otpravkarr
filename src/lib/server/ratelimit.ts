@@ -69,13 +69,14 @@ export function createRateLimiter(config: RateLimiterConfig): RateLimiter {
   return { check, reset, resetAll };
 }
 
+const FIVE_MINUTES = 5 * 60 * 1000;
 const FIFTEEN_MINUTES = 15 * 60 * 1000;
 
 /** Setup endpoint: 5 attempts per 15 minutes (keyed by IP) */
 export const setupLimiter = createRateLimiter({ windowMs: FIFTEEN_MINUTES, maxRequests: 5 });
 
-/** Admin login: 10 attempts per 15 minutes (keyed by IP) */
-export const loginLimiter = createRateLimiter({ windowMs: FIFTEEN_MINUTES, maxRequests: 10 });
+/** Admin login: 10 attempts per 5 minutes (keyed by IP) */
+export const loginLimiter = createRateLimiter({ windowMs: FIVE_MINUTES, maxRequests: 10 });
 
 /** User OAuth: 20 attempts per 15 minutes (keyed by IP) */
 export const oauthLimiter = createRateLimiter({ windowMs: FIFTEEN_MINUTES, maxRequests: 20 });

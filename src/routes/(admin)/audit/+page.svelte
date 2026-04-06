@@ -146,13 +146,13 @@ let rangeEnd = $derived(Math.min(data.filters.page * data.filters.limit, data.to
   <!-- ─── Filters ──────────────────────────────────────── -->
   <div class="flex flex-wrap items-end gap-3">
     <div class="grid gap-1.5">
-      <Label class="text-xs">Action</Label>
+      <Label class="text-xs text-foreground">Action</Label>
       <Select.Root
         type="single"
         value={data.filters.action ?? "all"}
         onValueChange={(v) => updateFilter("action", v === "all" ? null : v)}
       >
-        <Select.Trigger class="w-48">
+        <Select.Trigger class="w-48 text-foreground">
           <span data-slot="select-value">
             {data.filters.action ?? "All Actions"}
           </span>
@@ -167,7 +167,7 @@ let rangeEnd = $derived(Math.min(data.filters.page * data.filters.limit, data.to
     </div>
 
     <div class="grid gap-1.5">
-      <Label class="text-xs">Actor</Label>
+      <Label class="text-xs text-foreground">Actor</Label>
       <Input
         placeholder="Filter by actor…"
         class="h-8 w-40"
@@ -180,10 +180,11 @@ let rangeEnd = $derived(Math.min(data.filters.page * data.filters.limit, data.to
     </div>
 
     <div class="grid gap-1.5">
-      <Label class="text-xs">After</Label>
+      <Label class="text-xs text-foreground">After</Label>
       <Input
         type="date"
         class="h-8 w-36"
+        aria-label="Filter after date"
         value={data.filters.after ?? ""}
         onchange={(e) => {
           const v = (e.currentTarget as HTMLInputElement).value;
@@ -193,10 +194,11 @@ let rangeEnd = $derived(Math.min(data.filters.page * data.filters.limit, data.to
     </div>
 
     <div class="grid gap-1.5">
-      <Label class="text-xs">Before</Label>
+      <Label class="text-xs text-foreground">Before</Label>
       <Input
         type="date"
         class="h-8 w-36"
+        aria-label="Filter before date"
         value={data.filters.before ?? ""}
         onchange={(e) => {
           const v = (e.currentTarget as HTMLInputElement).value;
@@ -207,7 +209,7 @@ let rangeEnd = $derived(Math.min(data.filters.page * data.filters.limit, data.to
   </div>
 
   <!-- ─── Table ────────────────────────────────────────── -->
-  <div class="rounded-lg border">
+  <div class="overflow-x-auto rounded-lg border">
     <Table.Root>
       <Table.Header>
         <Table.Row>

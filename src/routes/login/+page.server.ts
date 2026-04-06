@@ -24,7 +24,7 @@ export const actions: Actions = {
     const clientAddress = getClientAddress();
     const limit = loginLimiter.check(clientAddress);
     if (!limit.allowed) {
-      return fail(429, { error: "rate_limited" });
+      return fail(429, { error: "rate_limited", resetAt: limit.resetAt });
     }
 
     const formData = await request.formData();

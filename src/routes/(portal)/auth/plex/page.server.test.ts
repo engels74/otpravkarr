@@ -336,14 +336,15 @@ describe("plex OAuth callback", () => {
     });
   });
 
-  it("throws 500 when provisioning fails", async () => {
+  it("throws 502 with safe message when provisioning fails", async () => {
     state.provisionResult = { status: "failed", error: "DB error" };
 
     const { load } = await import("./+page.server");
     const { cookies } = createCookies();
 
     await expect(load({ cookies } as unknown as Parameters<typeof load>[0])).rejects.toMatchObject({
-      status: 500,
+      status: 502,
+      body: { message: "Unable to set up your account. Please contact the administrator." },
     });
   });
 

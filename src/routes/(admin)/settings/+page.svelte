@@ -1,6 +1,7 @@
 <script lang="ts">
 import type { ActionResult } from "@sveltejs/kit";
-import { enhance } from "$app/forms";
+import { toast } from "svelte-sonner";
+import { applyAction, enhance } from "$app/forms";
 import { invalidateAll } from "$app/navigation";
 import { Badge } from "$lib/components/ui/badge";
 import { Button } from "$lib/components/ui/button";
@@ -45,12 +46,18 @@ function makeEnhance(section: string) {
       if (result.type === "success") {
         await invalidateAll();
         sectionMessage[section] = { type: "success", text: "Settings saved successfully." };
+        toast.success("Settings saved successfully.");
       } else if (result.type === "failure") {
         const errorMsg =
           (result.data as { error?: string } | undefined)?.error ?? "An error occurred.";
         sectionMessage[section] = { type: "error", text: errorMsg };
+        toast.error(errorMsg);
+      } else if (result.type === "error") {
+        const errorMsg = result.error?.message ?? "An unexpected error occurred.";
+        sectionMessage[section] = { type: "error", text: errorMsg };
+        toast.error(errorMsg);
       } else {
-        await invalidateAll();
+        await applyAction(result);
       }
     };
   };

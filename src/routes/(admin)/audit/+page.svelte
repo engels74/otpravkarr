@@ -33,16 +33,15 @@ interface Props {
 
 let { data }: Props = $props();
 
-let expandedRows = $state(new Set<number>());
+let expandedRows: Record<number, boolean> = $state({});
 const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 function toggleRow(id: number) {
-  if (expandedRows.has(id)) {
-    expandedRows.delete(id);
+  if (expandedRows[id]) {
+    delete expandedRows[id];
   } else {
-    expandedRows.add(id);
+    expandedRows[id] = true;
   }
-  expandedRows = new Set(expandedRows);
 }
 
 function localDateStartToIso(dateOnly: string): string | null {
@@ -228,9 +227,9 @@ let rangeEnd = $derived(Math.min(data.filters.page * data.filters.limit, data.to
           </Table.Row>
         {:else}
           {#each data.entries as entry (entry.id)}
-            {@const isExpanded = expandedRows.has(entry.id)}
+            {@const isExpanded = expandedRows[entry.id] === true}
             <Table.Row
-              class="cursor-pointer"
+              class={entry.detail ? "cursor-pointer" : ""}
               onclick={() => entry.detail && toggleRow(entry.id)}
             >
               <Table.Cell class="w-8 px-2">

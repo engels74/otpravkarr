@@ -1,5 +1,6 @@
 <script lang="ts">
 import "../app.css";
+import { Toaster } from "$lib/components/ui/sonner";
 
 let { children } = $props();
 </script>
@@ -7,3 +8,5 @@ let { children } = $props();
 <div class="page-shell">
   {@render children()}
 </div>
+
+<Toaster richColors />

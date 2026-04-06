@@ -151,6 +151,10 @@ vi.mock("$lib/server/logging", () => ({
 }));
 
 const { handle } = await import("../hooks.server");
+const { validateOrigin } = await import("$lib/server/csrf");
+const { getConfig } = await import("$lib/db/repositories/config");
+const mockValidateOrigin = vi.mocked(validateOrigin);
+const mockGetConfig = vi.mocked(getConfig);
 
 const validAdminSession: Session = {
   id: "sess-admin-1",
@@ -168,15 +172,30 @@ const validAdmin: AdminAccount = {
   updated_at: "2024-01-01 00:00:00",
 };
 
-function createMockEvent(sessionId: string | undefined = undefined) {
+function createMockEvent({
+  sessionId,
+  method = "GET",
+  origin,
+  url = "http://localhost/dashboard",
+}: {
+  sessionId?: string;
+  method?: string;
+  origin?: string;
+  url?: string;
+} = {}) {
+  const headers: Record<string, string> = {};
+  if (origin !== undefined) {
+    headers.Origin = origin;
+  }
+
   return {
     cookies: {
       get: (name: string) => (name === "otpravkarr_session" ? sessionId : undefined),
       set: vi.fn(),
     },
     locals: {} as App.Locals,
-    request: new Request("http://localhost/dashboard", { method: "GET" }),
-    url: new URL("http://localhost/dashboard"),
+    request: new Request(url, { method, headers }),
+    url: new URL(url),
   } as unknown as MockEvent;
 }
 
@@ -185,12 +204,15 @@ describe("hooks sessionResolver", () => {
     mockSession = null;
     mockAdmin = null;
     mockUser = null;
+    mockValidateOrigin.mockReset();
+    mockGetConfig.mockReset();
+    mockGetConfig.mockResolvedValue(null);
   });
 
   it("populates locals for a valid admin session", async () => {
     mockSession = { ...validAdminSession };
     mockAdmin = { ...validAdmin };
-    const event = createMockEvent("sess-admin-1");
+    const event = createMockEvent({ sessionId: "sess-admin-1" });
 
     await handle({
       event,
@@ -216,7 +238,7 @@ describe("hooks sessionResolver", () => {
     } as unknown as Session;
     mockAdmin = { ...validAdmin };
     mockUser = null;
-    const event = createMockEvent("sess-invalid-1");
+    const event = createMockEvent({ sessionId: "sess-invalid-1" });
 
     await handle({
       event,
@@ -226,5 +248,81 @@ describe("hooks sessionResolver", () => {
     expect(event.locals.session).toBeNull();
     expect(event.locals.admin).toBeNull();
     expect(event.locals.user).toBeNull();
+  });
+});
+
+describe("hooks security headers", () => {
+  it("adds security headers to normal responses", async () => {
+    const event = createMockEvent();
+
+    const response = await handle({
+      event,
+      resolve: async () => new Response(null, { status: 200 }),
+    });
+
+    expect(response.headers.get("X-Frame-Options")).toBe("DENY");
+    expect(response.headers.get("X-Content-Type-Options")).toBe("nosniff");
+    expect(response.headers.get("Referrer-Policy")).toBe("strict-origin-when-cross-origin");
+    expect(response.headers.get("Permissions-Policy")).toBe(
+      "camera=(), microphone=(), geolocation=()",
+    );
+  });
+
+  it("adds security headers to hostile-origin CSRF rejections", async () => {
+    mockValidateOrigin.mockImplementation(() => {
+      throw {
+        status: 403,
+        body: { message: "CSRF validation failed: origin not allowed" },
+      };
+    });
+    const event = createMockEvent({
+      method: "POST",
+      origin: "http://evil.example",
+      url: "http://localhost/api/internal/sync",
+    });
+    const resolveSpy = vi.fn(async () => new Response(null, { status: 204 }));
+
+    const response = await handle({ event, resolve: resolveSpy });
+
+    expect(resolveSpy).not.toHaveBeenCalled();
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({
+      message: "CSRF validation failed: origin not allowed",
+    });
+    expect(response.headers.get("X-Frame-Options")).toBe("DENY");
+    expect(response.headers.get("X-Content-Type-Options")).toBe("nosniff");
+    expect(response.headers.get("Referrer-Policy")).toBe("strict-origin-when-cross-origin");
+    expect(response.headers.get("Permissions-Policy")).toBe(
+      "camera=(), microphone=(), geolocation=()",
+    );
+  });
+
+  it("adds security headers to missing-Origin CSRF rejections", async () => {
+    mockValidateOrigin.mockImplementation(() => {
+      throw {
+        status: 403,
+        body: { message: "CSRF validation failed: missing Origin header" },
+      };
+    });
+    const event = createMockEvent({
+      method: "POST",
+      url: "http://localhost/api/internal/sync",
+    });
+
+    const response = await handle({
+      event,
+      resolve: async () => new Response(null, { status: 204 }),
+    });
+
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({
+      message: "CSRF validation failed: missing Origin header",
+    });
+    expect(response.headers.get("X-Frame-Options")).toBe("DENY");
+    expect(response.headers.get("X-Content-Type-Options")).toBe("nosniff");
+    expect(response.headers.get("Referrer-Policy")).toBe("strict-origin-when-cross-origin");
+    expect(response.headers.get("Permissions-Policy")).toBe(
+      "camera=(), microphone=(), geolocation=()",
+    );
   });
 });

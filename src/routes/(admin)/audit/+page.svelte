@@ -140,7 +140,7 @@ let rangeEnd = $derived(Math.min(data.filters.page * data.filters.limit, data.to
 
 <div class="space-y-4">
   <div>
-    <h1 class="text-lg font-semibold">Audit Log</h1>
+    <h1 class="text-lg font-semibold text-foreground">Audit Log</h1>
     <p class="text-sm text-muted-foreground">System event history and activity trail.</p>
   </div>
 
@@ -247,7 +247,7 @@ let rangeEnd = $derived(Math.min(data.filters.page * data.filters.limit, data.to
               <Table.Cell class="whitespace-nowrap font-mono text-xs text-muted-foreground">
                 {formatTimestamp(entry.timestamp)}
               </Table.Cell>
-              <Table.Cell class="text-sm">
+              <Table.Cell class="text-sm text-foreground">
                 {entry.actor ?? "system"}
               </Table.Cell>
               <Table.Cell>

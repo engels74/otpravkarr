@@ -136,7 +136,7 @@ function makeActionEnhance() {
 
 <div class="space-y-4">
   <div class="flex items-center justify-between">
-    <h1 class="text-lg font-semibold">Users</h1>
+    <h1 class="text-lg font-semibold text-foreground">Users</h1>
     <span class="text-sm text-muted-foreground">{data.mappings.length} users</span>
   </div>
 

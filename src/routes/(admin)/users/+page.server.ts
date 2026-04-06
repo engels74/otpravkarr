@@ -1,5 +1,6 @@
 import { fail } from "@sveltejs/kit";
 import { disableUser, enableUser, rotateCredentials } from "$lib/bridge/lifecycle";
+import { provisionUser } from "$lib/bridge/provisioner";
 import { getConfig } from "$lib/db/repositories/config";
 import {
   getAllUserMappings,
@@ -119,7 +120,37 @@ export const actions: Actions = {
 
     try {
       const client = await getClient();
-      await enableUser(client, mapping);
+
+      if (mapping.dispatcharr_user_id != null) {
+        // Dispatcharr user still exists — just re-enable locally
+        await enableUser(client, mapping);
+      } else {
+        // Dispatcharr user was deleted during disable — re-provision
+        let groupIds: number[];
+        try {
+          groupIds = JSON.parse(mapping.dispatcharr_group_ids) as number[];
+        } catch {
+          groupIds = [];
+        }
+        const plexToken = await getConfig("plex_admin_token");
+        const result = await provisionUser(client, {
+          plexIdentity: {
+            id: mapping.plex_account_id,
+            uuid: mapping.plex_uuid,
+            username: mapping.plex_username,
+            email: mapping.plex_email ?? "",
+            thumb: mapping.plex_thumb ?? "",
+            authenticationToken: plexToken ?? "",
+          },
+          mode: mapping.provisioning_mode,
+          groupIds,
+          profileId: mapping.dispatcharr_profile_id ?? undefined,
+        });
+        if (result.status === "failed") {
+          return fail(500, { error: result.error });
+        }
+      }
+
       return { success: true };
     } catch (err) {
       return fail(500, { error: err instanceof Error ? err.message : "Failed to enable user" });

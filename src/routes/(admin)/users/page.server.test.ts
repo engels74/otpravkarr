@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   rotateCredentials: vi.fn(async () => undefined),
   disableUser: vi.fn(async () => undefined),
   enableUser: vi.fn(async () => undefined),
+  provisionUser: vi.fn(async () => ({ status: "provisioned" as const, mapping: {} })),
 }));
 
 vi.mock("$lib/server/auth", () => ({
@@ -44,6 +45,10 @@ vi.mock("$lib/bridge/lifecycle", () => ({
   enableUser: mocks.enableUser,
 }));
 
+vi.mock("$lib/bridge/provisioner", () => ({
+  provisionUser: mocks.provisionUser,
+}));
+
 function resetMocks() {
   mocks.requireAdmin.mockClear();
   mocks.getConfig.mockClear();
@@ -54,6 +59,7 @@ function resetMocks() {
   mocks.rotateCredentials.mockClear();
   mocks.disableUser.mockClear();
   mocks.enableUser.mockClear();
+  mocks.provisionUser.mockClear();
 }
 
 function createActionEvent(body: FormData) {

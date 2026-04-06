@@ -199,7 +199,7 @@ function makeActionEnhance() {
           <Table.Head>Dispatcharr</Table.Head>
           <Table.Head>Mode</Table.Head>
           <Table.Head>Status</Table.Head>
-          <Table.Head>Last Accessed</Table.Head>
+          <Table.Head class="whitespace-nowrap">Last Accessed</Table.Head>
           <Table.Head class="w-[50px]"></Table.Head>
         </Table.Row>
       </Table.Header>
@@ -273,7 +273,7 @@ function makeActionEnhance() {
                         {/snippet}
                       </DropdownMenu.Item>
                     {/if}
-                    {#if m.is_active === 0 && m.dispatcharr_user_id != null}
+                    {#if m.is_active === 0}
                       <DropdownMenu.Item>
                         {#snippet child({ props })}
                           <form method="POST" action="?/enableUser" use:enhance={makeActionEnhance()}>

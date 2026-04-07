@@ -11,6 +11,8 @@ import type { UserMapping } from "$lib/db/types";
 import { AuditAction } from "$lib/db/types";
 import type { DispatcharrClient } from "$lib/dispatcharr/client";
 import { createUser, getUser } from "$lib/dispatcharr/endpoints/users";
+import { fetchAllPages } from "$lib/dispatcharr/pagination";
+import { DispatcharrUserSchema } from "$lib/dispatcharr/schemas";
 import { isTransientResultError, retryResult } from "$lib/utils/retry";
 import type { ProvisioningRequest, ProvisioningResult } from "./types";
 
@@ -134,9 +136,28 @@ export async function provisionUser(
       error: `Database lookup failed: ${err instanceof Error ? err.message : String(err)}`,
     };
   }
-  const existingUsernames = allMappings
+  const localUsernames = allMappings
     .map((m: UserMapping) => m.dispatcharr_username)
     .filter((u): u is string => u != null);
+
+  // Also include remote Dispatcharr usernames to avoid 400 "username already exists" collisions
+  let remoteUsernames: string[] = [];
+  try {
+    const remoteResult = await fetchAllPages(client, "/api/accounts/users/", DispatcharrUserSchema);
+    if (remoteResult.ok) {
+      remoteUsernames = remoteResult.data.map((u) => u.username);
+    } else {
+      console.warn(
+        `[provisioner] Failed to fetch remote usernames for dedup, falling back to local-only: ${remoteResult.message}`,
+      );
+    }
+  } catch (err) {
+    console.warn(
+      `[provisioner] Failed to fetch remote usernames for dedup, falling back to local-only: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+
+  const existingUsernames = [...new Set([...localUsernames, ...remoteUsernames])];
   const sanitizedUsername = sanitizeUsername(request.plexIdentity.username, existingUsernames);
 
   const password = generateXcPassword();

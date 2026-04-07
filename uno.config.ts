@@ -32,11 +32,8 @@ export default defineConfig({
   },
 
   shortcuts: [
-    ["page-shell", "min-h-screen bg-[hsl(var(--background))] text-[hsl(var(--foreground))]"],
-    [
-      "card",
-      "rounded-[var(--radius)] border border-[hsl(var(--border))] bg-[hsl(var(--card))] text-[hsl(var(--card-foreground))] shadow-sm",
-    ],
+    ["page-shell", "min-h-screen bg-background text-foreground"],
+    ["card", "rounded-[var(--radius)] border border-border bg-card text-card-foreground shadow-sm"],
   ],
 
   rules: [

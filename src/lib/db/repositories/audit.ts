@@ -52,7 +52,7 @@ export function queryAuditLog(filters: {
   if (filters.actor != null) {
     if (filters.actor.toLowerCase() === "system") {
       conditions.push("(actor IS NULL OR actor = ?)");
-      params.push(filters.actor);
+      params.push("system");
     } else {
       conditions.push("actor = ?");
       params.push(filters.actor);

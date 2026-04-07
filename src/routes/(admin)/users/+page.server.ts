@@ -149,6 +149,10 @@ export const actions: Actions = {
         if (result.status === "failed") {
           return fail(500, { error: result.error });
         }
+        // Surface the one-time password so the admin can communicate it
+        if (result.status === "provisioned" && result.initialPassword) {
+          return { success: true, initialPassword: result.initialPassword };
+        }
       }
 
       return { success: true };

@@ -1,4 +1,5 @@
 <script lang="ts">
+import type { ActionResult } from "@sveltejs/kit";
 import BanIcon from "lucide-svelte/icons/ban";
 import CheckCircle2Icon from "lucide-svelte/icons/check-circle-2";
 import EllipsisIcon from "lucide-svelte/icons/ellipsis";
@@ -36,8 +37,10 @@ let submitting = $state(false);
 // Dialog state
 let groupDialogOpen = $state(false);
 let detailDialogOpen = $state(false);
+let passwordDialogOpen = $state(false);
 let selectedMapping = $state<UserMapping | null>(null);
 let selectedGroupIds = $state<number[]>([]);
+let oneTimePassword = $state("");
 
 // Search debounce
 let searchTimeout: ReturnType<typeof setTimeout> | undefined;
@@ -127,6 +130,23 @@ function makeActionEnhance() {
   return () => {
     submitting = true;
     return async ({ update }: { update: () => Promise<void> }) => {
+      await update();
+      submitting = false;
+    };
+  };
+}
+
+function makeEnableEnhance() {
+  return () => {
+    submitting = true;
+    return async ({ result, update }: { result: ActionResult; update: () => Promise<void> }) => {
+      if (
+        result.type === "success" &&
+        (result.data as { initialPassword?: string } | undefined)?.initialPassword
+      ) {
+        oneTimePassword = (result.data as { initialPassword: string }).initialPassword;
+        passwordDialogOpen = true;
+      }
       await update();
       submitting = false;
     };
@@ -276,7 +296,7 @@ function makeActionEnhance() {
                     {#if m.is_active === 0}
                       <DropdownMenu.Item>
                         {#snippet child({ props })}
-                          <form method="POST" action="?/enableUser" use:enhance={makeActionEnhance()}>
+                          <form method="POST" action="?/enableUser" use:enhance={makeEnableEnhance()}>
                             <input type="hidden" name="id" value={m.id} />
                             <button type="submit" class="flex w-full items-center gap-2 text-left" disabled={submitting} {...props}>
                               <CheckCircle2Icon class="h-3.5 w-3.5" />
@@ -415,5 +435,28 @@ function makeActionEnhance() {
         </div>
       </div>
     {/if}
+  </Dialog.Content>
+</Dialog.Root>
+
+<!-- One-Time Password Dialog -->
+<Dialog.Root bind:open={passwordDialogOpen}>
+  <Dialog.Content class="sm:max-w-md">
+    <Dialog.Header>
+      <Dialog.Title>One-Time Password</Dialog.Title>
+      <Dialog.Description>
+        This user was re-provisioned with a new account. Save this password — it will not be shown again.
+      </Dialog.Description>
+    </Dialog.Header>
+    <div class="rounded-md bg-muted p-3 font-mono text-sm select-all">
+      {oneTimePassword}
+    </div>
+    <Dialog.Footer>
+      <Button size="sm" onclick={() => navigator.clipboard.writeText(oneTimePassword)}>
+        Copy Password
+      </Button>
+      <Button variant="outline" size="sm" onclick={() => { passwordDialogOpen = false; }}>
+        Close
+      </Button>
+    </Dialog.Footer>
   </Dialog.Content>
 </Dialog.Root>

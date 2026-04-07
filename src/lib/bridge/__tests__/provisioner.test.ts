@@ -23,6 +23,10 @@ vi.mock("$lib/dispatcharr/endpoints/users", () => ({
   getUser: vi.fn(),
 }));
 
+vi.mock("$lib/dispatcharr/pagination", () => ({
+  fetchAllPages: vi.fn(),
+}));
+
 vi.mock("$lib/crypto/encryption", () => ({
   encrypt: vi.fn(async (plaintext: string, _purpose: string) => `encrypted:${plaintext}`),
 }));
@@ -45,6 +49,7 @@ const { getUserMappingByPlexId, createUserMapping, updateUserMapping, getAllUser
   await import("$lib/db/repositories/users");
 const { appendAuditLog } = await import("$lib/db/repositories/audit");
 const { createUser, getUser } = await import("$lib/dispatcharr/endpoints/users");
+const { fetchAllPages } = await import("$lib/dispatcharr/pagination");
 const { encrypt } = await import("$lib/crypto/encryption");
 const { generateXcPassword } = await import("$lib/crypto/passwords");
 const { sanitizeUsername, provisionUser } = await import("../provisioner");
@@ -113,6 +118,7 @@ beforeEach(() => {
   vi.mocked(appendAuditLog).mockReset();
   vi.mocked(createUser).mockReset();
   vi.mocked(getUser).mockReset();
+  vi.mocked(fetchAllPages).mockReset();
   vi.mocked(encrypt)
     .mockReset()
     .mockImplementation(async (plaintext: string) => `encrypted:${plaintext}`);
@@ -121,6 +127,13 @@ beforeEach(() => {
   // Default: no existing mappings
   vi.mocked(getUserMappingByPlexId).mockReturnValue(null);
   vi.mocked(getAllUserMappings).mockReturnValue([]);
+
+  // Default: remote fetch fails (no client.baseUrl in mockClient), matching pre-existing behavior
+  vi.mocked(fetchAllPages).mockResolvedValue({
+    ok: false,
+    error: "network_error" as const,
+    message: "No baseUrl configured",
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -580,6 +593,46 @@ describe("provisionUser — username deduplication", () => {
       groupIds: [1],
     });
 
+    expect(createUser).toHaveBeenCalledWith(
+      mockClient,
+      expect.objectContaining({ username: "testuser_2" }),
+    );
+  });
+
+  it("appends suffix when username collides with remote Dispatcharr usernames", async () => {
+    // No local collisions
+    vi.mocked(getAllUserMappings).mockReturnValue([]);
+
+    // Remote Dispatcharr already has "testuser"
+    vi.mocked(fetchAllPages).mockResolvedValue({
+      ok: true,
+      data: [makeDispatcharrUser({ id: 900, username: "testuser" })],
+    });
+
+    const dispatcharrUser = makeDispatcharrUser({ id: 50, username: "testuser_2" });
+    const newMapping = makeMapping({
+      id: 10,
+      dispatcharr_user_id: 50,
+      dispatcharr_username: "testuser_2",
+    });
+
+    vi.mocked(createUser).mockResolvedValue({ ok: true, data: dispatcharrUser });
+    vi.mocked(createUserMapping).mockReturnValue(newMapping);
+
+    await provisionUser(mockClient, {
+      plexIdentity: makePlexIdentity({ username: "TestUser" }),
+      mode: "automatic",
+      groupIds: [1],
+    });
+
+    // Should have called fetchAllPages to get remote usernames
+    expect(fetchAllPages).toHaveBeenCalledWith(
+      mockClient,
+      "/api/accounts/users/",
+      expect.anything(),
+    );
+
+    // Username should be suffixed due to remote collision
     expect(createUser).toHaveBeenCalledWith(
       mockClient,
       expect.objectContaining({ username: "testuser_2" }),

@@ -21,6 +21,7 @@ import * as Table from "$lib/components/ui/table";
 import type { ProvisioningMode, UserMapping } from "$lib/db/types";
 import type { DispatcharrGroup } from "$lib/dispatcharr/types";
 import { normalizeSqliteDatetime } from "$lib/utils/datetime";
+import { copyOtpToClipboard } from "./otp-clipboard";
 
 interface Props {
   data: {
@@ -41,6 +42,7 @@ let passwordDialogOpen = $state(false);
 let selectedMapping = $state<UserMapping | null>(null);
 let selectedGroupIds = $state<number[]>([]);
 let oneTimePassword = $state("");
+let passwordCopyStatus = $state<"idle" | "copied" | "failed">("idle");
 
 // Search debounce
 let searchTimeout: ReturnType<typeof setTimeout> | undefined;
@@ -152,6 +154,7 @@ function makeEnableEnhance() {
           (result.data as { initialPassword?: string } | undefined)?.initialPassword
         ) {
           oneTimePassword = (result.data as { initialPassword: string }).initialPassword;
+          passwordCopyStatus = "idle";
           passwordDialogOpen = true;
         }
         await update();
@@ -160,6 +163,10 @@ function makeEnableEnhance() {
       }
     };
   };
+}
+
+async function copyOneTimePassword() {
+  passwordCopyStatus = await copyOtpToClipboard(oneTimePassword);
 }
 </script>
 
@@ -460,12 +467,24 @@ function makeEnableEnhance() {
       {oneTimePassword}
     </div>
     <Dialog.Footer>
-      <Button size="sm" onclick={() => navigator.clipboard.writeText(oneTimePassword)}>
+      <Button size="sm" onclick={copyOneTimePassword}>
         Copy Password
       </Button>
-      <Button variant="outline" size="sm" onclick={() => { passwordDialogOpen = false; }}>
+      <Button
+        variant="outline"
+        size="sm"
+        onclick={() => {
+          passwordDialogOpen = false;
+          passwordCopyStatus = "idle";
+        }}
+      >
         Close
       </Button>
     </Dialog.Footer>
+    {#if passwordCopyStatus === "copied"}
+      <p class="text-xs text-muted-foreground">Password copied to clipboard.</p>
+    {:else if passwordCopyStatus === "failed"}
+      <p class="text-xs text-destructive">Clipboard copy failed. Select and copy manually.</p>
+    {/if}
   </Dialog.Content>
 </Dialog.Root>

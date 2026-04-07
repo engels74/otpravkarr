@@ -217,6 +217,20 @@ describe("DispatcharrClient.request", () => {
     });
   });
 
+  it("marks 5xx mutation errors as non-retryable", async () => {
+    mockOfetch.mockRejectedValueOnce(makeFetchError(500, "Internal Server Error"));
+    const client = createClient();
+
+    const result = await client.request("PATCH", "/api/resource/1/", { body: { x: 1 } });
+
+    expect(result).toEqual({
+      ok: false,
+      error: "server_error",
+      message: "Internal Server Error",
+      retryable: false,
+    });
+  });
+
   it("maps 502 to server_error", async () => {
     mockOfetch.mockRejectedValueOnce(makeFetchError(502, "Bad Gateway"));
     const client = createClient();
@@ -237,6 +251,20 @@ describe("DispatcharrClient.request", () => {
     const result = await client.request("GET", "/api/resource/");
 
     expect(result).toEqual({ ok: false, error: "network_error", message: "ECONNREFUSED" });
+  });
+
+  it("marks network mutation errors as non-retryable", async () => {
+    mockOfetch.mockRejectedValueOnce(new Error("ECONNREFUSED"));
+    const client = createClient();
+
+    const result = await client.request("POST", "/api/resource/", { body: { x: 1 } });
+
+    expect(result).toEqual({
+      ok: false,
+      error: "network_error",
+      message: "ECONNREFUSED",
+      retryable: false,
+    });
   });
 
   it("maps non-Error thrown values to network_error", async () => {

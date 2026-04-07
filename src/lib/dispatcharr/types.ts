@@ -44,4 +44,4 @@ export type DispatcharrErrorCode =
 
 export type DispatcharrResult<T> =
   | { ok: true; data: T }
-  | { ok: false; error: DispatcharrErrorCode; message: string };
+  | { ok: false; error: DispatcharrErrorCode; message: string; retryable?: boolean };

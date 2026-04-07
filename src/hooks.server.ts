@@ -28,7 +28,6 @@ import { createRequestLogger } from "$lib/server/logging";
 import { markServerStarted } from "$lib/server/uptime";
 
 let runtimeInitialization: Promise<void> | null = null;
-const CSRF_ERROR_PREFIX = "CSRF validation failed:";
 
 function applySecurityHeaders(response: Response): Response {
   response.headers.set("X-Frame-Options", "DENY");
@@ -36,29 +35,6 @@ function applySecurityHeaders(response: Response): Response {
   response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
   response.headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
   return response;
-}
-
-function getCsrfErrorMessage(error: unknown): string | null {
-  if (typeof error !== "object" || error === null) {
-    return null;
-  }
-
-  const candidate = error as { status?: unknown; body?: unknown };
-  if (candidate.status !== 403) {
-    return null;
-  }
-
-  const body = candidate.body;
-  if (typeof body !== "object" || body === null) {
-    return null;
-  }
-
-  const message = (body as { message?: unknown }).message;
-  if (typeof message !== "string" || !message.startsWith(CSRF_ERROR_PREFIX)) {
-    return null;
-  }
-
-  return message;
 }
 
 async function registerSchedulerJobs(): Promise<void> {
@@ -238,25 +214,9 @@ const csrfValidator: Handle = async ({ event, resolve }) => {
       // to avoid mismatches behind reverse proxies where the internal URL
       // (e.g. http://127.0.0.1:3000) differs from the public origin.
       const fallbackOrigin = env.ORIGIN || new URL(event.request.url).origin;
-      try {
-        validateOrigin(event.request, [fallbackOrigin]);
-      } catch (error: unknown) {
-        const message = getCsrfErrorMessage(error);
-        if (message) {
-          return applySecurityHeaders(Response.json({ message }, { status: 403 }));
-        }
-        throw error;
-      }
+      validateOrigin(event.request, [fallbackOrigin]);
     } else {
-      try {
-        validateOrigin(event.request, parsedOrigins);
-      } catch (error: unknown) {
-        const message = getCsrfErrorMessage(error);
-        if (message) {
-          return applySecurityHeaders(Response.json({ message }, { status: 403 }));
-        }
-        throw error;
-      }
+      validateOrigin(event.request, parsedOrigins);
     }
   }
   return resolve(event);

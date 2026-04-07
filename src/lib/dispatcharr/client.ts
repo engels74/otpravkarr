@@ -58,7 +58,7 @@ export class DispatcharrClient {
     try {
       data = await ofetch(url, fetchOptions);
     } catch (error: unknown) {
-      return this.mapFetchError(error);
+      return this.mapFetchError(error, isIdempotent);
     }
 
     if (options?.schema) {
@@ -76,7 +76,7 @@ export class DispatcharrClient {
     return { ok: true, data: data as T };
   }
 
-  private mapFetchError<T>(error: unknown): DispatcharrResult<T> {
+  private mapFetchError<T>(error: unknown, isIdempotent: boolean): DispatcharrResult<T> {
     // ofetch throws FetchError with response status
     if (
       error != null &&
@@ -109,11 +109,17 @@ export class DispatcharrClient {
         return { ok: false, error: "validation_error", message };
       }
       // 5xx: server responded but with an error (distinct from network_error)
+      if (!isIdempotent) {
+        return { ok: false, error: "server_error", message, retryable: false };
+      }
       return { ok: false, error: "server_error", message };
     }
 
     // Generic network / other error
     const message = error instanceof Error ? error.message : String(error);
+    if (!isIdempotent) {
+      return { ok: false, error: "network_error", message, retryable: false };
+    }
     return { ok: false, error: "network_error", message };
   }
 }

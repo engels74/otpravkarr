@@ -307,6 +307,27 @@ describe("DispatcharrClient.request", () => {
     errorSpy.mockRestore();
   });
 
+  it("logs unserializable response bodies without throwing", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const responseBody: { detail: string; self?: unknown } = { detail: "circular" };
+    responseBody.self = responseBody;
+    mockOfetch.mockRejectedValueOnce(makeFetchError(500, "Internal Server Error", responseBody));
+    const client = createClient();
+
+    try {
+      const result = await client.request("GET", "/api/resource/999/");
+
+      expect(result).toEqual({
+        ok: false,
+        error: "server_error",
+        message: "Internal Server Error",
+      });
+      expect(errorSpy).toHaveBeenCalledWith("[dispatcharr] 500: [unserializable response body]");
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
   it("never leaks raw exceptions to callers", async () => {
     mockOfetch.mockRejectedValueOnce(new TypeError("fetch failed"));
     const client = createClient();

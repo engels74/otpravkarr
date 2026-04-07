@@ -3,6 +3,14 @@ import type { z } from "zod";
 
 import type { DispatcharrResult } from "./types";
 
+function formatResponseDataForLog(responseData: unknown): string {
+  try {
+    return JSON.stringify(responseData);
+  } catch {
+    return "[unserializable response body]";
+  }
+}
+
 export class DispatcharrClient {
   readonly baseUrl: string;
   private readonly apiKey: string;
@@ -89,8 +97,8 @@ export class DispatcharrClient {
       const responseData = (error as Record<string, unknown>).data;
 
       // Log raw response for debugging; keep user-facing message generic
-      if (responseData) {
-        console.error(`[dispatcharr] ${statusCode}: ${JSON.stringify(responseData)}`);
+      if (responseData !== undefined) {
+        console.error(`[dispatcharr] ${statusCode}: ${formatResponseDataForLog(responseData)}`);
       }
 
       const message = String(

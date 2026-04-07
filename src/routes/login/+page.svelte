@@ -16,6 +16,7 @@ interface Props {
 const ERROR_MESSAGES: Record<string, string> = {
   missing_credentials: "Username and password are required.",
   invalid_credentials: "Invalid username or password.",
+  rate_limited: "Too many login attempts. Please wait and try again.",
 };
 
 let { form }: Props = $props();

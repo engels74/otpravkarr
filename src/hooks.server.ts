@@ -29,11 +29,17 @@ import { markServerStarted } from "$lib/server/uptime";
 
 let runtimeInitialization: Promise<void> | null = null;
 
+const SECURITY_HEADERS = {
+  "X-Frame-Options": "DENY",
+  "X-Content-Type-Options": "nosniff",
+  "Referrer-Policy": "strict-origin-when-cross-origin",
+  "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+} as const;
+
 function applySecurityHeaders(response: Response): Response {
-  response.headers.set("X-Frame-Options", "DENY");
-  response.headers.set("X-Content-Type-Options", "nosniff");
-  response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
-  response.headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  for (const [name, value] of Object.entries(SECURITY_HEADERS)) {
+    response.headers.set(name, value);
+  }
   return response;
 }
 
@@ -220,7 +226,7 @@ const csrfValidator: Handle = async ({ event, resolve }) => {
         validateOrigin(event.request, parsedOrigins);
       }
     } catch (error) {
-      await resolve(event);
+      event.setHeaders(SECURITY_HEADERS);
       throw error;
     }
   }

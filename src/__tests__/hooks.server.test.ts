@@ -193,6 +193,7 @@ function createMockEvent({
       get: (name: string) => (name === "otpravkarr_session" ? sessionId : undefined),
       set: vi.fn(),
     },
+    setHeaders: vi.fn(),
     locals: {} as App.Locals,
     request: new Request(url, { method, headers }),
     url: new URL(url),
@@ -268,7 +269,7 @@ describe("hooks security headers", () => {
     );
   });
 
-  it("throws hostile-origin CSRF rejections after running resolve", async () => {
+  it("marks hostile-origin CSRF rejections with security headers", async () => {
     mockValidateOrigin.mockImplementation(() => {
       throw {
         status: 403,
@@ -288,11 +289,16 @@ describe("hooks security headers", () => {
         message: "CSRF validation failed: origin not allowed",
       },
     });
-    expect(resolveSpy).toHaveBeenCalledTimes(1);
-    expect(resolveSpy).toHaveBeenCalledWith(event);
+    expect(event.setHeaders).toHaveBeenCalledWith({
+      "X-Frame-Options": "DENY",
+      "X-Content-Type-Options": "nosniff",
+      "Referrer-Policy": "strict-origin-when-cross-origin",
+      "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+    });
+    expect(resolveSpy).not.toHaveBeenCalled();
   });
 
-  it("throws missing-Origin CSRF rejections after running resolve", async () => {
+  it("marks missing-Origin CSRF rejections with security headers", async () => {
     mockValidateOrigin.mockImplementation(() => {
       throw {
         status: 403,
@@ -317,7 +323,12 @@ describe("hooks security headers", () => {
         message: "CSRF validation failed: missing Origin header",
       },
     });
-    expect(resolveSpy).toHaveBeenCalledTimes(1);
-    expect(resolveSpy).toHaveBeenCalledWith(event);
+    expect(event.setHeaders).toHaveBeenCalledWith({
+      "X-Frame-Options": "DENY",
+      "X-Content-Type-Options": "nosniff",
+      "Referrer-Policy": "strict-origin-when-cross-origin",
+      "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+    });
+    expect(resolveSpy).not.toHaveBeenCalled();
   });
 });

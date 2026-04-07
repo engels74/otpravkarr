@@ -295,7 +295,7 @@ describe("DispatcharrClient.request", () => {
     }
   });
 
-  it("logs raw response body to console.error", async () => {
+  it("logs redacted response body metadata to console.error", async () => {
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     const responseBody = { detail: "user not found in external system" };
     mockOfetch.mockRejectedValueOnce(makeFetchError(404, "Not Found", responseBody));
@@ -303,7 +303,10 @@ describe("DispatcharrClient.request", () => {
 
     await client.request("GET", "/api/resource/999/");
 
-    expect(errorSpy).toHaveBeenCalledWith(`[dispatcharr] 404: ${JSON.stringify(responseBody)}`);
+    const serializedLength = JSON.stringify(responseBody)?.length ?? 0;
+    expect(errorSpy).toHaveBeenCalledWith(
+      `[dispatcharr] 404: [redacted object response body; ${serializedLength} chars]`,
+    );
     errorSpy.mockRestore();
   });
 
@@ -322,7 +325,9 @@ describe("DispatcharrClient.request", () => {
         error: "server_error",
         message: "Internal Server Error",
       });
-      expect(errorSpy).toHaveBeenCalledWith("[dispatcharr] 500: [unserializable response body]");
+      expect(errorSpy).toHaveBeenCalledWith(
+        "[dispatcharr] 500: [redacted object response body; unserializable]",
+      );
     } finally {
       errorSpy.mockRestore();
     }

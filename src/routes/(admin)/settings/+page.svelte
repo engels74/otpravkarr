@@ -2,7 +2,6 @@
 import type { ActionResult } from "@sveltejs/kit";
 import { toast } from "svelte-sonner";
 import { applyAction, enhance } from "$app/forms";
-import { invalidateAll } from "$app/navigation";
 import { Badge } from "$lib/components/ui/badge";
 import { Button } from "$lib/components/ui/button";
 import * as Card from "$lib/components/ui/card";
@@ -41,10 +40,10 @@ function makeEnhance(section: string) {
   return () => {
     sectionSubmitting[section] = true;
     delete sectionMessage[section];
-    return async ({ result }: { result: ActionResult }) => {
+    return async ({ result, update }: { result: ActionResult; update: () => Promise<void> }) => {
       sectionSubmitting[section] = false;
       if (result.type === "success") {
-        await invalidateAll();
+        await update();
         const msg =
           (result.data as { message?: string } | undefined)?.message ??
           "Settings saved successfully.";

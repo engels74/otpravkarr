@@ -3,7 +3,9 @@ import { z } from "zod";
 /**
  * Dispatcharr User schema aligned with the real API (OpenAPI 3.0.3 spec).
  *
- * Required in responses: id, username, api_key
+ * The OpenAPI response marks `id`, `username`, and `api_key` as required.
+ * This schema intentionally enforces only `id` and `username`; `api_key` is
+ * accepted as an additional passthrough field.
  * The API may return additional fields beyond what we parse here; `.passthrough()`
  * ensures we don't reject them.
  *

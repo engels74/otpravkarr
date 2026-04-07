@@ -4,10 +4,14 @@ import type { z } from "zod";
 import type { DispatcharrResult } from "./types";
 
 function formatResponseDataForLog(responseData: unknown): string {
+  const responseType =
+    responseData === null ? "null" : Array.isArray(responseData) ? "array" : typeof responseData;
+
   try {
-    return JSON.stringify(responseData);
+    const serialized = JSON.stringify(responseData) ?? "";
+    return `[redacted ${responseType} response body; ${serialized.length} chars]`;
   } catch {
-    return "[unserializable response body]";
+    return `[redacted ${responseType} response body; unserializable]`;
   }
 }
 

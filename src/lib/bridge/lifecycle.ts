@@ -205,7 +205,7 @@ export async function enableUser(client: DispatcharrClient, mapping: UserMapping
  * - Disables mappings for users no longer in the Plex friends list
  * - Refreshes Plex identity fields when they've changed
  * - Detects orphaned Dispatcharr users (deleted externally)
- * - Reconciles group/active-status drift from Dispatcharr
+ * - Reconciles Dispatcharr username drift and cleans up orphaned users
  * - Counts new Plex friends not yet mapped
  */
 export async function reconcileSync(

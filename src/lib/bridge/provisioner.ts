@@ -146,6 +146,10 @@ export async function provisionUser(
     const remoteResult = await fetchAllPages(client, "/api/accounts/users/", DispatcharrUserSchema);
     if (remoteResult.ok) {
       remoteUsernames = remoteResult.data.map((u) => u.username);
+    } else {
+      console.warn(
+        `[provisioner] Failed to fetch remote usernames for dedup, falling back to local-only: ${remoteResult.message}`,
+      );
     }
   } catch (err) {
     console.warn(

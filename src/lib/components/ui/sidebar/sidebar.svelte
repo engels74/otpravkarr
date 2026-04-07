@@ -77,7 +77,7 @@ const _sidebar = useSidebar();
 				"group-data-[collapsible=offcanvas]:w-0",
 				"group-data-[side=right]:rotate-180",
 				variant === "floating" || variant === "inset"
-					? "group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+var(--spacing)*4)]"
+					? "group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)_+_var(--spacing)_*_4)]"
 					: "group-data-[collapsible=icon]:w-[var(--sidebar-width-icon)]"
 			)}
 		></div>
@@ -86,11 +86,11 @@ const _sidebar = useSidebar();
 			class={cn(
 				"fixed inset-y-0 z-10 hidden h-svh w-[var(--sidebar-width)] transition-[left,right,width] duration-200 ease-linear md:flex",
 				side === "left"
-					? "start-0 group-data-[collapsible=offcanvas]:start-[calc(var(--sidebar-width)*-1)]"
-					: "end-0 group-data-[collapsible=offcanvas]:end-[calc(var(--sidebar-width)*-1)]",
+					? "start-0 group-data-[collapsible=offcanvas]:start-[calc(var(--sidebar-width)_*_-1)]"
+					: "end-0 group-data-[collapsible=offcanvas]:end-[calc(var(--sidebar-width)_*_-1)]",
 				// Adjust the padding for floating and inset variants.
 				variant === "floating" || variant === "inset"
-					? "p-2 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+var(--spacing)*4+2px)]"
+					? "p-2 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)_+_var(--spacing)_*_4_+_2px)]"
 					: "group-data-[collapsible=icon]:w-[var(--sidebar-width-icon)] group-data-[side=left]:border-e group-data-[side=right]:border-s",
 				className
 			)}

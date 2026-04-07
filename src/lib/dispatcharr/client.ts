@@ -87,25 +87,29 @@ export class DispatcharrClient {
       const statusCode = (error as Record<string, unknown>).statusCode as number;
       // ofetch FetchError includes parsed response body as `data`
       const responseData = (error as Record<string, unknown>).data;
-      const message = responseData
-        ? `${statusCode}: ${JSON.stringify(responseData)}`
-        : String(
-            (error as Record<string, unknown>).statusMessage ??
-              (error instanceof Error ? error.message : String(error)),
-          );
+
+      // Log raw response for debugging; keep user-facing message generic
+      if (responseData) {
+        console.error(`[dispatcharr] ${statusCode}: ${JSON.stringify(responseData)}`);
+      }
+
+      const message = String(
+        (error as Record<string, unknown>).statusMessage ??
+          (error instanceof Error ? error.message : `Dispatcharr API error (${statusCode})`),
+      );
 
       if (statusCode === 401 || statusCode === 403) {
-        return { ok: false, error: "auth_failure", message: String(message) };
+        return { ok: false, error: "auth_failure", message };
       }
       if (statusCode === 404) {
-        return { ok: false, error: "not_found", message: String(message) };
+        return { ok: false, error: "not_found", message };
       }
       // Remaining 4xx client errors
       if (statusCode >= 400 && statusCode < 500) {
-        return { ok: false, error: "validation_error", message: String(message) };
+        return { ok: false, error: "validation_error", message };
       }
       // 5xx: server responded but with an error (distinct from network_error)
-      return { ok: false, error: "server_error", message: String(message) };
+      return { ok: false, error: "server_error", message };
     }
 
     // Generic network / other error

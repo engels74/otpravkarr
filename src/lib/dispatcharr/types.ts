@@ -22,8 +22,9 @@ export interface DispatcharrChannelProfile {
 export interface DispatcharrChannel {
   id: number;
   name: string;
-  number: number;
-  enabled: boolean;
+  channel_number?: number | null | undefined;
+  /** Passthrough fields from the API that we don't actively use */
+  [key: string]: unknown;
 }
 
 export interface PaginatedResponse<T> {

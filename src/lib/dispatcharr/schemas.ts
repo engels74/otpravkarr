@@ -35,12 +35,21 @@ export const DispatcharrChannelProfileSchema = z.object({
   name: z.string(),
 });
 
-export const DispatcharrChannelSchema = z.object({
-  id: z.number(),
-  name: z.string(),
-  number: z.number(),
-  enabled: z.boolean(),
-});
+/**
+ * Dispatcharr Channel schema aligned with the real API (OpenAPI 3.0.3 spec).
+ *
+ * Required in responses: id, name
+ * The API uses `channel_number` (double, nullable) — NOT `number`.
+ * There is NO `enabled` field in the real API.
+ * `.passthrough()` accepts additional fields the API returns.
+ */
+export const DispatcharrChannelSchema = z
+  .object({
+    id: z.number(),
+    name: z.string(),
+    channel_number: z.number().nullable().optional(),
+  })
+  .passthrough();
 
 /** Minimal schema for health-probe responses (paginated endpoint, items ignored). */
 export const HealthProbeSchema = z.object({

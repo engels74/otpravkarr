@@ -6,8 +6,8 @@ import { generateM3U } from "../m3u";
 // helpers
 // ---------------------------------------------------------------------------
 
-function ch(id: number, name: string, number: number, enabled = true): DispatcharrChannel {
-  return { id, name, number, enabled };
+function ch(id: number, name: string, channel_number: number | null = null): DispatcharrChannel {
+  return { id, name, channel_number };
 }
 
 // ---------------------------------------------------------------------------
@@ -40,19 +40,15 @@ describe("generateM3U", () => {
     expect(result).toBe("#EXTM3U\n");
   });
 
-  it("filters out disabled channels", () => {
+  it("filters out channels with null channel_number", () => {
     const result = generateM3U({
       ...base,
-      channels: [
-        ch(1, "Enabled", 1, true),
-        ch(2, "Disabled", 2, false),
-        ch(3, "Also Enabled", 3, true),
-      ],
+      channels: [ch(1, "Has Number", 1), ch(2, "No Number", null), ch(3, "Also Has Number", 3)],
     });
 
-    expect(result).toContain("Enabled");
-    expect(result).toContain("Also Enabled");
-    expect(result).not.toContain("Disabled");
+    expect(result).toContain("Has Number");
+    expect(result).toContain("Also Has Number");
+    expect(result).not.toContain("No Number");
   });
 
   it("sorts channels by number ascending", () => {
@@ -109,10 +105,10 @@ describe("generateM3U", () => {
     expect(result).toContain("https://iptv.example.com/live/alice/s3cret/42.ts");
   });
 
-  it("returns only header when all channels are disabled", () => {
+  it("returns only header when all channels have null channel_number", () => {
     const result = generateM3U({
       ...base,
-      channels: [ch(1, "Off", 1, false), ch(2, "Also Off", 2, false)],
+      channels: [ch(1, "No Num", null), ch(2, "Also No Num", null)],
     });
 
     expect(result).toBe("#EXTM3U\n");

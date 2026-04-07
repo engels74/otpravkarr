@@ -46,8 +46,8 @@ function makeFetchError(statusCode: number, message = "Error") {
   return err;
 }
 
-const CHANNEL_A = { id: 1, name: "HBO", number: 101, enabled: true };
-const CHANNEL_B = { id: 2, name: "ESPN", number: 102, enabled: false };
+const CHANNEL_A = { id: 1, name: "HBO", channel_number: 101 };
+const CHANNEL_B = { id: 2, name: "ESPN", channel_number: 102 };
 
 // ---------------------------------------------------------------------------
 // Tests

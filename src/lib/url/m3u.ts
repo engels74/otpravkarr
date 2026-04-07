@@ -25,24 +25,26 @@ function sanitizeM3UValue(value: string): string {
 /**
  * Generate an M3U playlist string from a list of Dispatcharr channels.
  *
- * - Only enabled channels are included
- * - Channels are sorted by `number` ascending
+ * - Only channels with a non-null `channel_number` are included
+ * - Channels are sorted by `channel_number` ascending
  * - Each channel produces an `#EXTINF` line followed by the stream URL
  */
 export function generateM3U(params: M3UParams): string {
   const { channels, host, username, password, protocol } = params;
 
-  const enabled = channels.filter((ch) => ch.enabled === true).sort((a, b) => a.number - b.number);
+  const sorted = channels
+    .filter((ch) => ch.channel_number != null)
+    .sort((a, b) => (a.channel_number ?? 0) - (b.channel_number ?? 0));
 
   let output = "#EXTM3U\n";
 
-  for (const ch of enabled) {
+  for (const ch of sorted) {
     const url = buildLiveStreamUrl(
       { host, username, password, ...(protocol !== undefined ? { protocol } : {}) },
       ch.id,
     );
     const name = sanitizeM3UValue(ch.name);
-    output += `#EXTINF:-1 tvg-name="${name}" tvg-chno="${ch.number}",${name}\n`;
+    output += `#EXTINF:-1 tvg-name="${name}" tvg-chno="${ch.channel_number}",${name}\n`;
     output += `${url}\n`;
   }
 

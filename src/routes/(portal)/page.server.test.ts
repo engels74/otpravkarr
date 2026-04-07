@@ -41,8 +41,8 @@ const mocks = vi.hoisted(() => ({
       async (): Promise<DispatcharrResult<DispatcharrChannel[]>> => ({
         ok: true as const,
         data: [
-          { id: 1, name: "Channel 1", number: 1, enabled: true },
-          { id: 2, name: "Channel 2", number: 2, enabled: true },
+          { id: 1, name: "Channel 1", channel_number: 1 },
+          { id: 2, name: "Channel 2", channel_number: 2 },
         ],
       }),
     ),

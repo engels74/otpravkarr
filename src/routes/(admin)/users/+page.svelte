@@ -119,9 +119,12 @@ function makeEnhanceHandler() {
   return () => {
     submitting = true;
     return async ({ update }: { update: () => Promise<void> }) => {
-      await update();
-      submitting = false;
-      groupDialogOpen = false;
+      try {
+        await update();
+      } finally {
+        submitting = false;
+        groupDialogOpen = false;
+      }
     };
   };
 }
@@ -130,8 +133,11 @@ function makeActionEnhance() {
   return () => {
     submitting = true;
     return async ({ update }: { update: () => Promise<void> }) => {
-      await update();
-      submitting = false;
+      try {
+        await update();
+      } finally {
+        submitting = false;
+      }
     };
   };
 }
@@ -140,15 +146,18 @@ function makeEnableEnhance() {
   return () => {
     submitting = true;
     return async ({ result, update }: { result: ActionResult; update: () => Promise<void> }) => {
-      if (
-        result.type === "success" &&
-        (result.data as { initialPassword?: string } | undefined)?.initialPassword
-      ) {
-        oneTimePassword = (result.data as { initialPassword: string }).initialPassword;
-        passwordDialogOpen = true;
+      try {
+        if (
+          result.type === "success" &&
+          (result.data as { initialPassword?: string } | undefined)?.initialPassword
+        ) {
+          oneTimePassword = (result.data as { initialPassword: string }).initialPassword;
+          passwordDialogOpen = true;
+        }
+        await update();
+      } finally {
+        submitting = false;
       }
-      await update();
-      submitting = false;
     };
   };
 }

@@ -14,6 +14,8 @@ describe("resolveDevPort", () => {
     expect(resolveDevPort("abc")).toBe(3000);
     expect(resolveDevPort("-1")).toBe(3000);
     expect(resolveDevPort("0")).toBe(3000);
+    expect(resolveDevPort("65536")).toBe(3000);
+    expect(resolveDevPort("99999")).toBe(3000);
   });
 
   it("uses the configured numeric PORT", () => {

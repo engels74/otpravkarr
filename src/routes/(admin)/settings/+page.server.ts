@@ -115,7 +115,7 @@ export const actions: Actions = {
       if (err instanceof PlexConnectionError) {
         return fail(400, { error: "Could not connect to Plex server" });
       }
-      return fail(400, { error: "Could not connect to Plex server" });
+      return fail(500, { error: "Failed to save settings" });
     }
 
     invalidateConfigCache();

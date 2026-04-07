@@ -11,7 +11,7 @@ export function resolveDevPort(rawPort: string | undefined): number {
   }
 
   const parsed = Number.parseInt(trimmed, 10);
-  if (!Number.isFinite(parsed) || parsed <= 0) {
+  if (!Number.isFinite(parsed) || parsed <= 0 || parsed > 65535) {
     return DEFAULT_DEV_PORT;
   }
 

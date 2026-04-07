@@ -14,9 +14,9 @@ describe("selectActivePublicOrigin", () => {
     expect(selectActivePublicOrigin("", "http://127.0.0.1:5173")).toBe("http://127.0.0.1:5173");
   });
 
-  it("uses request origin when configured origin is stale loopback", () => {
+  it("uses configured origin when configured origin is stale loopback (avoids Host header influence)", () => {
     expect(selectActivePublicOrigin("http://localhost:3000", "http://127.0.0.1:5173")).toBe(
-      "http://127.0.0.1:5173",
+      "http://localhost:3000",
     );
   });
 

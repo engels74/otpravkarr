@@ -399,7 +399,7 @@ describe("portal page server", () => {
       expect(mocks.initiateOAuth).toHaveBeenCalledWith("https://public.example.com/auth/plex");
     });
 
-    it("uses request origin when ORIGIN is a stale loopback origin", async () => {
+    it("uses configured origin when ORIGIN is a stale loopback (avoids Host header influence)", async () => {
       envState.ORIGIN = "http://localhost:3000";
 
       const { actions } = await import("./+page.server");
@@ -417,7 +417,7 @@ describe("portal page server", () => {
         // redirect expected
       }
 
-      expect(mocks.initiateOAuth).toHaveBeenCalledWith("http://127.0.0.1:5173/auth/plex");
+      expect(mocks.initiateOAuth).toHaveBeenCalledWith("http://localhost:3000/auth/plex");
     });
   });
 

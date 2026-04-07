@@ -65,7 +65,15 @@ export function selectActivePublicOrigin(
     isLoopbackHostname(configured.hostname) &&
     !areEquivalentLoopbackOrigins(configured, request)
   ) {
-    return request.origin;
+    // When the configured origin is a loopback that doesn't match the request,
+    // return the configured origin rather than falling back to the request origin.
+    // Falling back to request.origin could let a spoofed Host header influence
+    // Plex OAuth callback URLs when ORIGIN is misconfigured to a loopback value.
+    console.warn(
+      `[origins] Configured origin ${configured.origin} is a loopback that does not match ` +
+        `request origin ${request.origin}. Using configured origin to avoid Host header influence.`,
+    );
+    return configured.origin;
   }
 
   return configured.origin;

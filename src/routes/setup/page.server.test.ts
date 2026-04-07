@@ -909,7 +909,7 @@ describe("configurePlex oauth initiate origin selection", () => {
     expect(oauth.initiateOAuth).toHaveBeenCalledWith("https://public.example.com/setup");
   });
 
-  it("uses request origin when ORIGIN is a stale loopback origin", async () => {
+  it("uses configured origin when ORIGIN is a stale loopback (avoids Host header influence)", async () => {
     state.env.ORIGIN = "http://localhost:3000";
     const { cookies } = createCookies({ [setupClaimCookie]: "proof-123" });
 
@@ -935,7 +935,7 @@ describe("configurePlex oauth initiate origin selection", () => {
       cookies,
     } as unknown as Parameters<typeof configurePlex>[0]);
 
-    expect(oauth.initiateOAuth).toHaveBeenCalledWith("http://127.0.0.1:5173/setup");
+    expect(oauth.initiateOAuth).toHaveBeenCalledWith("http://localhost:3000/setup");
   });
 
   it("falls back to request origin when ORIGIN is unset", async () => {

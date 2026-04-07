@@ -225,13 +225,13 @@ describe("admin users actions", () => {
       expect(mocks.enableUser).not.toHaveBeenCalled();
     });
 
-    it("falls back to empty groupIds when dispatcharr_group_ids is invalid JSON", async () => {
+    it("falls back to empty groupIds when dispatcharr_group_ids is not a number array", async () => {
       const { actions } = await import("./+page.server");
       const enableUserAction = actions.enableUser;
       if (!enableUserAction) throw new Error("enableUser action is undefined");
 
       mocks.getUserMappingById.mockReturnValueOnce(
-        makeOrphanedMapping({ dispatcharr_group_ids: "not-valid-json" }),
+        makeOrphanedMapping({ dispatcharr_group_ids: JSON.stringify([3, "five"]) }),
       );
       mocks.getConfig.mockResolvedValueOnce("dispatcharr-url");
       mocks.getConfig.mockResolvedValueOnce("dispatcharr-api-key");

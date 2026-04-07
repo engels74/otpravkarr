@@ -13,6 +13,22 @@ import { listGroups } from "$lib/dispatcharr/endpoints/groups";
 import { requireAdmin } from "$lib/server/auth";
 import type { Actions, PageServerLoad } from "./$types";
 
+function parseStoredGroupIds(rawGroupIds: string): number[] {
+  try {
+    const parsed: unknown = JSON.parse(rawGroupIds);
+    if (
+      !Array.isArray(parsed) ||
+      !parsed.every((groupId) => typeof groupId === "number" && Number.isFinite(groupId))
+    ) {
+      return [];
+    }
+
+    return parsed;
+  } catch {
+    return [];
+  }
+}
+
 async function getClient(): Promise<DispatcharrClient> {
   const url = await getConfig("dispatcharr_url");
   const key = await getConfig("dispatcharr_api_key");
@@ -126,12 +142,7 @@ export const actions: Actions = {
         await enableUser(client, mapping);
       } else {
         // Dispatcharr user was deleted during disable — re-provision
-        let groupIds: number[];
-        try {
-          groupIds = JSON.parse(mapping.dispatcharr_group_ids) as number[];
-        } catch {
-          groupIds = [];
-        }
+        const groupIds = parseStoredGroupIds(mapping.dispatcharr_group_ids);
         const plexToken = await getConfig("plex_admin_token");
         const result = await provisionUser(client, {
           plexIdentity: {

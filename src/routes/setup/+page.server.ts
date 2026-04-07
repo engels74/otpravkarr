@@ -15,6 +15,7 @@ import { listProfiles } from "$lib/dispatcharr/endpoints/profiles";
 import { validateServerToken } from "$lib/plex/client";
 import { completeOAuth, initiateOAuth } from "$lib/plex/oauth";
 import { PlexAuthError, PlexConnectionError } from "$lib/plex/types";
+import { seedInitialHealth } from "$lib/scheduler/jobs/health";
 import {
   ADMIN_COOKIE_OPTIONS,
   ADMIN_SESSION_TTL,
@@ -23,7 +24,7 @@ import {
   SESSION_COOKIE_NAME,
   SETUP_COMPLETED_CONFIG_KEY,
 } from "$lib/server/auth";
-import { parseAndNormalizeOrigins } from "$lib/server/origins";
+import { parseAndNormalizeOrigins, selectActivePublicOrigin } from "$lib/server/origins";
 import { setupLimiter } from "$lib/server/ratelimit";
 import {
   CreateAdminSchema,
@@ -335,10 +336,8 @@ export const actions: Actions = {
       }
 
       if (plexMode === "oauth_initiate") {
-        const configuredOrigin = env.ORIGIN?.trim();
-        const forwardOrigin =
-          configuredOrigin && configuredOrigin.length > 0 ? configuredOrigin : url.origin;
-        const forwardUrl = `${forwardOrigin.replace(/\/$/, "")}/setup`;
+        const forwardOrigin = selectActivePublicOrigin(env.ORIGIN, url.origin);
+        const forwardUrl = `${forwardOrigin}/setup`;
         const result = await initiateOAuth(forwardUrl);
         return {
           success: true,
@@ -542,6 +541,8 @@ export const actions: Actions = {
     ]);
     clearBootstrapToken();
     cookies.delete(SETUP_CLAIM_COOKIE_NAME, { path: SETUP_CLAIM_COOKIE_OPTIONS.path });
+
+    seedInitialHealth();
 
     const sessionId = createSession(adminUsername, "admin", ADMIN_SESSION_TTL);
     cookies.set(SESSION_COOKIE_NAME, sessionId, ADMIN_COOKIE_OPTIONS);

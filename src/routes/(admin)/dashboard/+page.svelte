@@ -81,7 +81,7 @@ function friendInitials(f: PlexFriend): string {
     <!-- Plex -->
     <Card.Root>
       <Card.Header class="pb-2">
-        <Card.Description>Plex</Card.Description>
+        <Card.Title class="text-sm font-medium">Plex</Card.Title>
       </Card.Header>
       <Card.Content>
         <div class="flex items-center justify-between">
@@ -96,7 +96,7 @@ function friendInitials(f: PlexFriend): string {
     <!-- Dispatcharr -->
     <Card.Root>
       <Card.Header class="pb-2">
-        <Card.Description>Dispatcharr</Card.Description>
+        <Card.Title class="text-sm font-medium">Dispatcharr</Card.Title>
       </Card.Header>
       <Card.Content>
         <div class="flex items-center justify-between">
@@ -111,7 +111,7 @@ function friendInitials(f: PlexFriend): string {
     <!-- SQLite -->
     <Card.Root>
       <Card.Header class="pb-2">
-        <Card.Description>SQLite</Card.Description>
+        <Card.Title class="text-sm font-medium">SQLite</Card.Title>
       </Card.Header>
       <Card.Content>
         <div class="flex items-center justify-between">
@@ -270,6 +270,9 @@ function friendInitials(f: PlexFriend): string {
             All accepted friends are already mapped.
           </p>
         {:else}
+          <p class="mb-3 text-sm text-muted-foreground">
+            Friends listed here will be automatically provisioned when they sign in to the portal via Plex.
+          </p>
           <ul class="space-y-3">
             {#each data.availableFriends as friend (friend.id)}
               <li class="flex items-center gap-3">

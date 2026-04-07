@@ -1,4 +1,5 @@
 <script lang="ts">
+import type { ActionResult } from "@sveltejs/kit";
 import BanIcon from "lucide-svelte/icons/ban";
 import CheckCircle2Icon from "lucide-svelte/icons/check-circle-2";
 import EllipsisIcon from "lucide-svelte/icons/ellipsis";
@@ -20,6 +21,7 @@ import * as Table from "$lib/components/ui/table";
 import type { ProvisioningMode, UserMapping } from "$lib/db/types";
 import type { DispatcharrGroup } from "$lib/dispatcharr/types";
 import { normalizeSqliteDatetime } from "$lib/utils/datetime";
+import { copyOtpToClipboard } from "./otp-clipboard";
 
 interface Props {
   data: {
@@ -36,8 +38,11 @@ let submitting = $state(false);
 // Dialog state
 let groupDialogOpen = $state(false);
 let detailDialogOpen = $state(false);
+let passwordDialogOpen = $state(false);
 let selectedMapping = $state<UserMapping | null>(null);
 let selectedGroupIds = $state<number[]>([]);
+let oneTimePassword = $state("");
+let passwordCopyStatus = $state<"idle" | "copied" | "failed">("idle");
 
 // Search debounce
 let searchTimeout: ReturnType<typeof setTimeout> | undefined;
@@ -116,9 +121,12 @@ function makeEnhanceHandler() {
   return () => {
     submitting = true;
     return async ({ update }: { update: () => Promise<void> }) => {
-      await update();
-      submitting = false;
-      groupDialogOpen = false;
+      try {
+        await update();
+      } finally {
+        submitting = false;
+        groupDialogOpen = false;
+      }
     };
   };
 }
@@ -127,16 +135,48 @@ function makeActionEnhance() {
   return () => {
     submitting = true;
     return async ({ update }: { update: () => Promise<void> }) => {
-      await update();
-      submitting = false;
+      try {
+        await update();
+      } finally {
+        submitting = false;
+      }
     };
   };
 }
+
+function makeEnableEnhance() {
+  return () => {
+    submitting = true;
+    return async ({ result, update }: { result: ActionResult; update: () => Promise<void> }) => {
+      try {
+        if (
+          result.type === "success" &&
+          (result.data as { initialPassword?: string } | undefined)?.initialPassword
+        ) {
+          oneTimePassword = (result.data as { initialPassword: string }).initialPassword;
+          passwordCopyStatus = "idle";
+          passwordDialogOpen = true;
+        }
+        await update();
+      } finally {
+        submitting = false;
+      }
+    };
+  };
+}
+
+async function copyOneTimePassword() {
+  passwordCopyStatus = await copyOtpToClipboard(oneTimePassword);
+}
 </script>
+
+<svelte:head>
+  <title>Users — otpravkarr</title>
+</svelte:head>
 
 <div class="space-y-4">
   <div class="flex items-center justify-between">
-    <h1 class="text-lg font-semibold">Users</h1>
+    <h1 class="text-lg font-semibold text-foreground">Users</h1>
     <span class="text-sm text-muted-foreground">{data.mappings.length} users</span>
   </div>
 
@@ -147,7 +187,7 @@ function makeActionEnhance() {
       value={data.filters.status}
       onValueChange={(v) => updateFilter("status", v ?? "all")}
     >
-      <Select.Trigger class="w-[140px]">
+      <Select.Trigger class="w-[140px] text-foreground">
         <span data-slot="select-value">
           {data.filters.status === "all" ? "All statuses" : data.filters.status.charAt(0).toUpperCase() + data.filters.status.slice(1)}
         </span>
@@ -165,7 +205,7 @@ function makeActionEnhance() {
       value={data.filters.mode}
       onValueChange={(v) => updateFilter("mode", v ?? "all")}
     >
-      <Select.Trigger class="w-[160px]">
+      <Select.Trigger class="w-[160px] text-foreground">
         <span data-slot="select-value">
           {data.filters.mode === "all" ? "All modes" : modeLabelText(data.filters.mode as ProvisioningMode)}
         </span>
@@ -180,14 +220,14 @@ function makeActionEnhance() {
 
     <Input
       placeholder="Search username..."
-      class="w-[200px]"
+      class="w-[200px] text-foreground"
       value={searchValue}
       oninput={onSearchInput}
     />
   </div>
 
   <!-- Table -->
-  <div class="rounded-lg border">
+  <div class="overflow-x-auto rounded-lg border">
     <Table.Root>
       <Table.Header>
         <Table.Row>
@@ -195,8 +235,8 @@ function makeActionEnhance() {
           <Table.Head>Dispatcharr</Table.Head>
           <Table.Head>Mode</Table.Head>
           <Table.Head>Status</Table.Head>
-          <Table.Head>Last Accessed</Table.Head>
-          <Table.Head class="w-[50px]"></Table.Head>
+          <Table.Head class="whitespace-nowrap">Last Accessed</Table.Head>
+          <Table.Head class="w-[50px]"><span class="sr-only">Actions</span></Table.Head>
         </Table.Row>
       </Table.Header>
       <Table.Body>
@@ -269,10 +309,10 @@ function makeActionEnhance() {
                         {/snippet}
                       </DropdownMenu.Item>
                     {/if}
-                    {#if m.is_active === 0 && m.dispatcharr_user_id != null}
+                    {#if m.is_active === 0}
                       <DropdownMenu.Item>
                         {#snippet child({ props })}
-                          <form method="POST" action="?/enableUser" use:enhance={makeActionEnhance()}>
+                          <form method="POST" action="?/enableUser" use:enhance={makeEnableEnhance()}>
                             <input type="hidden" name="id" value={m.id} />
                             <button type="submit" class="flex w-full items-center gap-2 text-left" disabled={submitting} {...props}>
                               <CheckCircle2Icon class="h-3.5 w-3.5" />
@@ -410,6 +450,41 @@ function makeActionEnhance() {
           <span>{formatRelativeTime(m.last_accessed_at)}</span>
         </div>
       </div>
+    {/if}
+  </Dialog.Content>
+</Dialog.Root>
+
+<!-- One-Time Password Dialog -->
+<Dialog.Root bind:open={passwordDialogOpen}>
+  <Dialog.Content class="sm:max-w-md">
+    <Dialog.Header>
+      <Dialog.Title>One-Time Password</Dialog.Title>
+      <Dialog.Description>
+        This user was re-provisioned with a new account. Save this password — it will not be shown again.
+      </Dialog.Description>
+    </Dialog.Header>
+    <div class="rounded-md bg-muted p-3 font-mono text-sm select-all">
+      {oneTimePassword}
+    </div>
+    <Dialog.Footer>
+      <Button size="sm" onclick={copyOneTimePassword}>
+        Copy Password
+      </Button>
+      <Button
+        variant="outline"
+        size="sm"
+        onclick={() => {
+          passwordDialogOpen = false;
+          passwordCopyStatus = "idle";
+        }}
+      >
+        Close
+      </Button>
+    </Dialog.Footer>
+    {#if passwordCopyStatus === "copied"}
+      <p class="text-xs text-muted-foreground">Password copied to clipboard.</p>
+    {:else if passwordCopyStatus === "failed"}
+      <p class="text-xs text-destructive">Clipboard copy failed. Select and copy manually.</p>
     {/if}
   </Dialog.Content>
 </Dialog.Root>

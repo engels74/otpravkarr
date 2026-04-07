@@ -282,7 +282,7 @@ describe("admin settings actions", () => {
       createActionEvent(body) as unknown as Parameters<typeof updatePlexConnection>[0],
     );
 
-    expect(result).toEqual({ success: true });
+    expect(result).toEqual({ success: true, message: "Plex settings saved." });
     expect(mocks.validateServerToken).toHaveBeenCalledWith("http://plex.local", "existing-token");
     expect(mocks.setConfig).toHaveBeenCalledWith("plex_machine_id", "new-mid");
     expect(state.configValues.get("plex_machine_id")).toBe("new-mid");
@@ -309,7 +309,7 @@ describe("admin settings actions", () => {
 
     expect(result).toMatchObject({
       status: 400,
-      data: { error: "Plex validation failed" },
+      data: { error: "Could not connect to Plex server" },
     });
     expect(mocks.setConfig).not.toHaveBeenCalled();
     expect(mocks.invalidateConfigCache).not.toHaveBeenCalled();

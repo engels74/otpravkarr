@@ -238,6 +238,11 @@ describe("retryResult", () => {
 // ---------------------------------------------------------------------------
 
 describe("isTransientResultError", () => {
+  it("returns false when retryable is explicitly false", () => {
+    expect(isTransientResultError({ error: "network_error", retryable: false })).toBe(false);
+    expect(isTransientResultError({ error: "server_error", retryable: false })).toBe(false);
+  });
+
   it("returns true for network_error", () => {
     expect(isTransientResultError({ error: "network_error" })).toBe(true);
   });

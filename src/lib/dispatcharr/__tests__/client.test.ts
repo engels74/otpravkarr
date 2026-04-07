@@ -22,10 +22,17 @@ function createClient(baseUrl = "https://dispatch.example.com", apiKey = "test-k
   return new DispatcharrClient(baseUrl, apiKey);
 }
 
-function makeFetchError(statusCode: number, message = "Error") {
-  const err = new Error(message) as Error & { statusCode: number; statusMessage: string };
+function makeFetchError(statusCode: number, message = "Error", data?: unknown) {
+  const err = new Error(message) as Error & {
+    statusCode: number;
+    statusMessage: string;
+    data?: unknown;
+  };
   err.statusCode = statusCode;
   err.statusMessage = message;
+  if (data !== undefined) {
+    err.data = data;
+  }
   return err;
 }
 
@@ -95,6 +102,8 @@ describe("DispatcharrClient.request", () => {
 
     expect(mockOfetch).toHaveBeenCalledWith("https://dispatch.example.com/api/test/", {
       method: "GET",
+      timeout: 15_000,
+      retry: 1,
       headers: { Authorization: "ApiKey my-api-key" },
     });
   });
@@ -208,6 +217,20 @@ describe("DispatcharrClient.request", () => {
     });
   });
 
+  it("marks 5xx mutation errors as non-retryable", async () => {
+    mockOfetch.mockRejectedValueOnce(makeFetchError(500, "Internal Server Error"));
+    const client = createClient();
+
+    const result = await client.request("PATCH", "/api/resource/1/", { body: { x: 1 } });
+
+    expect(result).toEqual({
+      ok: false,
+      error: "server_error",
+      message: "Internal Server Error",
+      retryable: false,
+    });
+  });
+
   it("maps 502 to server_error", async () => {
     mockOfetch.mockRejectedValueOnce(makeFetchError(502, "Bad Gateway"));
     const client = createClient();
@@ -230,6 +253,20 @@ describe("DispatcharrClient.request", () => {
     expect(result).toEqual({ ok: false, error: "network_error", message: "ECONNREFUSED" });
   });
 
+  it("marks network mutation errors as non-retryable", async () => {
+    mockOfetch.mockRejectedValueOnce(new Error("ECONNREFUSED"));
+    const client = createClient();
+
+    const result = await client.request("POST", "/api/resource/", { body: { x: 1 } });
+
+    expect(result).toEqual({
+      ok: false,
+      error: "network_error",
+      message: "ECONNREFUSED",
+      retryable: false,
+    });
+  });
+
   it("maps non-Error thrown values to network_error", async () => {
     mockOfetch.mockRejectedValueOnce("unexpected string");
     const client = createClient();
@@ -243,6 +280,59 @@ describe("DispatcharrClient.request", () => {
     });
   });
 
+  it("does not expose raw response body in error message", async () => {
+    const sensitiveData = { detail: "Internal DB error at row 42", stack: "..." };
+    mockOfetch.mockRejectedValueOnce(makeFetchError(500, "Internal Server Error", sensitiveData));
+    const client = createClient();
+
+    const result = await client.request("GET", "/api/resource/");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toBe("Internal Server Error");
+      expect(result.message).not.toContain("DB error");
+      expect(result.message).not.toContain("row 42");
+    }
+  });
+
+  it("logs redacted response body metadata to console.error", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const responseBody = { detail: "user not found in external system" };
+    mockOfetch.mockRejectedValueOnce(makeFetchError(404, "Not Found", responseBody));
+    const client = createClient();
+
+    await client.request("GET", "/api/resource/999/");
+
+    const serializedLength = JSON.stringify(responseBody)?.length ?? 0;
+    expect(errorSpy).toHaveBeenCalledWith(
+      `[dispatcharr] 404: [redacted object response body; ${serializedLength} chars]`,
+    );
+    errorSpy.mockRestore();
+  });
+
+  it("logs unserializable response bodies without throwing", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const responseBody: { detail: string; self?: unknown } = { detail: "circular" };
+    responseBody.self = responseBody;
+    mockOfetch.mockRejectedValueOnce(makeFetchError(500, "Internal Server Error", responseBody));
+    const client = createClient();
+
+    try {
+      const result = await client.request("GET", "/api/resource/999/");
+
+      expect(result).toEqual({
+        ok: false,
+        error: "server_error",
+        message: "Internal Server Error",
+      });
+      expect(errorSpy).toHaveBeenCalledWith(
+        "[dispatcharr] 500: [redacted object response body; unserializable]",
+      );
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
   it("never leaks raw exceptions to callers", async () => {
     mockOfetch.mockRejectedValueOnce(new TypeError("fetch failed"));
     const client = createClient();
@@ -251,5 +341,89 @@ describe("DispatcharrClient.request", () => {
     const result = await client.request("GET", "/api/resource/");
 
     expect(result.ok).toBe(false);
+  });
+
+  it("passes timeout: 15_000 on all requests", async () => {
+    mockOfetch.mockResolvedValueOnce({});
+    const client = createClient();
+
+    await client.request("POST", "/api/resource/", { body: { x: 1 } });
+
+    expect(mockOfetch).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ timeout: 15_000 }),
+    );
+  });
+
+  it("passes retry: 1 for GET requests", async () => {
+    mockOfetch.mockResolvedValueOnce({});
+    const client = createClient();
+
+    await client.request("GET", "/api/resource/");
+
+    expect(mockOfetch).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ retry: 1 }),
+    );
+  });
+
+  it("passes retry: 1 for HEAD requests", async () => {
+    mockOfetch.mockResolvedValueOnce({});
+    const client = createClient();
+
+    await client.request("HEAD", "/api/resource/");
+
+    expect(mockOfetch).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ retry: 1 }),
+    );
+  });
+
+  it("passes retry: 0 for POST requests", async () => {
+    mockOfetch.mockResolvedValueOnce({});
+    const client = createClient();
+
+    await client.request("POST", "/api/resource/", { body: {} });
+
+    expect(mockOfetch).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ retry: 0 }),
+    );
+  });
+
+  it("passes retry: 0 for PATCH requests", async () => {
+    mockOfetch.mockResolvedValueOnce({});
+    const client = createClient();
+
+    await client.request("PATCH", "/api/resource/1/", { body: {} });
+
+    expect(mockOfetch).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ retry: 0 }),
+    );
+  });
+
+  it("passes retry: 0 for PUT requests", async () => {
+    mockOfetch.mockResolvedValueOnce({});
+    const client = createClient();
+
+    await client.request("PUT", "/api/resource/1/", { body: {} });
+
+    expect(mockOfetch).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ retry: 0 }),
+    );
+  });
+
+  it("passes retry: 0 for DELETE requests", async () => {
+    mockOfetch.mockResolvedValueOnce({});
+    const client = createClient();
+
+    await client.request("DELETE", "/api/resource/1/");
+
+    expect(mockOfetch).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ retry: 0 }),
+    );
   });
 });

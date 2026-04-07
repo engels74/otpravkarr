@@ -10,7 +10,7 @@ import {
 import type { UserMapping } from "$lib/db/types";
 import { AuditAction } from "$lib/db/types";
 import type { DispatcharrClient } from "$lib/dispatcharr/client";
-import { createUser, updateUser } from "$lib/dispatcharr/endpoints/users";
+import { createUser, getUser } from "$lib/dispatcharr/endpoints/users";
 import { isTransientResultError, retryResult } from "$lib/utils/retry";
 import type { ProvisioningRequest, ProvisioningResult } from "./types";
 
@@ -74,14 +74,15 @@ export async function provisionUser(
   ) {
     const dispatcharrUserId = existingMapping.dispatcharr_user_id;
 
+    // Verify the Dispatcharr user still exists (disable deletes the remote user)
     const result = await retryResult(
-      () => updateUser(client, dispatcharrUserId, { is_active: true }),
+      () => getUser(client, dispatcharrUserId),
       isTransientResultError,
     );
 
     if (!result.ok) {
       if (result.error === "not_found") {
-        // Dispatcharr user was deleted externally — clear stale ID and fall through to create flow
+        // Dispatcharr user was deleted — clear stale ID and fall through to create flow
         try {
           updateUserMapping(existingMapping.id, {
             dispatcharr_user_id: null,
@@ -158,9 +159,7 @@ export async function provisionUser(
       createUser(client, {
         username: sanitizedUsername,
         password,
-        is_staff: request.mode === "staff",
-        is_active: true,
-        groups: request.groupIds,
+        ...(request.mode === "staff" && { is_staff: true }),
       }),
     isTransientResultError,
   );

@@ -33,16 +33,15 @@ interface Props {
 
 let { data }: Props = $props();
 
-let expandedRows = $state(new Set<number>());
+let expandedRows: Record<number, boolean> = $state({});
 const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 function toggleRow(id: number) {
-  if (expandedRows.has(id)) {
-    expandedRows.delete(id);
+  if (expandedRows[id]) {
+    delete expandedRows[id];
   } else {
-    expandedRows.add(id);
+    expandedRows[id] = true;
   }
-  expandedRows = new Set(expandedRows);
 }
 
 function localDateStartToIso(dateOnly: string): string | null {
@@ -140,20 +139,20 @@ let rangeEnd = $derived(Math.min(data.filters.page * data.filters.limit, data.to
 
 <div class="space-y-4">
   <div>
-    <h1 class="text-lg font-semibold">Audit Log</h1>
+    <h1 class="text-lg font-semibold text-foreground">Audit Log</h1>
     <p class="text-sm text-muted-foreground">System event history and activity trail.</p>
   </div>
 
   <!-- ─── Filters ──────────────────────────────────────── -->
   <div class="flex flex-wrap items-end gap-3">
     <div class="grid gap-1.5">
-      <Label class="text-xs">Action</Label>
+      <Label class="text-xs text-foreground">Action</Label>
       <Select.Root
         type="single"
         value={data.filters.action ?? "all"}
         onValueChange={(v) => updateFilter("action", v === "all" ? null : v)}
       >
-        <Select.Trigger class="w-48">
+        <Select.Trigger class="w-48 text-foreground">
           <span data-slot="select-value">
             {data.filters.action ?? "All Actions"}
           </span>
@@ -168,7 +167,7 @@ let rangeEnd = $derived(Math.min(data.filters.page * data.filters.limit, data.to
     </div>
 
     <div class="grid gap-1.5">
-      <Label class="text-xs">Actor</Label>
+      <Label class="text-xs text-foreground">Actor</Label>
       <Input
         placeholder="Filter by actor…"
         class="h-8 w-40"
@@ -181,10 +180,11 @@ let rangeEnd = $derived(Math.min(data.filters.page * data.filters.limit, data.to
     </div>
 
     <div class="grid gap-1.5">
-      <Label class="text-xs">After</Label>
+      <Label class="text-xs text-foreground">After</Label>
       <Input
         type="date"
         class="h-8 w-36"
+        aria-label="Filter after date"
         value={data.filters.after ?? ""}
         onchange={(e) => {
           const v = (e.currentTarget as HTMLInputElement).value;
@@ -194,10 +194,11 @@ let rangeEnd = $derived(Math.min(data.filters.page * data.filters.limit, data.to
     </div>
 
     <div class="grid gap-1.5">
-      <Label class="text-xs">Before</Label>
+      <Label class="text-xs text-foreground">Before</Label>
       <Input
         type="date"
         class="h-8 w-36"
+        aria-label="Filter before date"
         value={data.filters.before ?? ""}
         onchange={(e) => {
           const v = (e.currentTarget as HTMLInputElement).value;
@@ -208,7 +209,7 @@ let rangeEnd = $derived(Math.min(data.filters.page * data.filters.limit, data.to
   </div>
 
   <!-- ─── Table ────────────────────────────────────────── -->
-  <div class="rounded-lg border">
+  <div class="overflow-x-auto rounded-lg border">
     <Table.Root>
       <Table.Header>
         <Table.Row>
@@ -228,9 +229,9 @@ let rangeEnd = $derived(Math.min(data.filters.page * data.filters.limit, data.to
           </Table.Row>
         {:else}
           {#each data.entries as entry (entry.id)}
-            {@const isExpanded = expandedRows.has(entry.id)}
+            {@const isExpanded = expandedRows[entry.id] === true}
             <Table.Row
-              class="cursor-pointer"
+              class={entry.detail ? "cursor-pointer" : ""}
               onclick={() => entry.detail && toggleRow(entry.id)}
             >
               <Table.Cell class="w-8 px-2">
@@ -247,7 +248,7 @@ let rangeEnd = $derived(Math.min(data.filters.page * data.filters.limit, data.to
               <Table.Cell class="whitespace-nowrap font-mono text-xs text-muted-foreground">
                 {formatTimestamp(entry.timestamp)}
               </Table.Cell>
-              <Table.Cell class="text-sm">
+              <Table.Cell class="text-sm text-foreground">
                 {entry.actor ?? "system"}
               </Table.Cell>
               <Table.Cell>
@@ -262,7 +263,7 @@ let rangeEnd = $derived(Math.min(data.filters.page * data.filters.limit, data.to
             {#if isExpanded && entry.detail}
               <Table.Row>
                 <Table.Cell colspan={5} class="bg-muted/50 px-4 py-3">
-                  <pre class="text-xs font-mono whitespace-pre-wrap break-all">{formatDetail(entry.detail)}</pre>
+                  <pre class="text-xs font-mono whitespace-pre-wrap break-all text-foreground">{formatDetail(entry.detail)}</pre>
                 </Table.Cell>
               </Table.Row>
             {/if}

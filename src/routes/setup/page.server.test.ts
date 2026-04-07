@@ -85,6 +85,10 @@ vi.mock("$lib/dispatcharr/endpoints/profiles", () => ({
   listProfiles: vi.fn(async () => ({ ok: true, data: [] })),
 }));
 
+vi.mock("$lib/scheduler/jobs/health", () => ({
+  seedInitialHealth: vi.fn(),
+}));
+
 vi.mock("$lib/plex/client", () => ({
   validateServerToken: vi.fn(async () => ({
     friendlyName: "Plex",
@@ -903,6 +907,35 @@ describe("configurePlex oauth initiate origin selection", () => {
       oauthUri: "https://app.plex.tv/auth",
     });
     expect(oauth.initiateOAuth).toHaveBeenCalledWith("https://public.example.com/setup");
+  });
+
+  it("uses configured origin when ORIGIN is a stale loopback (avoids Host header influence)", async () => {
+    state.env.ORIGIN = "http://localhost:3000";
+    const { cookies } = createCookies({ [setupClaimCookie]: "proof-123" });
+
+    const body = new FormData();
+    body.set("plexMode", "oauth_initiate");
+    const request = new Request("http://127.0.0.1:5173/setup", { method: "POST", body });
+
+    const oauth = await import("$lib/plex/oauth");
+    vi.mocked(oauth.initiateOAuth).mockResolvedValue({
+      id: "oauth-id",
+      uri: "https://app.plex.tv/auth",
+    });
+
+    const { actions } = await import("./+page.server");
+    const configurePlex = actions.configurePlex;
+    if (!configurePlex) {
+      throw new Error("configurePlex action is undefined");
+    }
+
+    await configurePlex({
+      request,
+      url: new URL("http://127.0.0.1:5173/setup"),
+      cookies,
+    } as unknown as Parameters<typeof configurePlex>[0]);
+
+    expect(oauth.initiateOAuth).toHaveBeenCalledWith("http://localhost:3000/setup");
   });
 
   it("falls back to request origin when ORIGIN is unset", async () => {

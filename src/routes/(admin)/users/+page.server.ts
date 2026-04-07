@@ -1,5 +1,6 @@
 import { fail } from "@sveltejs/kit";
 import { disableUser, enableUser, rotateCredentials } from "$lib/bridge/lifecycle";
+import { provisionUser } from "$lib/bridge/provisioner";
 import { getConfig } from "$lib/db/repositories/config";
 import {
   getAllUserMappings,
@@ -9,9 +10,24 @@ import {
 import type { ProvisioningMode } from "$lib/db/types";
 import { DispatcharrClient } from "$lib/dispatcharr/client";
 import { listGroups } from "$lib/dispatcharr/endpoints/groups";
-import { updateUser } from "$lib/dispatcharr/endpoints/users";
 import { requireAdmin } from "$lib/server/auth";
 import type { Actions, PageServerLoad } from "./$types";
+
+function parseStoredGroupIds(rawGroupIds: string): number[] {
+  try {
+    const parsed: unknown = JSON.parse(rawGroupIds);
+    if (
+      !Array.isArray(parsed) ||
+      !parsed.every((groupId) => typeof groupId === "number" && Number.isFinite(groupId))
+    ) {
+      return [];
+    }
+
+    return parsed;
+  } catch {
+    return [];
+  }
+}
 
 async function getClient(): Promise<DispatcharrClient> {
   const url = await getConfig("dispatcharr_url");
@@ -120,7 +136,36 @@ export const actions: Actions = {
 
     try {
       const client = await getClient();
-      await enableUser(client, mapping);
+
+      if (mapping.dispatcharr_user_id != null) {
+        // Dispatcharr user still exists — just re-enable locally
+        await enableUser(client, mapping);
+      } else {
+        // Dispatcharr user was deleted during disable — re-provision
+        const groupIds = parseStoredGroupIds(mapping.dispatcharr_group_ids);
+        const plexToken = await getConfig("plex_admin_token");
+        const result = await provisionUser(client, {
+          plexIdentity: {
+            id: mapping.plex_account_id,
+            uuid: mapping.plex_uuid,
+            username: mapping.plex_username,
+            email: mapping.plex_email ?? "",
+            thumb: mapping.plex_thumb ?? "",
+            authenticationToken: plexToken ?? "",
+          },
+          mode: mapping.provisioning_mode,
+          groupIds,
+          profileId: mapping.dispatcharr_profile_id ?? undefined,
+        });
+        if (result.status === "failed") {
+          return fail(500, { error: result.error });
+        }
+        // Surface the one-time password so the admin can communicate it
+        if (result.status === "provisioned" && result.initialPassword) {
+          return { success: true, initialPassword: result.initialPassword };
+        }
+      }
+
       return { success: true };
     } catch (err) {
       return fail(500, { error: err instanceof Error ? err.message : "Failed to enable user" });
@@ -145,28 +190,8 @@ export const actions: Actions = {
     }
 
     try {
-      if (mapping.dispatcharr_user_id != null) {
-        const client = await getClient();
-        const result = await updateUser(client, mapping.dispatcharr_user_id, { groups: groupIds });
-        if (!result.ok) {
-          if (result.error === "not_found") {
-            updateUserMapping(id, {
-              is_active: 0,
-              dispatcharr_user_id: null,
-              dispatcharr_username: null,
-              dispatcharr_xc_password_enc: null,
-              dispatcharr_group_ids: JSON.stringify(groupIds),
-            });
-            return {
-              success: true,
-              staleMappingCleared: true,
-              message:
-                "Dispatcharr user no longer exists. Cleared stale mapping and saved groups locally.",
-            };
-          }
-          return fail(500, { error: `Dispatcharr error: ${result.message}` });
-        }
-      }
+      // Groups are tracked locally — the Dispatcharr User API does not have a groups field.
+      // Group assignments on Dispatcharr are managed separately through the Groups API.
       updateUserMapping(id, { dispatcharr_group_ids: JSON.stringify(groupIds) });
       return { success: true };
     } catch (err) {

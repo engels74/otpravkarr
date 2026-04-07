@@ -46,8 +46,8 @@ function makeFetchError(statusCode: number, message = "Error") {
   return err;
 }
 
-const CHANNEL_A = { id: 1, name: "HBO", number: 101, enabled: true };
-const CHANNEL_B = { id: 2, name: "ESPN", number: 102, enabled: false };
+const CHANNEL_A = { id: 1, name: "HBO", channel_number: 101 };
+const CHANNEL_B = { id: 2, name: "ESPN", channel_number: 102 };
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -153,6 +153,19 @@ describe("getAllChannels", () => {
     if (!result.ok) {
       expect(result.error).toBe("auth_failure");
     }
+  });
+
+  it("handles flat array response from channels API", async () => {
+    mockOfetch.mockResolvedValueOnce([CHANNEL_A, CHANNEL_B]);
+    const endpoints = createChannelEndpoints(createClient());
+
+    const result = await endpoints.getAllChannels();
+
+    expect(result).toEqual({
+      ok: true,
+      data: [CHANNEL_A, CHANNEL_B],
+    });
+    expect(mockOfetch).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -105,7 +105,8 @@ export const load: PageServerLoad = async ({ cookies }) => {
   });
 
   if (result.status === "failed") {
-    throw error(500, `Provisioning failed: ${result.error}`);
+    console.error("[auth/plex] Provisioning failed for Plex user:", result.error);
+    throw error(502, "Unable to set up your account. Please contact the administrator.");
   }
 
   // 5. Create session

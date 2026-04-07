@@ -1,0 +1,12 @@
+/*
+ * Fix for unocss-preset-shadcn mismatch: the preset generates --sidebar
+ * as the CSS variable but references --sidebar-background in theme colors.
+ * Alias the missing variable so bg-sidebar works correctly.
+ */
+:root {
+  --sidebar-background: var(--sidebar);
+}
+
+.dark {
+  --sidebar-background: var(--sidebar);
+}

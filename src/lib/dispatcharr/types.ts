@@ -3,8 +3,9 @@ export interface DispatcharrUser {
   username: string;
   email?: string | undefined;
   is_staff: boolean;
-  is_active: boolean;
-  groups: number[];
+  is_superuser: boolean;
+  /** Passthrough fields from the API that we don't actively use */
+  [key: string]: unknown;
 }
 
 export interface DispatcharrGroup {
@@ -21,8 +22,9 @@ export interface DispatcharrChannelProfile {
 export interface DispatcharrChannel {
   id: number;
   name: string;
-  number: number;
-  enabled: boolean;
+  channel_number?: number | null | undefined;
+  /** Passthrough fields from the API that we don't actively use */
+  [key: string]: unknown;
 }
 
 export interface PaginatedResponse<T> {
@@ -42,4 +44,4 @@ export type DispatcharrErrorCode =
 
 export type DispatcharrResult<T> =
   | { ok: true; data: T }
-  | { ok: false; error: DispatcharrErrorCode; message: string };
+  | { ok: false; error: DispatcharrErrorCode; message: string; retryable?: boolean };

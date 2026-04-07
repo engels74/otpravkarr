@@ -187,4 +187,35 @@ describe("fetchAllPages", () => {
       expect(result.error).toBe("unexpected_shape");
     }
   });
+
+  it("handles flat array response (no pagination envelope)", async () => {
+    mockOfetch.mockResolvedValueOnce([
+      { id: 1, name: "one" },
+      { id: 2, name: "two" },
+    ]);
+
+    const client = createClient();
+    const result = await fetchAllPages(client, "/api/resource/", itemSchema);
+
+    expect(result).toEqual({
+      ok: true,
+      data: [
+        { id: 1, name: "one" },
+        { id: 2, name: "two" },
+      ],
+    });
+    expect(mockOfetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns error when response is neither paginated nor valid flat array", async () => {
+    mockOfetch.mockResolvedValueOnce({ something: "unexpected" });
+
+    const client = createClient();
+    const result = await fetchAllPages(client, "/api/resource/", itemSchema);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBe("unexpected_shape");
+    }
+  });
 });

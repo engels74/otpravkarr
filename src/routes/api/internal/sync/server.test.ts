@@ -111,7 +111,7 @@ describe("POST /api/internal/sync", () => {
       return Promise.resolve(config[key] ?? null);
     });
 
-    const report = { newFriends: 2, disabled: 0, orphaned: 0, refreshed: 1, errors: [] };
+    const report = { unmappedFriends: 2, disabled: 0, orphaned: 0, refreshed: 1, errors: [] };
     mocks.reconcileSync.mockResolvedValueOnce(report);
 
     const { POST } = await import("./+server");
@@ -133,7 +133,7 @@ describe("POST /api/internal/sync", () => {
       return Promise.resolve(config[key] ?? null);
     });
 
-    const report = { newFriends: 0, disabled: 0, orphaned: 0, refreshed: 0, errors: [] };
+    const report = { unmappedFriends: 0, disabled: 0, orphaned: 0, refreshed: 0, errors: [] };
     mocks.reconcileSync.mockImplementationOnce(async () => {
       // reconcileSync writes sync.completed; route should not write another one.
       mocks.appendAuditLog({

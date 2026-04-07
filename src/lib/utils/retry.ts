@@ -100,7 +100,10 @@ export async function retryResult<T, R extends { ok: boolean }>(
   return lastResult;
 }
 
-export function isTransientResultError(result: { error: string }): boolean {
+export function isTransientResultError(result: { error: string; retryable?: boolean }): boolean {
+  if (result.retryable === false) {
+    return false;
+  }
   return result.error === "network_error" || result.error === "server_error";
 }
 

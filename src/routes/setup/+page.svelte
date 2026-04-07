@@ -375,7 +375,6 @@ function enhanceHandler(nextStep?: number) {
                     placeholder="••••••••••••"
                     autocomplete="new-password"
                     required
-                    minlength={12}
                     bind:value={password}
                   />
                   <button
@@ -422,7 +421,6 @@ function enhanceHandler(nextStep?: number) {
                     placeholder="••••••••••••"
                     autocomplete="new-password"
                     required
-                    minlength={12}
                     bind:value={confirmPassword}
                   />
                   <button

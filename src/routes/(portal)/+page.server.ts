@@ -10,6 +10,7 @@ import { createChannelEndpoints } from "$lib/dispatcharr/endpoints/channels";
 import { initiateOAuth } from "$lib/plex/oauth";
 import { PlexAuthError } from "$lib/plex/types";
 import { isSecure } from "$lib/server/auth";
+import { selectActivePublicOrigin } from "$lib/server/origins";
 import { oauthLimiter } from "$lib/server/ratelimit";
 import { generateM3U } from "$lib/url/m3u";
 import {
@@ -114,10 +115,8 @@ export const actions: Actions = {
     }
 
     try {
-      const configuredOrigin = env.ORIGIN?.trim();
-      const forwardOrigin =
-        configuredOrigin && configuredOrigin.length > 0 ? configuredOrigin : url.origin;
-      const forwardUrl = `${forwardOrigin.replace(/\/$/, "")}/auth/plex`;
+      const forwardOrigin = selectActivePublicOrigin(env.ORIGIN, url.origin);
+      const forwardUrl = `${forwardOrigin}/auth/plex`;
 
       const result = await initiateOAuth(forwardUrl);
 

@@ -4,12 +4,12 @@ import type { PlexFriend } from "./types";
 
 const PlexFriendSchema = z.object({
   id: z.number(),
-  uuid: z.string().optional(),
-  username: z.string().optional(),
-  title: z.string().optional(),
-  friendlyName: z.string().optional(),
+  uuid: z.string().nullish(),
+  username: z.string().nullish(),
+  title: z.string().nullish(),
+  friendlyName: z.string().nullish(),
   email: z.string(),
-  thumb: z.string().optional(),
+  thumb: z.string().nullish(),
   status: z.string(),
 });
 

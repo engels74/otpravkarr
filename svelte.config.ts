@@ -17,7 +17,7 @@ const config: Config = {
         "default-src": ["self"],
         "script-src": ["self"],
         "style-src": ["self", "unsafe-inline"],
-        "img-src": ["self", "https://plex.tv", "https://*.plex.direct"],
+        "img-src": ["self", "data:", "https://plex.tv", "https://*.plex.direct"],
         "connect-src": ["self", "https://plex.tv"],
         "font-src": ["self"],
         "object-src": ["none"],

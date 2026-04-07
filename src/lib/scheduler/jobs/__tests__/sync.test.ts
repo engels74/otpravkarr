@@ -124,7 +124,7 @@ describe("sync job fn", () => {
     mockConfigWith(FULL_CONFIG);
 
     const report = {
-      newFriends: 2,
+      unmappedFriends: 2,
       disabled: 1,
       orphaned: 0,
       refreshed: 3,

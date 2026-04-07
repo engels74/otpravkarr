@@ -55,6 +55,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   rate_limited: "Too many sign-in attempts. Please wait and try again.",
   plex_error: "Unable to connect to Plex. Please try again later.",
   refresh_failed: "Failed to refresh credentials. Please try again.",
+  channels_failed: "Failed to fetch channel list. Please try again.",
   m3u_failed: "Failed to generate playlist. Please try again.",
 };
 

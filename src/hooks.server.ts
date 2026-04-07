@@ -29,6 +29,20 @@ import { markServerStarted } from "$lib/server/uptime";
 
 let runtimeInitialization: Promise<void> | null = null;
 
+const SECURITY_HEADERS = {
+  "X-Frame-Options": "DENY",
+  "X-Content-Type-Options": "nosniff",
+  "Referrer-Policy": "strict-origin-when-cross-origin",
+  "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+} as const;
+
+function applySecurityHeaders(response: Response): Response {
+  for (const [name, value] of Object.entries(SECURITY_HEADERS)) {
+    response.headers.set(name, value);
+  }
+  return response;
+}
+
 async function registerSchedulerJobs(): Promise<void> {
   const syncJob = await createSyncJob();
   const healthJob = createHealthJob();
@@ -201,26 +215,26 @@ const csrfValidator: Handle = async ({ event, resolve }) => {
         // Malformed JSON in config — treat as empty so we fall through to fail-closed
       }
     }
-    if (parsedOrigins.length === 0) {
-      // Fail closed: prefer ORIGIN env var (set by deployer) over request URL
-      // to avoid mismatches behind reverse proxies where the internal URL
-      // (e.g. http://127.0.0.1:3000) differs from the public origin.
-      const fallbackOrigin = env.ORIGIN || new URL(event.request.url).origin;
-      validateOrigin(event.request, [fallbackOrigin]);
-    } else {
-      validateOrigin(event.request, parsedOrigins);
+    try {
+      if (parsedOrigins.length === 0) {
+        // Fail closed: prefer ORIGIN env var (set by deployer) over request URL
+        // to avoid mismatches behind reverse proxies where the internal URL
+        // (e.g. http://127.0.0.1:3000) differs from the public origin.
+        const fallbackOrigin = env.ORIGIN || new URL(event.request.url).origin;
+        validateOrigin(event.request, [fallbackOrigin]);
+      } else {
+        validateOrigin(event.request, parsedOrigins);
+      }
+    } catch (error) {
+      event.setHeaders(SECURITY_HEADERS);
+      throw error;
     }
   }
   return resolve(event);
 };
 
 const securityHeaders: Handle = async ({ event, resolve }) => {
-  const response = await resolve(event);
-  response.headers.set("X-Frame-Options", "DENY");
-  response.headers.set("X-Content-Type-Options", "nosniff");
-  response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
-  response.headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
-  return response;
+  return applySecurityHeaders(await resolve(event));
 };
 
 const requestLogger = createRequestLogger();

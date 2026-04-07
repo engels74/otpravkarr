@@ -1,5 +1,7 @@
 <script lang="ts">
-import { enhance } from "$app/forms";
+import type { ActionResult } from "@sveltejs/kit";
+import { toast } from "svelte-sonner";
+import { applyAction, enhance } from "$app/forms";
 import { Badge } from "$lib/components/ui/badge";
 import { Button } from "$lib/components/ui/button";
 import * as Card from "$lib/components/ui/card";
@@ -32,13 +34,33 @@ interface Props {
 let { data }: Props = $props();
 
 let sectionSubmitting = $state<Record<string, boolean>>({});
+let sectionMessage = $state<Record<string, { type: "success" | "error"; text: string }>>({});
 
 function makeEnhance(section: string) {
   return () => {
     sectionSubmitting[section] = true;
-    return async ({ update }: { update: () => Promise<void> }) => {
-      await update();
+    delete sectionMessage[section];
+    return async ({ result, update }: { result: ActionResult; update: () => Promise<void> }) => {
       sectionSubmitting[section] = false;
+      if (result.type === "success") {
+        await update();
+        const msg =
+          (result.data as { message?: string } | undefined)?.message ??
+          "Settings saved successfully.";
+        sectionMessage[section] = { type: "success", text: msg };
+        toast.success(msg);
+      } else if (result.type === "failure") {
+        const errorMsg =
+          (result.data as { error?: string } | undefined)?.error ?? "An error occurred.";
+        sectionMessage[section] = { type: "error", text: errorMsg };
+        toast.error(errorMsg);
+      } else if (result.type === "error") {
+        const errorMsg = result.error?.message ?? "An unexpected error occurred.";
+        sectionMessage[section] = { type: "error", text: errorMsg };
+        toast.error(errorMsg);
+      } else {
+        await applyAction(result);
+      }
     };
   };
 }
@@ -49,7 +71,7 @@ function makeEnhance(section: string) {
 </svelte:head>
 
 <div class="space-y-6">
-  <h1 class="text-lg font-semibold">Settings</h1>
+  <h1 class="text-lg font-semibold text-foreground">Settings</h1>
 
   <!-- Plex Connection -->
   <Card.Root>
@@ -87,10 +109,15 @@ function makeEnhance(section: string) {
           </div>
         {/if}
       </Card.Content>
-      <Card.Footer>
+      <Card.Footer class="flex items-center gap-3">
         <Button type="submit" disabled={sectionSubmitting["plex"]}>
           {sectionSubmitting["plex"] ? "Saving..." : "Save"}
         </Button>
+        {#if sectionMessage["plex"]}
+          <span class="text-sm {sectionMessage['plex'].type === 'success' ? 'text-green-600 dark:text-green-400' : 'text-destructive'}">
+            {sectionMessage["plex"].text}
+          </span>
+        {/if}
       </Card.Footer>
     </form>
   </Card.Root>
@@ -124,10 +151,15 @@ function makeEnhance(section: string) {
           <Input id="dispatcharr_api_key" name="dispatcharr_api_key" type="password" placeholder="Enter new API key..." />
         </div>
       </Card.Content>
-      <Card.Footer>
+      <Card.Footer class="flex items-center gap-3">
         <Button type="submit" disabled={sectionSubmitting["dispatcharr"]}>
           {sectionSubmitting["dispatcharr"] ? "Saving..." : "Save"}
         </Button>
+        {#if sectionMessage["dispatcharr"]}
+          <span class="text-sm {sectionMessage['dispatcharr'].type === 'success' ? 'text-green-600 dark:text-green-400' : 'text-destructive'}">
+            {sectionMessage["dispatcharr"].text}
+          </span>
+        {/if}
       </Card.Footer>
     </form>
   </Card.Root>
@@ -148,10 +180,15 @@ function makeEnhance(section: string) {
           </div>
         </div>
       </Card.Content>
-      <Card.Footer>
+      <Card.Footer class="flex items-center gap-3">
         <Button type="submit" disabled={sectionSubmitting["sync"]}>
           {sectionSubmitting["sync"] ? "Saving..." : "Save"}
         </Button>
+        {#if sectionMessage["sync"]}
+          <span class="text-sm {sectionMessage['sync'].type === 'success' ? 'text-green-600 dark:text-green-400' : 'text-destructive'}">
+            {sectionMessage["sync"].text}
+          </span>
+        {/if}
       </Card.Footer>
     </form>
   </Card.Root>
@@ -190,10 +227,15 @@ function makeEnhance(section: string) {
           <p class="text-xs text-muted-foreground">One origin per line (e.g. https://example.com). If empty, falls back to the ORIGIN environment variable.</p>
         </div>
       </Card.Content>
-      <Card.Footer>
+      <Card.Footer class="flex items-center gap-3">
         <Button type="submit" disabled={sectionSubmitting["security"]}>
           {sectionSubmitting["security"] ? "Saving..." : "Save"}
         </Button>
+        {#if sectionMessage["security"]}
+          <span class="text-sm {sectionMessage['security'].type === 'success' ? 'text-green-600 dark:text-green-400' : 'text-destructive'}">
+            {sectionMessage["security"].text}
+          </span>
+        {/if}
       </Card.Footer>
     </form>
   </Card.Root>
@@ -215,10 +257,15 @@ function makeEnhance(section: string) {
           <p class="text-xs text-muted-foreground">Audit log entries older than this will be automatically purged.</p>
         </div>
       </Card.Content>
-      <Card.Footer>
+      <Card.Footer class="flex items-center gap-3">
         <Button type="submit" disabled={sectionSubmitting["audit"]}>
           {sectionSubmitting["audit"] ? "Saving..." : "Save"}
         </Button>
+        {#if sectionMessage["audit"]}
+          <span class="text-sm {sectionMessage['audit'].type === 'success' ? 'text-green-600 dark:text-green-400' : 'text-destructive'}">
+            {sectionMessage["audit"].text}
+          </span>
+        {/if}
       </Card.Footer>
     </form>
   </Card.Root>

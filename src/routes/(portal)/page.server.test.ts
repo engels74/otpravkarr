@@ -41,8 +41,8 @@ const mocks = vi.hoisted(() => ({
       async (): Promise<DispatcharrResult<DispatcharrChannel[]>> => ({
         ok: true as const,
         data: [
-          { id: 1, name: "Channel 1", number: 1, enabled: true },
-          { id: 2, name: "Channel 2", number: 2, enabled: true },
+          { id: 1, name: "Channel 1", channel_number: 1 },
+          { id: 2, name: "Channel 2", channel_number: 2 },
         ],
       }),
     ),
@@ -397,6 +397,27 @@ describe("portal page server", () => {
       }
 
       expect(mocks.initiateOAuth).toHaveBeenCalledWith("https://public.example.com/auth/plex");
+    });
+
+    it("uses configured origin when ORIGIN is a stale loopback (avoids Host header influence)", async () => {
+      envState.ORIGIN = "http://localhost:3000";
+
+      const { actions } = await import("./+page.server");
+      const action = actions.signInWithPlex;
+      if (!action) throw new Error("signInWithPlex action is undefined");
+
+      const { cookies } = createCookies();
+      try {
+        await action({
+          url: new URL("http://127.0.0.1:5173"),
+          cookies,
+          getClientAddress: () => "127.0.0.1",
+        } as unknown as Parameters<typeof action>[0]);
+      } catch {
+        // redirect expected
+      }
+
+      expect(mocks.initiateOAuth).toHaveBeenCalledWith("http://localhost:3000/auth/plex");
     });
   });
 

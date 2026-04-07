@@ -10,7 +10,9 @@ import {
 import type { UserMapping } from "$lib/db/types";
 import { AuditAction } from "$lib/db/types";
 import type { DispatcharrClient } from "$lib/dispatcharr/client";
-import { createUser, getUser, listUsers } from "$lib/dispatcharr/endpoints/users";
+import { createUser, getUser } from "$lib/dispatcharr/endpoints/users";
+import { fetchAllPages } from "$lib/dispatcharr/pagination";
+import { DispatcharrUserSchema } from "$lib/dispatcharr/schemas";
 import { isTransientResultError, retryResult } from "$lib/utils/retry";
 import type { ProvisioningRequest, ProvisioningResult } from "./types";
 
@@ -141,12 +143,14 @@ export async function provisionUser(
   // Also include remote Dispatcharr usernames to avoid 400 "username already exists" collisions
   let remoteUsernames: string[] = [];
   try {
-    const remoteResult = await listUsers(client);
+    const remoteResult = await fetchAllPages(client, "/api/accounts/users/", DispatcharrUserSchema);
     if (remoteResult.ok) {
-      remoteUsernames = remoteResult.data.results.map((u) => u.username);
+      remoteUsernames = remoteResult.data.map((u) => u.username);
     }
-  } catch {
-    // Non-fatal — fall back to local-only deduplication
+  } catch (err) {
+    console.warn(
+      `[provisioner] Failed to fetch remote usernames for dedup, falling back to local-only: ${err instanceof Error ? err.message : String(err)}`,
+    );
   }
 
   const existingUsernames = [...new Set([...localUsernames, ...remoteUsernames])];

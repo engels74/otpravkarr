@@ -1,4 +1,4 @@
-import type { z } from "zod";
+import { z } from "zod";
 
 import type { DispatcharrClient } from "./client";
 import { paginatedSchema } from "./schemas";
@@ -21,6 +21,8 @@ async function* paginate<T>(
 ): AsyncGenerator<T[], void, undefined> {
   let url: string | null = initialUrl;
   const envelope = paginatedSchema(itemSchema);
+  const flatArray = z.array(itemSchema);
+  let firstRequest = true;
 
   while (url != null) {
     // Convert absolute URLs to relative paths for the client
@@ -32,6 +34,33 @@ async function* paginate<T>(
       throw new PaginationError("validation_error", `Invalid pagination URL: ${url}`);
     }
 
+    // On the first request, fetch without schema to allow dual-format parsing
+    if (firstRequest) {
+      firstRequest = false;
+      const rawResult = await client.request<unknown>("GET", path);
+      if (!rawResult.ok) {
+        throw new PaginationError(rawResult.error, rawResult.message);
+      }
+
+      // Try paginated envelope first
+      const paginated = envelope.safeParse(rawResult.data);
+      if (paginated.success) {
+        yield paginated.data.results;
+        url = paginated.data.next;
+        continue;
+      }
+
+      // Try flat array (some Dispatcharr endpoints return arrays without pagination)
+      const flat = flatArray.safeParse(rawResult.data);
+      if (flat.success) {
+        yield flat.data;
+        return;
+      }
+
+      throw new PaginationError("unexpected_shape", paginated.error.message);
+    }
+
+    // Subsequent pages always use paginated envelope
     const result: DispatcharrResult<PaginatedResponse<T>> = await client.request<
       PaginatedResponse<T>
     >("GET", path, {

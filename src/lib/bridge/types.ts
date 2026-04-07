@@ -17,7 +17,7 @@ export type ProvisioningResult =
   | { status: "failed"; error: string };
 
 export interface SyncReport {
-  newFriends: number;
+  unmappedFriends: number;
   disabled: number;
   orphaned: number;
   refreshed: number;

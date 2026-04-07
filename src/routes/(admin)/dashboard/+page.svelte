@@ -270,6 +270,9 @@ function friendInitials(f: PlexFriend): string {
             All accepted friends are already mapped.
           </p>
         {:else}
+          <p class="mb-3 text-sm text-muted-foreground">
+            Friends listed here will be automatically provisioned when they sign in to the portal via Plex.
+          </p>
           <ul class="space-y-3">
             {#each data.availableFriends as friend (friend.id)}
               <li class="flex items-center gap-3">

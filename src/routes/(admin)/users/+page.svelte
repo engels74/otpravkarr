@@ -200,7 +200,7 @@ function makeActionEnhance() {
           <Table.Head>Mode</Table.Head>
           <Table.Head>Status</Table.Head>
           <Table.Head class="whitespace-nowrap">Last Accessed</Table.Head>
-          <Table.Head class="w-[50px]"></Table.Head>
+          <Table.Head class="w-[50px]"><span class="sr-only">Actions</span></Table.Head>
         </Table.Row>
       </Table.Header>
       <Table.Body>

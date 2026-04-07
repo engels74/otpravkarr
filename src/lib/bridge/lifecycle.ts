@@ -213,7 +213,7 @@ export async function reconcileSync(
   plexAdminToken: string,
 ): Promise<SyncReport> {
   const report: SyncReport = {
-    newFriends: 0,
+    unmappedFriends: 0,
     disabled: 0,
     orphaned: 0,
     refreshed: 0,
@@ -395,7 +395,7 @@ export async function reconcileSync(
   const mappedPlexIds = new Set(allMappings.map((m) => m.plex_account_id));
   for (const friend of acceptedFriends) {
     if (!mappedPlexIds.has(friend.id)) {
-      report.newFriends++;
+      report.unmappedFriends++;
     }
   }
 

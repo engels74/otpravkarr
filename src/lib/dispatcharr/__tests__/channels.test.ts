@@ -154,6 +154,19 @@ describe("getAllChannels", () => {
       expect(result.error).toBe("auth_failure");
     }
   });
+
+  it("handles flat array response from channels API", async () => {
+    mockOfetch.mockResolvedValueOnce([CHANNEL_A, CHANNEL_B]);
+    const endpoints = createChannelEndpoints(createClient());
+
+    const result = await endpoints.getAllChannels();
+
+    expect(result).toEqual({
+      ok: true,
+      data: [CHANNEL_A, CHANNEL_B],
+    });
+    expect(mockOfetch).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("getChannelStreams", () => {

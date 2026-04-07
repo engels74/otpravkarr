@@ -485,7 +485,7 @@ describe("reconcileSync", () => {
 
     const report = await reconcileSync(mockClient, "admin-token");
 
-    expect(report.newFriends).toBe(2);
+    expect(report.unmappedFriends).toBe(2);
   });
 
   it("detects orphaned Dispatcharr users (404 on getUser)", async () => {
@@ -686,7 +686,7 @@ describe("reconcileSync", () => {
     expect(report.refreshed).toBe(1); // mapping1 identity changed
     expect(report.disabled).toBe(1); // mapping2 removed from friends
     expect(report.orphaned).toBe(1); // mapping3 dispatcharr user gone
-    expect(report.newFriends).toBe(1); // id=400 not in any mapping
+    expect(report.unmappedFriends).toBe(1); // id=400 not in any mapping
     expect(report.errors).toHaveLength(0);
   });
 
@@ -707,7 +707,7 @@ describe("reconcileSync", () => {
     expect(report.disabled).toBe(1);
     expect(mockDeleteUser).toHaveBeenCalledWith(mockClient, 10);
     // Only accepted unmapped friends should be counted as new
-    expect(report.newFriends).toBe(1); // only id=200 (accepted), not id=300 (pending)
+    expect(report.unmappedFriends).toBe(1); // only id=200 (accepted), not id=300 (pending)
   });
 
   it("handles Plex fetch failure gracefully", async () => {
@@ -752,7 +752,7 @@ describe("reconcileSync", () => {
     expect(mockAppendAuditLog).toHaveBeenCalledWith({
       action: AuditAction.SYNC_COMPLETED,
       detail: {
-        newFriends: 0,
+        unmappedFriends: 0,
         disabled: 0,
         orphaned: 0,
         refreshed: 0,

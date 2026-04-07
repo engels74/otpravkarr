@@ -209,14 +209,19 @@ const csrfValidator: Handle = async ({ event, resolve }) => {
         // Malformed JSON in config — treat as empty so we fall through to fail-closed
       }
     }
-    if (parsedOrigins.length === 0) {
-      // Fail closed: prefer ORIGIN env var (set by deployer) over request URL
-      // to avoid mismatches behind reverse proxies where the internal URL
-      // (e.g. http://127.0.0.1:3000) differs from the public origin.
-      const fallbackOrigin = env.ORIGIN || new URL(event.request.url).origin;
-      validateOrigin(event.request, [fallbackOrigin]);
-    } else {
-      validateOrigin(event.request, parsedOrigins);
+    try {
+      if (parsedOrigins.length === 0) {
+        // Fail closed: prefer ORIGIN env var (set by deployer) over request URL
+        // to avoid mismatches behind reverse proxies where the internal URL
+        // (e.g. http://127.0.0.1:3000) differs from the public origin.
+        const fallbackOrigin = env.ORIGIN || new URL(event.request.url).origin;
+        validateOrigin(event.request, [fallbackOrigin]);
+      } else {
+        validateOrigin(event.request, parsedOrigins);
+      }
+    } catch (error) {
+      await resolve(event);
+      throw error;
     }
   }
   return resolve(event);

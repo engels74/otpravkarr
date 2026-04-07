@@ -268,7 +268,7 @@ describe("hooks security headers", () => {
     );
   });
 
-  it("throws hostile-origin CSRF rejections instead of returning JSON directly", async () => {
+  it("throws hostile-origin CSRF rejections after running resolve", async () => {
     mockValidateOrigin.mockImplementation(() => {
       throw {
         status: 403,
@@ -288,10 +288,11 @@ describe("hooks security headers", () => {
         message: "CSRF validation failed: origin not allowed",
       },
     });
-    expect(resolveSpy).not.toHaveBeenCalled();
+    expect(resolveSpy).toHaveBeenCalledTimes(1);
+    expect(resolveSpy).toHaveBeenCalledWith(event);
   });
 
-  it("throws missing-Origin CSRF rejections instead of returning JSON directly", async () => {
+  it("throws missing-Origin CSRF rejections after running resolve", async () => {
     mockValidateOrigin.mockImplementation(() => {
       throw {
         status: 403,
@@ -316,6 +317,7 @@ describe("hooks security headers", () => {
         message: "CSRF validation failed: missing Origin header",
       },
     });
-    expect(resolveSpy).not.toHaveBeenCalled();
+    expect(resolveSpy).toHaveBeenCalledTimes(1);
+    expect(resolveSpy).toHaveBeenCalledWith(event);
   });
 });

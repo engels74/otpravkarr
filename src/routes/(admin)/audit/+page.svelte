@@ -2,6 +2,7 @@
 import ChevronDownIcon from "lucide-svelte/icons/chevron-down";
 import ChevronLeftIcon from "lucide-svelte/icons/chevron-left";
 import ChevronRightIcon from "lucide-svelte/icons/chevron-right";
+import { onDestroy } from "svelte";
 import { goto } from "$app/navigation";
 import { page } from "$app/state";
 import { Badge } from "$lib/components/ui/badge";
@@ -35,6 +36,7 @@ let { data }: Props = $props();
 
 let expandedRows: Record<number, boolean> = $state({});
 let actorSearchTimeout: ReturnType<typeof setTimeout> | undefined;
+onDestroy(() => clearTimeout(actorSearchTimeout));
 let actorSearchValue = $derived(data.filters.actor ?? "");
 const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
 

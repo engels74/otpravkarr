@@ -91,7 +91,8 @@ export async function runMigrations(
     const insertMigration = db.prepare("INSERT INTO _migrations (version, name) VALUES (?, ?)");
 
     for (const migration of pending) {
-      const sql = fileSqlMap.get(migration.filename)!;
+      const sql = fileSqlMap.get(migration.filename);
+      if (!sql) continue;
       db.exec(sql);
       insertMigration.run(migration.version, migration.name);
     }

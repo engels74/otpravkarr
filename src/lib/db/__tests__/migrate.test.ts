@@ -39,7 +39,7 @@ function resetMockDb() {
 
 class MockStatement {
   constructor(
-    private db: MockDatabase,
+    _db: MockDatabase,
     private sql: string,
   ) {}
 
@@ -122,7 +122,7 @@ class MockStatement {
     // PRAGMA table_info
     const pragmaMatch = sql.match(/PRAGMA table_info\((\w+)\)/);
     if (pragmaMatch) {
-      const tableName = pragmaMatch[1]!;
+      const tableName = pragmaMatch[1] as string;
       const t = tables[tableName];
       if (!t) return [];
       return t.columns.map((name, i) => ({
@@ -140,7 +140,7 @@ class MockStatement {
       // Extract table name
       const tableMatch = sql.match(/FROM\s+(\w+)/);
       if (tableMatch) {
-        const t = tables[tableMatch[1]!];
+        const t = tables[tableMatch[1] as string];
         return [{ c: t ? t.rows.length : 0 }];
       }
     }
@@ -167,7 +167,7 @@ class MockStatement {
     // Generic INSERT
     const insertMatch = sql.match(/INSERT INTO (\w+)/);
     if (insertMatch) {
-      const tableName = insertMatch[1]!;
+      const tableName = insertMatch[1] as string;
       const t = tables[tableName];
       if (!t) throw new Error(`Table ${tableName} does not exist`);
 
@@ -175,8 +175,8 @@ class MockStatement {
       const normalized = sql.replace(/\s+/g, " ");
       const colsMatch = normalized.match(/\(([^)]+)\)\s*VALUES\s*\(([^)]+)\)/i);
       if (colsMatch) {
-        const cols = colsMatch[1]!.split(",").map((c) => c.trim());
-        const valueParts = colsMatch[2]!.split(",").map((v) => v.trim());
+        const cols = (colsMatch[1] as string).split(",").map((c) => c.trim());
+        const valueParts = (colsMatch[2] as string).split(",").map((v) => v.trim());
         const row: Row = {};
         let paramIdx = 0;
         cols.forEach((col, i) => {
@@ -220,8 +220,8 @@ class MockDatabase {
     // Parse CREATE TABLE statements
     const createMatches = sql.matchAll(/CREATE TABLE(?:\s+IF NOT EXISTS)?\s+(\w+)\s*\(([^;]*)\)/gi);
     for (const match of createMatches) {
-      const tableName = match[1]!;
-      const body = match[2]!;
+      const tableName = match[1] as string;
+      const body = match[2] as string;
       if (!tables[tableName]) {
         const columns = parseColumns(body);
         const checks = parseChecks(body);
@@ -232,8 +232,8 @@ class MockDatabase {
     // Parse CREATE INDEX statements
     const indexMatches = sql.matchAll(/CREATE INDEX(?:\s+IF NOT EXISTS)?\s+(\w+)\s+ON\s+(\w+)/gi);
     for (const match of indexMatches) {
-      const indexName = match[1]!;
-      const tableName = match[2]!;
+      const indexName = match[1] as string;
+      const tableName = match[2] as string;
       const t = tables[tableName];
       if (t && !t.indices.includes(indexName)) {
         t.indices.push(indexName);
@@ -311,8 +311,8 @@ function parseChecks(body: string): Record<string, string[]> {
   // Match CHECK constraints like: CHECK (provisioning_mode IN ('automatic', 'self_managed', 'staff'))
   const checkMatches = normalized.matchAll(/CHECK\s*\(\s*(\w+)\s+IN\s*\(([^)]+)\)\s*\)/gi);
   for (const match of checkMatches) {
-    const col = match[1]!;
-    const values = match[2]!.split(",").map((v) => v.trim().replace(/'/g, ""));
+    const col = match[1] as string;
+    const values = (match[2] as string).split(",").map((v) => v.trim().replace(/'/g, ""));
     checks[col] = values;
   }
   return checks;
@@ -372,7 +372,7 @@ describe("runMigrations", () => {
     expect(applied).toBe(1);
     expect(tables.test).toBeDefined();
 
-    const migrations = tables._migrations!.rows;
+    const migrations = (tables._migrations as TableDef).rows;
     expect(migrations).toHaveLength(1);
     expect(migrations[0]?.version).toBe(1);
     expect(migrations[0]?.name).toBe("create_test");
@@ -386,7 +386,7 @@ describe("runMigrations", () => {
 
     await runMigrations(db as any, dir);
 
-    const migrations = tables._migrations!.rows.sort(
+    const migrations = (tables._migrations as TableDef).rows.sort(
       (a, b) => (a.version as number) - (b.version as number),
     );
     expect(migrations).toHaveLength(2);
@@ -407,7 +407,7 @@ describe("runMigrations", () => {
     const secondRun = await runMigrations(db as any, dir);
     expect(secondRun).toBe(0);
 
-    expect(tables._migrations!.rows).toHaveLength(1);
+    expect((tables._migrations as TableDef).rows).toHaveLength(1);
   });
 
   it("applies only new migrations on subsequent runs", async () => {
@@ -422,7 +422,7 @@ describe("runMigrations", () => {
     const applied = await runMigrations(db as any, dir);
     expect(applied).toBe(1);
 
-    expect(tables._migrations!.rows).toHaveLength(2);
+    expect((tables._migrations as TableDef).rows).toHaveLength(2);
     expect(tables.first).toBeDefined();
     expect(tables.second).toBeDefined();
   });
@@ -434,9 +434,9 @@ describe("runMigrations", () => {
 
     await runMigrations(db as any, dir);
 
-    const row = tables._migrations!.rows.find((r) => r.version === 1);
+    const row = (tables._migrations as TableDef).rows.find((r) => r.version === 1);
     expect(row?.applied_at).toBeTruthy();
-    expect(new Date(row!.applied_at as string).getTime()).not.toBeNaN();
+    expect(new Date(row?.applied_at as string).getTime()).not.toBeNaN();
   });
 
   it("returns 0 when migrations directory is empty", async () => {
@@ -471,7 +471,7 @@ describe("runMigrations", () => {
     await runMigrations(db as any, dir).catch(() => {});
 
     // Entire batch rolls back — no partial application
-    expect(tables._migrations!.rows).toHaveLength(0);
+    expect((tables._migrations as TableDef).rows).toHaveLength(0);
     expect(tables.good).toBeUndefined();
     expect(tables.bad).toBeUndefined();
   });
@@ -528,7 +528,7 @@ describe("001_initial.sql migration", () => {
     const db = new MockDatabase(":memory:");
     await runMigrations(db as any, migrationsDir);
 
-    const colNames = tables.config!.columns;
+    const colNames = (tables.config as TableDef).columns;
     expect(colNames).toEqual(["key", "value", "encrypted", "updated_at"]);
   });
 
@@ -536,7 +536,7 @@ describe("001_initial.sql migration", () => {
     const db = new MockDatabase(":memory:");
     await runMigrations(db as any, migrationsDir);
 
-    const colNames = tables.user_mappings!.columns;
+    const colNames = (tables.user_mappings as TableDef).columns;
     expect(colNames).toContain("plex_account_id");
     expect(colNames).toContain("plex_uuid");
     expect(colNames).toContain("dispatcharr_xc_password_enc");
@@ -575,7 +575,7 @@ describe("001_initial.sql migration", () => {
     const db = new MockDatabase(":memory:");
     await runMigrations(db as any, migrationsDir);
 
-    const migrations = tables._migrations!.rows;
+    const migrations = (tables._migrations as TableDef).rows;
     expect(migrations).toHaveLength(1);
     expect(migrations[0]?.version).toBe(1);
     expect(migrations[0]?.name).toBe("initial");

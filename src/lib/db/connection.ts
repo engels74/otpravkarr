@@ -43,7 +43,7 @@ export async function initializeDatabase(): Promise<void> {
  * Lazily initializes via getDb() on first property access.
  */
 export const db: Database = new Proxy({} as Database, {
-  get(_target, prop, receiver) {
+  get(_target, prop, _receiver) {
     const real = getDb();
     const value = Reflect.get(real, prop, real);
     if (typeof value === "function") {

@@ -216,6 +216,6 @@ describe("hooks bootstrap token recovery", () => {
 
     expect(healthProbeCallOrder).toBeDefined();
     expect(resolveCallOrder).toBeDefined();
-    expect(healthProbeCallOrder!).toBeLessThan(resolveCallOrder!);
+    expect(healthProbeCallOrder as number).toBeLessThan(resolveCallOrder as number);
   });
 });

@@ -141,7 +141,7 @@ describe("sync job fn", () => {
 
     // Verify reconcileSync was called with a DispatcharrClient instance and the plex token
     expect(mockReconcileSync).toHaveBeenCalledTimes(1);
-    const [client, token] = mockReconcileSync.mock.calls[0]!;
+    const [client, token] = mockReconcileSync.mock.calls[0] as unknown[];
     expect(client.baseUrl).toBe("http://dispatcharr.local");
     expect(client.apiKey).toBe("test-api-key");
     expect(token).toBe("test-plex-token");
@@ -149,8 +149,8 @@ describe("sync job fn", () => {
     const logs = getLogEntries();
     const completedLog = logs.find((l) => l.event === "sync.completed");
     expect(completedLog).toBeDefined();
-    expect(completedLog!.job).toBe("plex-dispatcharr-sync");
-    expect(completedLog!.report).toEqual(report);
+    expect(completedLog?.job).toBe("plex-dispatcharr-sync");
+    expect(completedLog?.report).toEqual(report);
 
     expect(mockAppendAuditLog).toHaveBeenCalledWith({
       action: "sync.completed",
@@ -172,8 +172,8 @@ describe("sync job fn", () => {
     const logs = getLogEntries();
     const skippedLog = logs.find((l) => l.event === "sync.skipped");
     expect(skippedLog).toBeDefined();
-    expect(skippedLog!.reason).toBe("missing_config");
-    expect(skippedLog!.missing).toEqual(["dispatcharr_api_key", "plex_admin_token"]);
+    expect(skippedLog?.reason).toBe("missing_config");
+    expect(skippedLog?.missing).toEqual(["dispatcharr_api_key", "plex_admin_token"]);
   });
 
   it("missing all config keys: includes all in missing array", async () => {
@@ -187,7 +187,7 @@ describe("sync job fn", () => {
     const logs = getLogEntries();
     const skippedLog = logs.find((l) => l.event === "sync.skipped");
     expect(skippedLog).toBeDefined();
-    expect(skippedLog!.missing).toEqual([
+    expect(skippedLog?.missing).toEqual([
       "dispatcharr_url",
       "dispatcharr_api_key",
       "plex_admin_token",
@@ -205,7 +205,7 @@ describe("sync job fn", () => {
     const logs = getLogEntries();
     const configErrorLog = logs.find((l) => l.event === "config.error");
     expect(configErrorLog).toBeDefined();
-    expect(configErrorLog!.error).toBe("DB connection lost");
+    expect(configErrorLog?.error).toBe("DB connection lost");
   });
 
   it("reconcileSync throws: error caught and logged, no crash", async () => {
@@ -219,8 +219,8 @@ describe("sync job fn", () => {
     const logs = getLogEntries();
     const errorLog = logs.find((l) => l.event === "sync.error");
     expect(errorLog).toBeDefined();
-    expect(errorLog!.job).toBe("plex-dispatcharr-sync");
-    expect(errorLog!.error).toBe("Network failure");
+    expect(errorLog?.job).toBe("plex-dispatcharr-sync");
+    expect(errorLog?.error).toBe("Network failure");
 
     expect(mockAppendAuditLog).toHaveBeenCalledWith({
       action: "sync.failed",
@@ -238,6 +238,6 @@ describe("sync job fn", () => {
     const logs = getLogEntries();
     const errorLog = logs.find((l) => l.event === "sync.error");
     expect(errorLog).toBeDefined();
-    expect(errorLog!.error).toBe("string error");
+    expect(errorLog?.error).toBe("string error");
   });
 });

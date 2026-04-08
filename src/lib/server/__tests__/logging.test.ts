@@ -39,14 +39,14 @@ describe("createRequestLogger", () => {
     await handler({ event: createMockEvent(), resolve: mockResolve });
 
     expect(consoleSpy).toHaveBeenCalledOnce();
-    expect(typeof consoleSpy.mock.calls[0]![0]).toBe("string");
+    expect(typeof (consoleSpy.mock.calls[0] as unknown[])[0]).toBe("string");
   });
 
   it("logged JSON is parseable and contains all required fields", async () => {
     const handler = createRequestLogger();
     await handler({ event: createMockEvent(), resolve: mockResolve });
 
-    const raw = consoleSpy.mock.calls[0]![0] as string;
+    const raw = (consoleSpy.mock.calls[0] as unknown[])[0] as string;
     const entry = JSON.parse(raw);
 
     expect(entry).toHaveProperty("timestamp");
@@ -61,7 +61,7 @@ describe("createRequestLogger", () => {
     const handler = createRequestLogger();
     await handler({ event: createMockEvent({ method: "POST" }), resolve: mockResolve });
 
-    const entry = JSON.parse(consoleSpy.mock.calls[0]![0] as string);
+    const entry = JSON.parse((consoleSpy.mock.calls[0] as unknown[])[0] as string);
     expect(entry.method).toBe("POST");
   });
 
@@ -69,7 +69,7 @@ describe("createRequestLogger", () => {
     const handler = createRequestLogger();
     await handler({ event: createMockEvent({ pathname: "/api/data" }), resolve: mockResolve });
 
-    const entry = JSON.parse(consoleSpy.mock.calls[0]![0] as string);
+    const entry = JSON.parse((consoleSpy.mock.calls[0] as unknown[])[0] as string);
     expect(entry.path).toBe("/api/data");
   });
 
@@ -80,7 +80,7 @@ describe("createRequestLogger", () => {
       resolve: async () => new Response(null, { status: 201 }),
     });
 
-    const entry = JSON.parse(consoleSpy.mock.calls[0]![0] as string);
+    const entry = JSON.parse((consoleSpy.mock.calls[0] as unknown[])[0] as string);
     expect(entry.status).toBe(201);
   });
 
@@ -88,7 +88,7 @@ describe("createRequestLogger", () => {
     const handler = createRequestLogger();
     await handler({ event: createMockEvent({ ip: "192.168.1.100" }), resolve: mockResolve });
 
-    const entry = JSON.parse(consoleSpy.mock.calls[0]![0] as string);
+    const entry = JSON.parse((consoleSpy.mock.calls[0] as unknown[])[0] as string);
     expect(entry.ip).toBe("192.168.1.100");
   });
 
@@ -96,7 +96,7 @@ describe("createRequestLogger", () => {
     const handler = createRequestLogger();
     await handler({ event: createMockEvent(), resolve: mockResolve });
 
-    const entry = JSON.parse(consoleSpy.mock.calls[0]![0] as string);
+    const entry = JSON.parse((consoleSpy.mock.calls[0] as unknown[])[0] as string);
     expect(typeof entry.duration_ms).toBe("number");
     expect(entry.duration_ms).toBeGreaterThanOrEqual(0);
   });
@@ -105,7 +105,7 @@ describe("createRequestLogger", () => {
     const handler = createRequestLogger();
     await handler({ event: createMockEvent(), resolve: mockResolve });
 
-    const entry = JSON.parse(consoleSpy.mock.calls[0]![0] as string);
+    const entry = JSON.parse((consoleSpy.mock.calls[0] as unknown[])[0] as string);
     const parsed = new Date(entry.timestamp);
     expect(parsed.toISOString()).toBe(entry.timestamp);
   });
@@ -128,7 +128,7 @@ describe("createRequestLogger", () => {
       resolve: async () => new Response(null, { status: 404 }),
     });
 
-    const entry = JSON.parse(consoleSpy.mock.calls[0]![0] as string);
+    const entry = JSON.parse((consoleSpy.mock.calls[0] as unknown[])[0] as string);
     expect(entry.status).toBe(404);
   });
 
@@ -139,7 +139,7 @@ describe("createRequestLogger", () => {
       resolve: async () => new Response(null, { status: 500 }),
     });
 
-    const entry = JSON.parse(consoleSpy.mock.calls[0]![0] as string);
+    const entry = JSON.parse((consoleSpy.mock.calls[0] as unknown[])[0] as string);
     expect(entry.status).toBe(500);
   });
 
@@ -154,7 +154,7 @@ describe("createRequestLogger", () => {
       }),
     ).rejects.toThrow();
 
-    const entry = JSON.parse(consoleSpy.mock.calls[0]![0] as string);
+    const entry = JSON.parse((consoleSpy.mock.calls[0] as unknown[])[0] as string);
     expect(entry.status).toBe(303);
   });
 
@@ -169,7 +169,7 @@ describe("createRequestLogger", () => {
       }),
     ).rejects.toThrow();
 
-    const entry = JSON.parse(consoleSpy.mock.calls[0]![0] as string);
+    const entry = JSON.parse((consoleSpy.mock.calls[0] as unknown[])[0] as string);
     expect(entry.status).toBe(403);
   });
 
@@ -184,7 +184,7 @@ describe("createRequestLogger", () => {
       }),
     ).rejects.toThrow();
 
-    const entry = JSON.parse(consoleSpy.mock.calls[0]![0] as string);
+    const entry = JSON.parse((consoleSpy.mock.calls[0] as unknown[])[0] as string);
     expect(entry.status).toBe(500);
   });
 });

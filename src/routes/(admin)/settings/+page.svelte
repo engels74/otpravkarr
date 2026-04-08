@@ -99,7 +99,7 @@ function makeEnhance(section: string) {
 
         <div class="grid gap-1.5">
           <Label for="plex_admin_token">New token (leave blank to keep current)</Label>
-          <Input id="plex_admin_token" name="plex_admin_token" type="password" placeholder="Enter new Plex token..." />
+          <Input id="plex_admin_token" name="plex_admin_token" type="password" placeholder="Enter new Plex token..." oninput={() => { delete sectionMessage["plex"]; }} />
         </div>
 
         {#if data.plex.machineId}
@@ -148,7 +148,7 @@ function makeEnhance(section: string) {
 
         <div class="grid gap-1.5">
           <Label for="dispatcharr_api_key">New API key (leave blank to keep current)</Label>
-          <Input id="dispatcharr_api_key" name="dispatcharr_api_key" type="password" placeholder="Enter new API key..." />
+          <Input id="dispatcharr_api_key" name="dispatcharr_api_key" type="password" placeholder="Enter new API key..." oninput={() => { delete sectionMessage["dispatcharr"]; }} />
         </div>
       </Card.Content>
       <Card.Footer class="flex items-center gap-3">

@@ -34,6 +34,8 @@ interface Props {
 let { data }: Props = $props();
 
 let expandedRows: Record<number, boolean> = $state({});
+let actorSearchTimeout: ReturnType<typeof setTimeout> | undefined;
+let actorSearchValue = $derived(data.filters.actor ?? "");
 const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 function toggleRow(id: number) {
@@ -171,10 +173,12 @@ let rangeEnd = $derived(Math.min(data.filters.page * data.filters.limit, data.to
       <Input
         placeholder="Filter by actor…"
         class="h-8 w-40"
-        value={data.filters.actor ?? ""}
-        onchange={(e) => {
-          const v = (e.currentTarget as HTMLInputElement).value.trim();
-          updateFilter("actor", v || null);
+        value={actorSearchValue}
+        oninput={(e) => {
+          const val = (e.currentTarget as HTMLInputElement).value;
+          actorSearchValue = val;
+          clearTimeout(actorSearchTimeout);
+          actorSearchTimeout = setTimeout(() => updateFilter("actor", val.trim() || null), 300);
         }}
       />
     </div>
@@ -243,6 +247,8 @@ let rangeEnd = $derived(Math.min(data.filters.page * data.filters.limit, data.to
                       !isExpanded && "-rotate-90"
                     )}
                   />
+                {:else}
+                  <span class="text-xs text-muted-foreground/40">—</span>
                 {/if}
               </Table.Cell>
               <Table.Cell class="whitespace-nowrap font-mono text-xs text-muted-foreground">

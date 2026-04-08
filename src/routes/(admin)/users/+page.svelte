@@ -232,10 +232,10 @@ async function copyOneTimePassword() {
       <Table.Header>
         <Table.Row>
           <Table.Head class="pl-4">User</Table.Head>
-          <Table.Head>Dispatcharr</Table.Head>
+          <Table.Head class="hidden sm:table-cell">Dispatcharr</Table.Head>
           <Table.Head>Mode</Table.Head>
           <Table.Head>Status</Table.Head>
-          <Table.Head class="whitespace-nowrap">Last Accessed</Table.Head>
+          <Table.Head class="hidden whitespace-nowrap sm:table-cell">Last Accessed</Table.Head>
           <Table.Head class="w-[50px]"><span class="sr-only">Actions</span></Table.Head>
         </Table.Row>
       </Table.Header>
@@ -261,7 +261,7 @@ async function copyOneTimePassword() {
                   <span class="text-sm font-medium">{m.plex_username}</span>
                 </div>
               </Table.Cell>
-              <Table.Cell class="text-sm text-muted-foreground">
+              <Table.Cell class="hidden text-sm text-muted-foreground sm:table-cell">
                 {m.dispatcharr_username ?? "\u2014"}
               </Table.Cell>
               <Table.Cell>
@@ -270,7 +270,7 @@ async function copyOneTimePassword() {
               <Table.Cell>
                 <StatusBadge {status} />
               </Table.Cell>
-              <Table.Cell class="text-xs text-muted-foreground whitespace-nowrap">
+              <Table.Cell class="hidden text-xs text-muted-foreground whitespace-nowrap sm:table-cell">
                 {formatRelativeTime(m.last_accessed_at)}
               </Table.Cell>
               <Table.Cell>

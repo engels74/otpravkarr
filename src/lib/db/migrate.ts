@@ -91,8 +91,15 @@ export async function runMigrations(
     const insertMigration = db.prepare("INSERT INTO _migrations (version, name) VALUES (?, ?)");
 
     for (const migration of pending) {
-      const sql = fileSqlMap.get(migration.filename)!;
-      db.exec(sql);
+      const sql = fileSqlMap.get(migration.filename);
+      if (sql === undefined) {
+        throw new Error(
+          `Migration file "${migration.filename}" was not pre-loaded — this is a bug in the migration runner`,
+        );
+      }
+      if (sql) {
+        db.exec(sql);
+      }
       insertMigration.run(migration.version, migration.name);
     }
 

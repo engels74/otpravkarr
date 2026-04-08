@@ -39,7 +39,7 @@ class MockDatabase {
 
   constructor(public path: string = ":memory:") {}
 
-  exec(sql: string): void {
+  exec(_sql: string): void {
     // Handle CREATE TABLE and PRAGMA — no-op for our purposes
   }
 

@@ -939,7 +939,7 @@ function enhanceHandler(nextStep?: number) {
 
               <Separator />
 
-              <Button type="submit" disabled={submitting} class="w-full">
+              <Button type="submit" disabled={submitting} class="relative z-10 w-full">
                 {#if submitting}
                   <svg class="mr-2 h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                     <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" class="opacity-25" />

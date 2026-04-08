@@ -1,6 +1,6 @@
 // @vitest-environment node
 
-import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import { createCleanupJob } from "$lib/scheduler/jobs/cleanup";
 
 vi.mock("$lib/db/repositories/sessions", () => ({
@@ -54,11 +54,13 @@ describe("createCleanupJob", () => {
     expect(mockDeleteExpiredSessions).toHaveBeenCalledOnce();
 
     const entries = getLogEntries();
-    const entry = entries.find((e) => e.event === "job.session-cleanup");
+    const entry = entries.find((e) => e.event === "job.session-cleanup") as
+      | Record<string, unknown>
+      | undefined;
     expect(entry).toBeDefined();
-    expect(entry!.job).toBe("session-cleanup");
-    expect(entry!.deletedCount).toBe(7);
-    expect(typeof entry!.timestamp).toBe("string");
+    expect(entry?.job).toBe("session-cleanup");
+    expect(entry?.deletedCount).toBe(7);
+    expect(typeof entry?.timestamp).toBe("string");
   });
 
   it("logs zero when no sessions are expired", async () => {
@@ -70,7 +72,7 @@ describe("createCleanupJob", () => {
     const entries = getLogEntries();
     const entry = entries.find((e) => e.event === "job.session-cleanup");
     expect(entry).toBeDefined();
-    expect(entry!.deletedCount).toBe(0);
+    expect(entry?.deletedCount).toBe(0);
   });
 
   it("catches errors and logs them without re-throwing", async () => {
@@ -84,8 +86,8 @@ describe("createCleanupJob", () => {
     const entries = getLogEntries();
     const errorEntry = entries.find((e) => e.event === "job.session-cleanup.error");
     expect(errorEntry).toBeDefined();
-    expect(errorEntry!.job).toBe("session-cleanup");
-    expect(errorEntry!.error).toBe("db locked");
+    expect(errorEntry?.job).toBe("session-cleanup");
+    expect(errorEntry?.error).toBe("db locked");
   });
 
   it("handles non-Error thrown values", async () => {
@@ -99,6 +101,6 @@ describe("createCleanupJob", () => {
     const entries = getLogEntries();
     const errorEntry = entries.find((e) => e.event === "job.session-cleanup.error");
     expect(errorEntry).toBeDefined();
-    expect(errorEntry!.error).toBe("unexpected string error");
+    expect(errorEntry?.error).toBe("unexpected string error");
   });
 });

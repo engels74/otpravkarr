@@ -21,7 +21,7 @@ vi.stubGlobal("Bun", {
     verify: vi.fn(async (password: string, hash: string) => {
       // Extract the original password from our synthetic hash
       const parts = hash.split("$");
-      const encoded = parts[parts.length - 1]!;
+      const encoded = parts[parts.length - 1] as string;
       const original = Buffer.from(encoded, "base64").toString("utf-8");
       return password === original;
     }),

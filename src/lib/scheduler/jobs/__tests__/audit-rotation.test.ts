@@ -72,10 +72,10 @@ describe("createAuditRotationJob", () => {
     const entries = getLogEntries();
     const entry = entries.find((e) => e.event === "job.audit-rotation");
     expect(entry).toBeDefined();
-    expect(entry!.job).toBe("audit-log-rotation");
-    expect(entry!.deletedCount).toBe(42);
-    expect(entry!.retentionDays).toBe(90);
-    expect(typeof entry!.timestamp).toBe("string");
+    expect(entry?.job).toBe("audit-log-rotation");
+    expect(entry?.deletedCount).toBe(42);
+    expect(entry?.retentionDays).toBe(90);
+    expect(typeof entry?.timestamp).toBe("string");
   });
 
   it("defaults to 90 days when config key is missing", async () => {
@@ -90,8 +90,8 @@ describe("createAuditRotationJob", () => {
     const entries = getLogEntries();
     const entry = entries.find((e) => e.event === "job.audit-rotation");
     expect(entry).toBeDefined();
-    expect(entry!.retentionDays).toBe(90);
-    expect(entry!.deletedCount).toBe(5);
+    expect(entry?.retentionDays).toBe(90);
+    expect(entry?.deletedCount).toBe(5);
   });
 
   it("defaults to 90 days when config value is invalid (non-numeric)", async () => {
@@ -106,7 +106,7 @@ describe("createAuditRotationJob", () => {
     const entries = getLogEntries();
     const entry = entries.find((e) => e.event === "job.audit-rotation");
     expect(entry).toBeDefined();
-    expect(entry!.retentionDays).toBe(90);
+    expect(entry?.retentionDays).toBe(90);
   });
 
   it("defaults to 90 days when config value is zero", async () => {
@@ -140,7 +140,7 @@ describe("createAuditRotationJob", () => {
 
     const entries = getLogEntries();
     const entry = entries.find((e) => e.event === "job.audit-rotation");
-    expect(entry!.retentionDays).toBe(30);
+    expect(entry?.retentionDays).toBe(30);
   });
 
   it("uses correct datetime modifier format with hyphen prefix", async () => {
@@ -165,8 +165,8 @@ describe("createAuditRotationJob", () => {
     const entries = getLogEntries();
     const errorEntry = entries.find((e) => e.event === "job.audit-rotation.error");
     expect(errorEntry).toBeDefined();
-    expect(errorEntry!.job).toBe("audit-log-rotation");
-    expect(errorEntry!.error).toBe("database is locked");
+    expect(errorEntry?.job).toBe("audit-log-rotation");
+    expect(errorEntry?.error).toBe("database is locked");
   });
 
   it("handles non-Error thrown values", async () => {
@@ -181,7 +181,7 @@ describe("createAuditRotationJob", () => {
     const entries = getLogEntries();
     const errorEntry = entries.find((e) => e.event === "job.audit-rotation.error");
     expect(errorEntry).toBeDefined();
-    expect(errorEntry!.error).toBe("unexpected string error");
+    expect(errorEntry?.error).toBe("unexpected string error");
   });
 
   it("catches getConfig errors and logs without re-throwing", async () => {
@@ -193,7 +193,7 @@ describe("createAuditRotationJob", () => {
     const entries = getLogEntries();
     const errorEntry = entries.find((e) => e.event === "job.audit-rotation.error");
     expect(errorEntry).toBeDefined();
-    expect(errorEntry!.error).toBe("config read failed");
+    expect(errorEntry?.error).toBe("config read failed");
   });
 
   it("logs zero when no entries are rotated", async () => {
@@ -206,6 +206,6 @@ describe("createAuditRotationJob", () => {
     const entries = getLogEntries();
     const entry = entries.find((e) => e.event === "job.audit-rotation");
     expect(entry).toBeDefined();
-    expect(entry!.deletedCount).toBe(0);
+    expect(entry?.deletedCount).toBe(0);
   });
 });

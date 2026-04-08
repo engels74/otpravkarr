@@ -175,17 +175,17 @@ describe("audit repository", () => {
       });
 
       expect(auditRows).toHaveLength(1);
-      const row = auditRows[0]!;
+      const row = auditRows[0] as (typeof auditRows)[number];
       expect(row.actor).toBe("admin");
       expect(row.action).toBe("setup.completed");
-      expect(JSON.parse(row.detail!)).toEqual({ step: "final" });
+      expect(JSON.parse(row.detail as string)).toEqual({ step: "final" });
       expect(row.ip_address).toBe("127.0.0.1");
     });
 
     it("handles optional fields as null", () => {
       appendAuditLog({ action: "admin.login" });
 
-      const row = auditRows[0]!;
+      const row = auditRows[0] as (typeof auditRows)[number];
       expect(row.actor).toBeNull();
       expect(row.detail).toBeNull();
       expect(row.ip_address).toBeNull();
@@ -195,7 +195,9 @@ describe("audit repository", () => {
       const detail = { users: ["a", "b"], count: 2 };
       appendAuditLog({ action: "sync.completed", detail });
 
-      expect(JSON.parse(auditRows[0]!.detail!)).toEqual(detail);
+      expect(JSON.parse((auditRows[0] as (typeof auditRows)[number]).detail as string)).toEqual(
+        detail,
+      );
     });
   });
 
@@ -259,7 +261,9 @@ describe("audit repository", () => {
       const { entries } = queryAuditLog({});
 
       for (let i = 1; i < entries.length; i++) {
-        expect(entries[i - 1]!.timestamp >= entries[i]!.timestamp).toBe(true);
+        const prev = entries[i - 1] as (typeof entries)[number];
+        const curr = entries[i] as (typeof entries)[number];
+        expect(prev.timestamp >= curr.timestamp).toBe(true);
       }
     });
 
@@ -269,7 +273,7 @@ describe("audit repository", () => {
 
       expect(total).toBe(1);
       expect(entries).toHaveLength(1);
-      expect(entries[0]!.action).toBe("admin.login");
+      expect((entries[0] as (typeof entries)[number]).action).toBe("admin.login");
     });
 
     it("filters by actor", () => {
@@ -303,7 +307,7 @@ describe("audit repository", () => {
 
       expect(total).toBe(2);
       expect(entries).toHaveLength(2);
-      expect(entries[0]!.timestamp).toBe("2024-01-02T10:00:00Z");
+      expect((entries[0] as (typeof entries)[number]).timestamp).toBe("2024-01-02T10:00:00Z");
     });
 
     it("combines multiple filters", () => {

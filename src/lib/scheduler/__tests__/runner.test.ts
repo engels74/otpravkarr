@@ -532,6 +532,156 @@ describe("Scheduler", () => {
     });
   });
 
+  describe("runExclusive", () => {
+    it("returns result on success", async () => {
+      scheduler.register(createJob({ name: "exclusive-job" }));
+
+      const outcome = await scheduler.runExclusive("exclusive-job", async () => 42);
+
+      expect(outcome).toEqual({ ok: true, result: 42 });
+    });
+
+    it("sets running to true during execution", async () => {
+      scheduler.register(createJob({ name: "exclusive-job" }));
+
+      await scheduler.runExclusive("exclusive-job", async () => {
+        const status = expectDefined(scheduler.getJobStatus("exclusive-job"));
+        expect(status.running).toBe(true);
+      });
+    });
+
+    it("resets running to false after completion, even on throw", async () => {
+      scheduler.register(createJob({ name: "exclusive-job" }));
+
+      try {
+        await scheduler.runExclusive("exclusive-job", async () => {
+          throw new Error("fail");
+        });
+      } catch {
+        // expected
+      }
+
+      const status = expectDefined(scheduler.getJobStatus("exclusive-job"));
+      expect(status.running).toBe(false);
+    });
+
+    it("updates lastRunAt and lastDurationMs after successful run", async () => {
+      scheduler.register(createJob({ name: "exclusive-job" }));
+
+      await scheduler.runExclusive("exclusive-job", async () => "done");
+
+      const status = expectDefined(scheduler.getJobStatus("exclusive-job"));
+      expect(status.lastRunAt).not.toBeNull();
+      expect(status.lastDurationMs).not.toBeNull();
+    });
+
+    it("returns already_running when job is running via scheduler tick", async () => {
+      let resolveJob: (() => void) | null = null;
+
+      const fn = vi.fn(async () => {
+        await new Promise<void>((resolve) => {
+          resolveJob = resolve;
+        });
+      });
+
+      scheduler.register(createJob({ name: "exclusive-job", fn, interval: 100 }));
+      scheduler.start();
+
+      // First tick fires at 100ms — job starts, blocks on promise
+      await vi.advanceTimersByTimeAsync(100);
+      expect(fn).toHaveBeenCalledOnce();
+
+      // While the tick job is running, runExclusive should be rejected
+      const outcome = await scheduler.runExclusive("exclusive-job", async () => "nope");
+      expect(outcome).toEqual({ ok: false, reason: "already_running" });
+
+      // Clean up: resolve the blocking promise
+      expect(resolveJob).not.toBeNull();
+      (resolveJob as unknown as () => void)();
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    it("returns already_running when job is running via another runExclusive", async () => {
+      let resolveJob: (() => void) | null = null;
+
+      scheduler.register(createJob({ name: "exclusive-job" }));
+
+      // Start a runExclusive that blocks
+      const firstCall = scheduler.runExclusive("exclusive-job", async () => {
+        await new Promise<void>((resolve) => {
+          resolveJob = resolve;
+        });
+        return "first";
+      });
+
+      // Yield so the first runExclusive enters the awaiting state
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Second call should be rejected
+      const outcome = await scheduler.runExclusive("exclusive-job", async () => "second");
+      expect(outcome).toEqual({ ok: false, reason: "already_running" });
+
+      // Clean up
+      expect(resolveJob).not.toBeNull();
+      (resolveJob as unknown as () => void)();
+      await vi.advanceTimersByTimeAsync(0);
+      const firstResult = await firstCall;
+      expect(firstResult).toEqual({ ok: true, result: "first" });
+    });
+
+    it("prevents scheduler tick overlap during runExclusive", async () => {
+      let resolveJob: (() => void) | null = null;
+
+      scheduler.register(createJob({ name: "exclusive-job", interval: 100 }));
+      scheduler.start();
+
+      // Start a runExclusive that blocks
+      const exclusiveCall = scheduler.runExclusive("exclusive-job", async () => {
+        await new Promise<void>((resolve) => {
+          resolveJob = resolve;
+        });
+        return "exclusive";
+      });
+
+      // Yield so runExclusive enters the awaiting state
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Advance timers past the interval — tick should be skipped due to overlap
+      await vi.advanceTimersByTimeAsync(100);
+
+      const entries = getLogEntries();
+      const skipEntry = expectDefined(entries.find((e) => e.event === "job.skipped"));
+      expect(skipEntry.reason).toBe("overlap");
+
+      // Clean up
+      expect(resolveJob).not.toBeNull();
+      (resolveJob as unknown as () => void)();
+      await vi.advanceTimersByTimeAsync(0);
+      const result = await exclusiveCall;
+      expect(result).toEqual({ ok: true, result: "exclusive" });
+    });
+
+    it("returns unknown_job for unregistered job name", async () => {
+      const outcome = await scheduler.runExclusive("nonexistent", async () => "nope");
+      expect(outcome).toEqual({ ok: false, reason: "unknown_job" });
+    });
+
+    it("propagates exceptions while resetting running state", async () => {
+      scheduler.register(createJob({ name: "exclusive-job" }));
+
+      await expect(
+        scheduler.runExclusive("exclusive-job", async () => {
+          throw new Error("boom");
+        }),
+      ).rejects.toThrow("boom");
+
+      const status = expectDefined(scheduler.getJobStatus("exclusive-job"));
+      expect(status.running).toBe(false);
+      expect(status.lastRunAt).not.toBeNull();
+      expect(status.lastDurationMs).not.toBeNull();
+    });
+  });
+
   describe("structured logging", () => {
     it("emits valid JSON on every log call", async () => {
       scheduler.register(createJob());

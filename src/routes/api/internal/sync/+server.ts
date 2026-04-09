@@ -26,10 +26,10 @@ export const POST: RequestHandler = async (event) => {
     return Response.json({ ok: false, error: "missing_config", missing }, { status: 503 });
   }
 
-  const client = new DispatcharrClient(dispatcharrUrl, apiKey);
   const start = performance.now();
 
   try {
+    const client = new DispatcharrClient(dispatcharrUrl, apiKey);
     const report = await reconcileSync(client, plexAdminToken);
     return Response.json({ ok: true, report }, { status: 200 });
   } catch (err) {

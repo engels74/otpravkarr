@@ -12,7 +12,7 @@ Otpravkarr bridges **Plex** user accounts to **Dispatcharr** IPTV management. It
 
 ```bash
 bun install                # Install dependencies
-bun run dev                # Dev server at http://localhost:3000
+bun run --run bun dev      # Dev server at http://localhost:3000
 bun run build              # Production build (copies migrations to build/server/)
 bun run start              # Run production server (bun ./build/index.js)
 bun run test               # Unit tests (vitest run)

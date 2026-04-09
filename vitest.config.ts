@@ -8,7 +8,7 @@ export default defineConfig({
   resolve: {
     alias: {
       $lib: path.resolve("src/lib"),
-      "$app/forms": path.resolve("node_modules/@sveltejs/kit/src/runtime/app/forms.js"),
+      "$app/forms": path.resolve("src/lib/test-stubs/app-forms.ts"),
     },
   },
   test: {

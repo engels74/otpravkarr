@@ -33,6 +33,12 @@ export const POST: RequestHandler = async (event) => {
     });
 
     if (!exclusive.ok) {
+      if (exclusive.reason === "unknown_job") {
+        return Response.json(
+          { ok: false, error: "internal_error", message: "Sync job not registered" },
+          { status: 500 },
+        );
+      }
       return Response.json({ ok: false, error: "sync_in_progress" }, { status: 409 });
     }
 

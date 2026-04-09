@@ -98,7 +98,7 @@ function makeEnhance(section: string) {
           <Label>Token Status</Label>
           <div>
             {#if data.plex.hasToken}
-              <Badge variant="default">Token configured</Badge>
+              <Badge variant="secondary" class="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">Token configured</Badge>
             {:else}
               <Badge variant="destructive">Not configured</Badge>
             {/if}
@@ -147,7 +147,7 @@ function makeEnhance(section: string) {
           <Label>API Key Status</Label>
           <div>
             {#if data.dispatcharr.hasApiKey}
-              <Badge variant="default">Key configured</Badge>
+              <Badge variant="secondary" class="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">Key configured</Badge>
             {:else}
               <Badge variant="destructive">Not configured</Badge>
             {/if}

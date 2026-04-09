@@ -377,10 +377,10 @@ export const actions: Actions = {
       return fail(400, { error: "Invalid plex mode" });
     } catch (err: unknown) {
       if (err instanceof PlexAuthError) {
-        return fail(400, { error: err.message });
+        return fail(400, { error: "Invalid or expired Plex token" });
       }
       if (err instanceof PlexConnectionError) {
-        return fail(400, { error: err.message });
+        return fail(400, { error: "Could not connect to Plex server" });
       }
       throw err;
     }

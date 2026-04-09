@@ -10,7 +10,6 @@ import ConfirmDialog from "$lib/components/ConfirmDialog.svelte";
 import CopyableField from "$lib/components/CopyableField.svelte";
 import QRCodeDisplay from "$lib/components/QRCodeDisplay.svelte";
 import * as Alert from "$lib/components/ui/alert";
-import { Badge } from "$lib/components/ui/badge";
 import { Button } from "$lib/components/ui/button";
 import * as Card from "$lib/components/ui/card";
 import * as Tabs from "$lib/components/ui/tabs";
@@ -320,10 +319,7 @@ function enhanceDownload() {
           {#each data.platformUrls as platform (platform.id)}
             <Card.Root>
               <Card.Header>
-                <div class="flex items-center gap-2">
-                  <Card.Title class="text-base">{platform.name}</Card.Title>
-                  <Badge variant="secondary">{platform.id}</Badge>
-                </div>
+                <Card.Title class="text-base">{platform.name}</Card.Title>
                 <Card.Description>{platform.description}</Card.Description>
               </Card.Header>
               <Card.Content class="space-y-3">

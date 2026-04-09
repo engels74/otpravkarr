@@ -3,6 +3,7 @@ import { appendAuditLog } from "$lib/db/repositories/audit";
 import { getConfig } from "$lib/db/repositories/config";
 import { AuditAction } from "$lib/db/types";
 import { DispatcharrClient } from "$lib/dispatcharr/client";
+import { scheduler } from "$lib/scheduler/runner";
 import { requireAdminApi } from "$lib/server/auth";
 import type { RequestHandler } from "./$types";
 
@@ -27,7 +28,9 @@ export const POST: RequestHandler = async (event) => {
 
   try {
     const client = new DispatcharrClient(dispatcharrUrl, apiKey);
+    const start = performance.now();
     const report = await reconcileSync(client, plexAdminToken);
+    scheduler.notifyRun("plex-dispatcharr-sync", Math.round(performance.now() - start));
 
     return Response.json({ ok: true, report }, { status: 200 });
   } catch (err) {

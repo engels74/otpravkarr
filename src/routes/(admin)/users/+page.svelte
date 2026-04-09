@@ -6,7 +6,8 @@ import EllipsisIcon from "lucide-svelte/icons/ellipsis";
 import InfoIcon from "lucide-svelte/icons/info";
 import KeyRoundIcon from "lucide-svelte/icons/key-round";
 import UsersIcon from "lucide-svelte/icons/users";
-import { enhance } from "$app/forms";
+import { toast } from "svelte-sonner";
+import { applyAction, enhance } from "$app/forms";
 import { goto } from "$app/navigation";
 import { page } from "$app/state";
 import StatusBadge from "$lib/components/StatusBadge.svelte";
@@ -120,9 +121,19 @@ function toggleGroupId(gid: number) {
 function makeEnhanceHandler() {
   return () => {
     submitting = true;
-    return async ({ update }: { update: () => Promise<void> }) => {
+    return async ({ result, update }: { result: ActionResult; update: () => Promise<void> }) => {
       try {
-        await update();
+        if (result.type === "success") {
+          toast.success("Group updated successfully.");
+          await update();
+        } else if (result.type === "failure") {
+          toast.error(
+            (result.data as { error?: string } | undefined)?.error ?? "Failed to update group.",
+          );
+          await update();
+        } else {
+          await applyAction(result);
+        }
       } finally {
         submitting = false;
         groupDialogOpen = false;
@@ -131,12 +142,20 @@ function makeEnhanceHandler() {
   };
 }
 
-function makeActionEnhance() {
+function makeActionEnhance(successMsg: string) {
   return () => {
     submitting = true;
-    return async ({ update }: { update: () => Promise<void> }) => {
+    return async ({ result, update }: { result: ActionResult; update: () => Promise<void> }) => {
       try {
-        await update();
+        if (result.type === "success") {
+          toast.success(successMsg);
+          await update();
+        } else if (result.type === "failure") {
+          toast.error((result.data as { error?: string } | undefined)?.error ?? "Action failed.");
+          await update();
+        } else {
+          await applyAction(result);
+        }
       } finally {
         submitting = false;
       }
@@ -149,15 +168,23 @@ function makeEnableEnhance() {
     submitting = true;
     return async ({ result, update }: { result: ActionResult; update: () => Promise<void> }) => {
       try {
-        if (
-          result.type === "success" &&
-          (result.data as { initialPassword?: string } | undefined)?.initialPassword
-        ) {
-          oneTimePassword = (result.data as { initialPassword: string }).initialPassword;
-          passwordCopyStatus = "idle";
-          passwordDialogOpen = true;
+        if (result.type === "success") {
+          const d = result.data as { initialPassword?: string } | undefined;
+          if (d?.initialPassword) {
+            oneTimePassword = d.initialPassword;
+            passwordCopyStatus = "idle";
+            passwordDialogOpen = true;
+          }
+          toast.success("User enabled successfully.");
+          await update();
+        } else if (result.type === "failure") {
+          toast.error(
+            (result.data as { error?: string } | undefined)?.error ?? "Failed to enable user.",
+          );
+          await update();
+        } else {
+          await applyAction(result);
         }
-        await update();
       } finally {
         submitting = false;
       }
@@ -177,7 +204,7 @@ async function copyOneTimePassword() {
 <div class="space-y-4">
   <div class="flex items-center justify-between">
     <h1 class="text-lg font-semibold text-foreground">Users</h1>
-    <span class="text-sm text-muted-foreground">{data.mappings.length} users</span>
+    <span class="text-sm text-muted-foreground">{data.mappings.length} {data.mappings.length === 1 ? "user" : "users"}</span>
   </div>
 
   <!-- Filters bar -->
@@ -286,7 +313,7 @@ async function copyOneTimePassword() {
                     {#if m.provisioning_mode === "automatic" && m.dispatcharr_user_id != null}
                       <DropdownMenu.Item>
                         {#snippet child({ props })}
-                          <form method="POST" action="?/rotateCredentials" use:enhance={makeActionEnhance()}>
+                          <form method="POST" action="?/rotateCredentials" use:enhance={makeActionEnhance("Credentials rotated successfully.")}>
                             <input type="hidden" name="id" value={m.id} />
                             <button type="submit" class="flex w-full items-center gap-2 text-left" disabled={submitting} {...props}>
                               <KeyRoundIcon class="h-3.5 w-3.5" />
@@ -299,7 +326,7 @@ async function copyOneTimePassword() {
                     {#if m.is_active === 1 && m.dispatcharr_user_id != null}
                       <DropdownMenu.Item>
                         {#snippet child({ props })}
-                          <form method="POST" action="?/disableUser" use:enhance={makeActionEnhance()}>
+                          <form method="POST" action="?/disableUser" use:enhance={makeActionEnhance("User disabled.")}>
                             <input type="hidden" name="id" value={m.id} />
                             <button type="submit" class="flex w-full items-center gap-2 text-left" disabled={submitting} {...props}>
                               <BanIcon class="h-3.5 w-3.5" />
@@ -438,10 +465,10 @@ async function copyOneTimePassword() {
           <span>{m.is_active === 1 ? "Yes" : "No"}</span>
 
           <span class="text-muted-foreground">Created</span>
-          <span>{m.created_at}</span>
+          <span>{formatRelativeTime(m.created_at)}</span>
 
           <span class="text-muted-foreground">Updated</span>
-          <span>{m.updated_at}</span>
+          <span>{formatRelativeTime(m.updated_at)}</span>
 
           <span class="text-muted-foreground">Last Synced</span>
           <span>{formatRelativeTime(m.last_synced_at)}</span>

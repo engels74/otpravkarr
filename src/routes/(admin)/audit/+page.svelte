@@ -282,7 +282,7 @@ let rangeEnd = $derived(Math.min(data.filters.page * data.filters.limit, data.to
   </div>
 
   <!-- ─── Pagination ───────────────────────────────────── -->
-  {#if data.total > 0}
+  {#if data.totalPages > 0}
     <div class="flex items-center justify-between text-sm">
       <span class="text-muted-foreground">
         Showing {rangeStart}–{rangeEnd} of {data.total} entries

@@ -232,4 +232,29 @@ describe("POST /api/internal/sync", () => {
     const body = await response.json();
     expect(body).toEqual({ ok: false, error: "sync_in_progress" });
   });
+
+  it("returns 500 when sync job is not registered", async () => {
+    mocks.requireAdminApi.mockResolvedValueOnce({ id: 1, username: "admin" });
+    mocks.getConfig.mockImplementation((key: string) => {
+      const config: Record<string, string> = {
+        dispatcharr_url: "http://dispatcharr:8000",
+        dispatcharr_api_key: "test-key",
+        plex_admin_token: "plex-token",
+      };
+      return Promise.resolve(config[key] ?? null);
+    });
+
+    mocks.runExclusive.mockResolvedValueOnce({ ok: false, reason: "unknown_job" });
+
+    const { POST } = await import("./+server");
+    const response = await POST(createEvent());
+
+    expect(response.status).toBe(500);
+    const body = await response.json();
+    expect(body).toEqual({
+      ok: false,
+      error: "internal_error",
+      message: "Sync job not registered",
+    });
+  });
 });

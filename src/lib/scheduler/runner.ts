@@ -129,11 +129,17 @@ export class Scheduler {
       const durationMs = Math.round((performance.now() - start) * 100) / 100;
       entry.lastRunAt = Date.now();
       entry.lastDurationMs = durationMs;
+      log("job.completed", name, { duration_ms: durationMs, trigger: "api" });
       return { ok: true, result };
     } catch (err) {
       const durationMs = Math.round((performance.now() - start) * 100) / 100;
       entry.lastRunAt = Date.now();
       entry.lastDurationMs = durationMs;
+      log("job.error", name, {
+        duration_ms: durationMs,
+        error: err instanceof Error ? err.message : String(err),
+        trigger: "api",
+      });
       throw err;
     } finally {
       entry.running = false;

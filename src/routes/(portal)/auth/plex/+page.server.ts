@@ -46,7 +46,7 @@ export const load: PageServerLoad = async ({ cookies }) => {
     identity = await completeOAuth(oauthId);
   } catch (err: unknown) {
     if (err instanceof PlexAuthError) {
-      throw error(400, err.message);
+      throw error(400, "Plex sign-in failed. Please try again.");
     }
     throw err;
   }

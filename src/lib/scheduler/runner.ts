@@ -112,6 +112,13 @@ export class Scheduler {
     };
   }
 
+  notifyRun(name: string, durationMs: number): void {
+    const entry = this.jobs.get(name);
+    if (!entry) return;
+    entry.lastRunAt = Date.now();
+    entry.lastDurationMs = durationMs;
+  }
+
   private scheduleTick(entry: JobEntry): void {
     if (!this.started) return;
 

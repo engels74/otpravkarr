@@ -838,7 +838,7 @@ function enhanceHandler(nextStep?: number) {
                     <Select.Trigger id="default-group" class="w-full">
                       {dispatcharrGroups.find(g => String(g.id) === defaultGroupId)?.name ?? 'Select a group'}
                     </Select.Trigger>
-                    <Select.Content>
+                    <Select.Content preventScroll={false}>
                       {#each dispatcharrGroups as group (group.id)}
                         <Select.Item value={String(group.id)} label={group.name} />
                       {/each}
@@ -870,7 +870,7 @@ function enhanceHandler(nextStep?: number) {
                         {dispatcharrProfiles.find(p => String(p.id) === defaultProfileId)?.name ?? 'All channels'}
                       {/if}
                     </Select.Trigger>
-                    <Select.Content>
+                    <Select.Content preventScroll={false}>
                       <Select.Item value="" label="All channels" />
                       {#each dispatcharrProfiles as profile (profile.id)}
                         <Select.Item value={String(profile.id)} label={profile.name} />
@@ -911,7 +911,7 @@ function enhanceHandler(nextStep?: number) {
                   <Select.Trigger id="provisioning-mode" class="w-full">
                     {provisioningMode === 'automatic' ? 'Automatic' : 'Self-managed'}
                   </Select.Trigger>
-                  <Select.Content>
+                  <Select.Content preventScroll={false}>
                     <Select.Item value="automatic" label="Automatic" />
                     <Select.Item value="self_managed" label="Self-managed" />
                   </Select.Content>

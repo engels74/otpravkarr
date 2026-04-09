@@ -1019,7 +1019,7 @@ describe("configurePlex oauth completion retries", () => {
 
     expect(firstResult).toMatchObject({
       status: 400,
-      data: { error: "temporary validation failure" },
+      data: { error: "Could not connect to Plex server" },
     });
 
     const retryBody = new FormData();

@@ -26,12 +26,11 @@ export const POST: RequestHandler = async (event) => {
     return Response.json({ ok: false, error: "missing_config", missing }, { status: 503 });
   }
 
-  try {
-    const client = new DispatcharrClient(dispatcharrUrl, apiKey);
-    const start = performance.now();
-    const report = await reconcileSync(client, plexAdminToken);
-    scheduler.notifyRun("plex-dispatcharr-sync", Math.round(performance.now() - start));
+  const client = new DispatcharrClient(dispatcharrUrl, apiKey);
+  const start = performance.now();
 
+  try {
+    const report = await reconcileSync(client, plexAdminToken);
     return Response.json({ ok: true, report }, { status: 200 });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -43,5 +42,7 @@ export const POST: RequestHandler = async (event) => {
     }
 
     return Response.json({ ok: false, error: "sync_failed", message }, { status: 500 });
+  } finally {
+    scheduler.notifyRun("plex-dispatcharr-sync", Math.round(performance.now() - start));
   }
 };

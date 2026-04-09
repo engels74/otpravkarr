@@ -8,6 +8,7 @@ export default defineConfig({
   resolve: {
     alias: {
       $lib: path.resolve("src/lib"),
+      "$app/forms": path.resolve("src/lib/test-stubs/app-forms.ts"),
     },
   },
   test: {

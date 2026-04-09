@@ -200,6 +200,15 @@ function createMockEvent({
   } as unknown as MockEvent;
 }
 
+function expectStandardSecurityHeaders(response: Response): void {
+  expect(response.headers.get("X-Frame-Options")).toBe("DENY");
+  expect(response.headers.get("X-Content-Type-Options")).toBe("nosniff");
+  expect(response.headers.get("Referrer-Policy")).toBe("strict-origin-when-cross-origin");
+  expect(response.headers.get("Permissions-Policy")).toBe(
+    "camera=(), microphone=(), geolocation=()",
+  );
+}
+
 describe("hooks sessionResolver", () => {
   beforeEach(() => {
     mockSession = null;
@@ -261,15 +270,10 @@ describe("hooks security headers", () => {
       resolve: async () => new Response(null, { status: 200 }),
     });
 
-    expect(response.headers.get("X-Frame-Options")).toBe("DENY");
-    expect(response.headers.get("X-Content-Type-Options")).toBe("nosniff");
-    expect(response.headers.get("Referrer-Policy")).toBe("strict-origin-when-cross-origin");
-    expect(response.headers.get("Permissions-Policy")).toBe(
-      "camera=(), microphone=(), geolocation=()",
-    );
+    expectStandardSecurityHeaders(response);
   });
 
-  it("marks hostile-origin CSRF rejections with security headers", async () => {
+  it("returns hostile-origin CSRF rejections with security headers", async () => {
     mockValidateOrigin.mockImplementation(() => {
       throw {
         status: 403,
@@ -283,22 +287,18 @@ describe("hooks security headers", () => {
     });
     const resolveSpy = vi.fn(async () => new Response(null, { status: 204 }));
 
-    await expect(handle({ event, resolve: resolveSpy })).rejects.toMatchObject({
-      status: 403,
-      body: {
-        message: "CSRF validation failed: origin not allowed",
-      },
+    const response = await handle({ event, resolve: resolveSpy });
+
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({
+      message: "CSRF validation failed: origin not allowed",
     });
-    expect(event.setHeaders).toHaveBeenCalledWith({
-      "X-Frame-Options": "DENY",
-      "X-Content-Type-Options": "nosniff",
-      "Referrer-Policy": "strict-origin-when-cross-origin",
-      "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
-    });
+    expectStandardSecurityHeaders(response);
+    expect(event.setHeaders).not.toHaveBeenCalled();
     expect(resolveSpy).not.toHaveBeenCalled();
   });
 
-  it("marks missing-Origin CSRF rejections with security headers", async () => {
+  it("returns missing-Origin CSRF rejections with security headers", async () => {
     mockValidateOrigin.mockImplementation(() => {
       throw {
         status: 403,
@@ -312,23 +312,17 @@ describe("hooks security headers", () => {
 
     const resolveSpy = vi.fn(async () => new Response(null, { status: 204 }));
 
-    await expect(
-      handle({
-        event,
-        resolve: resolveSpy,
-      }),
-    ).rejects.toMatchObject({
-      status: 403,
-      body: {
-        message: "CSRF validation failed: missing Origin header",
-      },
+    const response = await handle({
+      event,
+      resolve: resolveSpy,
     });
-    expect(event.setHeaders).toHaveBeenCalledWith({
-      "X-Frame-Options": "DENY",
-      "X-Content-Type-Options": "nosniff",
-      "Referrer-Policy": "strict-origin-when-cross-origin",
-      "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({
+      message: "CSRF validation failed: missing Origin header",
     });
+    expectStandardSecurityHeaders(response);
+    expect(event.setHeaders).not.toHaveBeenCalled();
     expect(resolveSpy).not.toHaveBeenCalled();
   });
 });

@@ -83,7 +83,15 @@ function makeEnhance(section: string) {
       <Card.Content class="grid gap-4">
         <div class="grid gap-1.5">
           <Label for="plex_server_url">Server URL</Label>
-          <Input id="plex_server_url" name="plex_server_url" value={data.plex.serverUrl} placeholder="http://localhost:32400" />
+          <Input
+            id="plex_server_url"
+            name="plex_server_url"
+            value={data.plex.serverUrl}
+            placeholder="http://localhost:32400"
+            oninput={() => {
+              delete sectionMessage["plex"];
+            }}
+          />
         </div>
 
         <div class="grid gap-1.5">

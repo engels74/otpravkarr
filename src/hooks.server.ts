@@ -43,6 +43,20 @@ function applySecurityHeaders(response: Response): Response {
   return response;
 }
 
+function toForbiddenResponse(error: unknown): Response | null {
+  if (typeof error !== "object" || error === null || !("status" in error) || error.status !== 403) {
+    return null;
+  }
+
+  const body = "body" in error && error.body !== undefined ? error.body : { message: "Forbidden" };
+
+  if (typeof body === "string") {
+    return new Response(body, { status: 403 });
+  }
+
+  return Response.json(body, { status: 403 });
+}
+
 async function registerSchedulerJobs(): Promise<void> {
   const syncJob = await createSyncJob();
   const healthJob = createHealthJob();
@@ -226,7 +240,10 @@ const csrfValidator: Handle = async ({ event, resolve }) => {
         validateOrigin(event.request, parsedOrigins);
       }
     } catch (error) {
-      event.setHeaders(SECURITY_HEADERS);
+      const forbiddenResponse = toForbiddenResponse(error);
+      if (forbiddenResponse) {
+        return applySecurityHeaders(forbiddenResponse);
+      }
       throw error;
     }
   }

@@ -1390,7 +1390,7 @@ describe("configureDispatcharr retry behavior", () => {
     );
   });
 
-  it("does not store external URL when not provided", async () => {
+  it("stores empty string for external URL when not provided", async () => {
     const { cookies } = createCookies({ [setupClaimCookie]: "proof-123" });
     const healthModule = await import("$lib/dispatcharr/endpoints/health");
     const mockCheckHealth = vi.fn().mockResolvedValueOnce({
@@ -1416,7 +1416,7 @@ describe("configureDispatcharr retry behavior", () => {
     } as unknown as Parameters<typeof configureDispatcharr>[0]);
 
     expect(result).toMatchObject({ success: true });
-    expect(mocks.setConfig).not.toHaveBeenCalledWith("dispatcharr_external_url", expect.anything());
+    expect(mocks.setConfig).toHaveBeenCalledWith("dispatcharr_external_url", "");
   });
 
   it("does not retry auth failures", async () => {

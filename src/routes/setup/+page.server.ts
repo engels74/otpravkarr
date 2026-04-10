@@ -474,14 +474,11 @@ export const actions: Actions = {
       return fail(400, { error: "Dispatcharr API key is invalid" });
     }
 
-    const configPromises = [
+    await Promise.all([
       setConfig("dispatcharr_url", dispatcharrUrl),
       setConfig("dispatcharr_api_key", dispatcharrApiKey, true),
-    ];
-    if (dispatcharrExternalUrl) {
-      configPromises.push(setConfig("dispatcharr_external_url", dispatcharrExternalUrl));
-    }
-    await Promise.all(configPromises);
+      setConfig("dispatcharr_external_url", dispatcharrExternalUrl ?? ""),
+    ]);
 
     const [groupsResult, profilesResult] = await Promise.all([
       listGroups(client),

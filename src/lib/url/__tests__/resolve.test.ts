@@ -5,7 +5,7 @@ vi.mock("../../db/repositories/config", () => ({
 }));
 
 const { getConfig } = await import("../../db/repositories/config");
-const { getDispatcharrPublicUrl } = await import("../resolve");
+const { getDispatcharrPublicUrl } = await import("../resolve.server");
 
 const mockGetConfig = vi.mocked(getConfig);
 

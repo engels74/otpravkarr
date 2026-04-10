@@ -18,7 +18,7 @@ import {
   getSupportedPlatforms,
   type PlatformUrlResult,
 } from "$lib/url/platforms";
-import { getDispatcharrPublicUrl } from "$lib/url/resolve";
+import { getDispatcharrPublicUrl } from "$lib/url/resolve.server";
 import { buildPlayerApiUrl, buildXcUrl } from "$lib/url/xc";
 import { generateQRCodeDataUri } from "$lib/utils/qrcode";
 

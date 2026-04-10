@@ -102,7 +102,7 @@ vi.mock("$lib/utils/qrcode", () => ({
   generateQRCodeDataUri: mocks.generateQRCodeDataUri,
 }));
 
-vi.mock("$lib/url/resolve", () => ({
+vi.mock("$lib/url/resolve.server", () => ({
   getDispatcharrPublicUrl: mocks.getDispatcharrPublicUrl,
 }));
 

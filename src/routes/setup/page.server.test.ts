@@ -110,8 +110,12 @@ vi.mock("$lib/plex/oauth", () => ({
 }));
 
 vi.mock("$lib/plex/types", () => ({
-  PlexAuthError: class PlexAuthError extends Error {},
-  PlexConnectionError: class PlexConnectionError extends Error {},
+  PlexAuthError: class PlexAuthError extends Error {
+    override readonly name = "PlexAuthError" as const;
+  },
+  PlexConnectionError: class PlexConnectionError extends Error {
+    override readonly name = "PlexConnectionError" as const;
+  },
 }));
 
 vi.mock("$lib/server/auth", () => ({
@@ -138,6 +142,33 @@ vi.mock("$lib/server/ratelimit", () => ({
 vi.mock("$lib/url/discover", () => ({
   probeXcSurface: vi.fn(async () => null),
 }));
+
+vi.mock("$lib/utils/retry", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("$lib/utils/retry")>();
+  return {
+    ...actual,
+    sleep: vi.fn().mockResolvedValue(undefined),
+    retryAsync: async <T>(
+      fn: () => Promise<T>,
+      shouldRetry?: (error: unknown) => boolean,
+      options?: import("$lib/utils/retry").RetryOptions,
+    ): Promise<T> => {
+      const config = { ...actual.DEFAULT_RETRY_CONFIG, ...options };
+      let lastError: unknown;
+      for (let attempt = 0; attempt <= config.maxRetries; attempt++) {
+        try {
+          return await fn();
+        } catch (error: unknown) {
+          lastError = error;
+          if (shouldRetry && !shouldRetry(error)) {
+            throw error;
+          }
+        }
+      }
+      throw lastError;
+    },
+  };
+});
 
 const setupClaimedKey = "setup_claimed";
 const setupClaimProofKey = "setup_claim_proof";
@@ -976,7 +1007,7 @@ describe("configurePlex oauth completion retries", () => {
     state.configValues.set(setupClaimedAtKey, String(Date.now()));
   });
 
-  it("allows retrying oauth completion after Plex server validation fails once", async () => {
+  it("recovers from a transient Plex server validation failure via built-in retry", async () => {
     const { cookies } = createCookies({ [setupClaimCookie]: "proof-123" });
     const oauth = await import("$lib/plex/oauth");
     const plexClient = await import("$lib/plex/client");
@@ -1011,37 +1042,350 @@ describe("configurePlex oauth completion retries", () => {
       throw new Error("configurePlex action is undefined");
     }
 
-    const firstResult = await configurePlex({
+    const result = await configurePlex({
       request,
       url: new URL("http://localhost/setup"),
       cookies,
     } as unknown as Parameters<typeof configurePlex>[0]);
 
-    expect(firstResult).toMatchObject({
-      status: 400,
-      data: { error: "Could not connect to Plex server" },
-    });
-
-    const retryBody = new FormData();
-    retryBody.set("plexMode", "oauth_complete");
-    retryBody.set("oauthId", "oauth-id");
-    retryBody.set("plexServerUrl", "http://plex.local");
-
-    const retryRequest = new Request("http://localhost/setup", { method: "POST", body: retryBody });
-
-    const retryResult = await configurePlex({
-      request: retryRequest,
-      url: new URL("http://localhost/setup"),
-      cookies,
-    } as unknown as Parameters<typeof configurePlex>[0]);
-
-    expect(retryResult).toMatchObject({
+    expect(result).toMatchObject({
       success: true,
       friendlyName: "Plex",
       machineIdentifier: "mid",
       version: "1.0",
     });
-    expect(oauth.completeOAuth).toHaveBeenCalledTimes(2);
+    expect(oauth.completeOAuth).toHaveBeenCalledOnce();
     expect(plexClient.validateServerToken).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("configurePlex retry behavior", () => {
+  beforeEach(async () => {
+    resetStateAndMocks();
+    state.configValues.set(setupClaimedKey, "true");
+    state.configValues.set(setupClaimProofKey, "proof-123");
+    state.configValues.set(setupClaimedAtKey, String(Date.now()));
+    const plexClient = await import("$lib/plex/client");
+    vi.mocked(plexClient.validateServerToken).mockReset();
+  });
+
+  it("succeeds on first attempt without retry", async () => {
+    const { cookies } = createCookies({ [setupClaimCookie]: "proof-123" });
+    const plexClient = await import("$lib/plex/client");
+    vi.mocked(plexClient.validateServerToken).mockResolvedValueOnce({
+      friendlyName: "Plex",
+      machineIdentifier: "mid",
+      version: "1.0",
+    });
+
+    const body = new FormData();
+    body.set("plexMode", "token");
+    body.set("plexServerUrl", "http://plex.local");
+    body.set("plexToken", "test-token");
+    const request = new Request("http://localhost/setup", { method: "POST", body });
+
+    const { actions } = await import("./+page.server");
+    const configurePlex = actions.configurePlex;
+    if (!configurePlex) throw new Error("configurePlex action is undefined");
+
+    const result = await configurePlex({
+      request,
+      url: new URL("http://localhost/setup"),
+      cookies,
+    } as unknown as Parameters<typeof configurePlex>[0]);
+
+    expect(result).toMatchObject({ success: true, friendlyName: "Plex" });
+    expect(plexClient.validateServerToken).toHaveBeenCalledOnce();
+  });
+
+  it("retries transient errors and succeeds", async () => {
+    const { cookies } = createCookies({ [setupClaimCookie]: "proof-123" });
+    const plexClient = await import("$lib/plex/client");
+    const plexTypes = await import("$lib/plex/types");
+    vi.mocked(plexClient.validateServerToken)
+      .mockRejectedValueOnce(new plexTypes.PlexConnectionError("conn fail 1"))
+      .mockRejectedValueOnce(new plexTypes.PlexConnectionError("conn fail 2"))
+      .mockResolvedValueOnce({
+        friendlyName: "Plex",
+        machineIdentifier: "mid",
+        version: "1.0",
+      });
+
+    const body = new FormData();
+    body.set("plexMode", "token");
+    body.set("plexServerUrl", "http://plex.local");
+    body.set("plexToken", "test-token");
+    const request = new Request("http://localhost/setup", { method: "POST", body });
+
+    const { actions } = await import("./+page.server");
+    const configurePlex = actions.configurePlex;
+    if (!configurePlex) throw new Error("configurePlex action is undefined");
+
+    const result = await configurePlex({
+      request,
+      url: new URL("http://localhost/setup"),
+      cookies,
+    } as unknown as Parameters<typeof configurePlex>[0]);
+
+    expect(result).toMatchObject({ success: true });
+    expect(plexClient.validateServerToken).toHaveBeenCalledTimes(3);
+  });
+
+  it("fails after exhausting all retry attempts", async () => {
+    const { cookies } = createCookies({ [setupClaimCookie]: "proof-123" });
+    const plexClient = await import("$lib/plex/client");
+    const plexTypes = await import("$lib/plex/types");
+    vi.mocked(plexClient.validateServerToken).mockRejectedValue(
+      new plexTypes.PlexConnectionError("conn fail"),
+    );
+
+    const body = new FormData();
+    body.set("plexMode", "token");
+    body.set("plexServerUrl", "http://plex.local");
+    body.set("plexToken", "test-token");
+    const request = new Request("http://localhost/setup", { method: "POST", body });
+
+    const { actions } = await import("./+page.server");
+    const configurePlex = actions.configurePlex;
+    if (!configurePlex) throw new Error("configurePlex action is undefined");
+
+    const result = await configurePlex({
+      request,
+      url: new URL("http://localhost/setup"),
+      cookies,
+    } as unknown as Parameters<typeof configurePlex>[0]);
+
+    expect(result).toMatchObject({
+      status: 400,
+      data: { error: expect.stringContaining("Could not connect to Plex server") },
+    });
+    expect(plexClient.validateServerToken).toHaveBeenCalledTimes(5);
+  });
+
+  it("does not retry deterministic PlexConnectionError (Bad request)", async () => {
+    const { cookies } = createCookies({ [setupClaimCookie]: "proof-123" });
+    const plexClient = await import("$lib/plex/client");
+    const plexTypes = await import("$lib/plex/types");
+    vi.mocked(plexClient.validateServerToken).mockRejectedValueOnce(
+      new plexTypes.PlexConnectionError("Bad request: invalid URL format"),
+    );
+
+    const body = new FormData();
+    body.set("plexMode", "token");
+    body.set("plexServerUrl", "http://plex.local");
+    body.set("plexToken", "test-token");
+    const request = new Request("http://localhost/setup", { method: "POST", body });
+
+    const { actions } = await import("./+page.server");
+    const configurePlex = actions.configurePlex;
+    if (!configurePlex) throw new Error("configurePlex action is undefined");
+
+    const result = await configurePlex({
+      request,
+      url: new URL("http://localhost/setup"),
+      cookies,
+    } as unknown as Parameters<typeof configurePlex>[0]);
+
+    expect(result).toMatchObject({
+      status: 400,
+      data: { error: expect.stringContaining("Could not connect to Plex server") },
+    });
+    expect(plexClient.validateServerToken).toHaveBeenCalledOnce();
+  });
+
+  it("does not retry deterministic PlexConnectionError (Not found)", async () => {
+    const { cookies } = createCookies({ [setupClaimCookie]: "proof-123" });
+    const plexClient = await import("$lib/plex/client");
+    const plexTypes = await import("$lib/plex/types");
+    vi.mocked(plexClient.validateServerToken).mockRejectedValueOnce(
+      new plexTypes.PlexConnectionError("Not found: no server at this address"),
+    );
+
+    const body = new FormData();
+    body.set("plexMode", "token");
+    body.set("plexServerUrl", "http://plex.local");
+    body.set("plexToken", "test-token");
+    const request = new Request("http://localhost/setup", { method: "POST", body });
+
+    const { actions } = await import("./+page.server");
+    const configurePlex = actions.configurePlex;
+    if (!configurePlex) throw new Error("configurePlex action is undefined");
+
+    const result = await configurePlex({
+      request,
+      url: new URL("http://localhost/setup"),
+      cookies,
+    } as unknown as Parameters<typeof configurePlex>[0]);
+
+    expect(result).toMatchObject({
+      status: 400,
+      data: { error: expect.stringContaining("Could not connect to Plex server") },
+    });
+    expect(plexClient.validateServerToken).toHaveBeenCalledOnce();
+  });
+
+  it("does not retry auth errors", async () => {
+    const { cookies } = createCookies({ [setupClaimCookie]: "proof-123" });
+    const plexClient = await import("$lib/plex/client");
+    const plexTypes = await import("$lib/plex/types");
+    vi.mocked(plexClient.validateServerToken).mockRejectedValueOnce(
+      new plexTypes.PlexAuthError("invalid token"),
+    );
+
+    const body = new FormData();
+    body.set("plexMode", "token");
+    body.set("plexServerUrl", "http://plex.local");
+    body.set("plexToken", "test-token");
+    const request = new Request("http://localhost/setup", { method: "POST", body });
+
+    const { actions } = await import("./+page.server");
+    const configurePlex = actions.configurePlex;
+    if (!configurePlex) throw new Error("configurePlex action is undefined");
+
+    const result = await configurePlex({
+      request,
+      url: new URL("http://localhost/setup"),
+      cookies,
+    } as unknown as Parameters<typeof configurePlex>[0]);
+
+    expect(result).toMatchObject({
+      status: 400,
+      data: { error: expect.stringContaining("Invalid") },
+    });
+    expect(plexClient.validateServerToken).toHaveBeenCalledOnce();
+  });
+});
+
+describe("configureDispatcharr retry behavior", () => {
+  beforeEach(async () => {
+    resetStateAndMocks();
+    state.configValues.set(setupClaimedKey, "true");
+    state.configValues.set(setupClaimProofKey, "proof-123");
+    state.configValues.set(setupClaimedAtKey, String(Date.now()));
+    const healthModule = await import("$lib/dispatcharr/endpoints/health");
+    vi.mocked(healthModule.createHealthEndpoints).mockReset();
+  });
+
+  it("succeeds on first attempt without retry", async () => {
+    const { cookies } = createCookies({ [setupClaimCookie]: "proof-123" });
+    const healthModule = await import("$lib/dispatcharr/endpoints/health");
+    const mockCheckHealth = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      data: { reachable: true, authValid: true },
+    });
+    vi.mocked(healthModule.createHealthEndpoints).mockReturnValue({
+      checkHealth: mockCheckHealth,
+    } as unknown as ReturnType<typeof healthModule.createHealthEndpoints>);
+
+    const body = new FormData();
+    body.set("dispatcharrUrl", "http://dispatcharr.local");
+    body.set("dispatcharrApiKey", "test-key");
+    const request = new Request("http://localhost/setup", { method: "POST", body });
+
+    const { actions } = await import("./+page.server");
+    const configureDispatcharr = actions.configureDispatcharr;
+    if (!configureDispatcharr) throw new Error("configureDispatcharr action is undefined");
+
+    const result = await configureDispatcharr({
+      request,
+      cookies,
+    } as unknown as Parameters<typeof configureDispatcharr>[0]);
+
+    expect(result).toMatchObject({ success: true });
+    expect(mockCheckHealth).toHaveBeenCalledOnce();
+  });
+
+  it("retries when server is unreachable and succeeds", async () => {
+    const { cookies } = createCookies({ [setupClaimCookie]: "proof-123" });
+    const healthModule = await import("$lib/dispatcharr/endpoints/health");
+    const mockCheckHealth = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, data: { reachable: false, authValid: false } })
+      .mockResolvedValueOnce({ ok: true, data: { reachable: false, authValid: false } })
+      .mockResolvedValueOnce({ ok: true, data: { reachable: true, authValid: true } });
+    vi.mocked(healthModule.createHealthEndpoints).mockReturnValue({
+      checkHealth: mockCheckHealth,
+    } as unknown as ReturnType<typeof healthModule.createHealthEndpoints>);
+
+    const body = new FormData();
+    body.set("dispatcharrUrl", "http://dispatcharr.local");
+    body.set("dispatcharrApiKey", "test-key");
+    const request = new Request("http://localhost/setup", { method: "POST", body });
+
+    const { actions } = await import("./+page.server");
+    const configureDispatcharr = actions.configureDispatcharr;
+    if (!configureDispatcharr) throw new Error("configureDispatcharr action is undefined");
+
+    const result = await configureDispatcharr({
+      request,
+      cookies,
+    } as unknown as Parameters<typeof configureDispatcharr>[0]);
+
+    expect(result).toMatchObject({ success: true });
+    expect(mockCheckHealth).toHaveBeenCalledTimes(3);
+  });
+
+  it("fails after exhausting all retry attempts", async () => {
+    const { cookies } = createCookies({ [setupClaimCookie]: "proof-123" });
+    const healthModule = await import("$lib/dispatcharr/endpoints/health");
+    const mockCheckHealth = vi.fn().mockResolvedValue({
+      ok: true,
+      data: { reachable: false, authValid: false },
+    });
+    vi.mocked(healthModule.createHealthEndpoints).mockReturnValue({
+      checkHealth: mockCheckHealth,
+    } as unknown as ReturnType<typeof healthModule.createHealthEndpoints>);
+
+    const body = new FormData();
+    body.set("dispatcharrUrl", "http://dispatcharr.local");
+    body.set("dispatcharrApiKey", "test-key");
+    const request = new Request("http://localhost/setup", { method: "POST", body });
+
+    const { actions } = await import("./+page.server");
+    const configureDispatcharr = actions.configureDispatcharr;
+    if (!configureDispatcharr) throw new Error("configureDispatcharr action is undefined");
+
+    const result = await configureDispatcharr({
+      request,
+      cookies,
+    } as unknown as Parameters<typeof configureDispatcharr>[0]);
+
+    expect(result).toMatchObject({
+      status: 400,
+      data: { error: expect.stringContaining("multiple attempts") },
+    });
+    expect(mockCheckHealth).toHaveBeenCalledTimes(5);
+  });
+
+  it("does not retry auth failures", async () => {
+    const { cookies } = createCookies({ [setupClaimCookie]: "proof-123" });
+    const healthModule = await import("$lib/dispatcharr/endpoints/health");
+    const mockCheckHealth = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      data: { reachable: true, authValid: false },
+    });
+    vi.mocked(healthModule.createHealthEndpoints).mockReturnValue({
+      checkHealth: mockCheckHealth,
+    } as unknown as ReturnType<typeof healthModule.createHealthEndpoints>);
+
+    const body = new FormData();
+    body.set("dispatcharrUrl", "http://dispatcharr.local");
+    body.set("dispatcharrApiKey", "test-key");
+    const request = new Request("http://localhost/setup", { method: "POST", body });
+
+    const { actions } = await import("./+page.server");
+    const configureDispatcharr = actions.configureDispatcharr;
+    if (!configureDispatcharr) throw new Error("configureDispatcharr action is undefined");
+
+    const result = await configureDispatcharr({
+      request,
+      cookies,
+    } as unknown as Parameters<typeof configureDispatcharr>[0]);
+
+    expect(result).toMatchObject({
+      status: 400,
+      data: { error: expect.stringContaining("API key is invalid") },
+    });
+    expect(mockCheckHealth).toHaveBeenCalledOnce();
   });
 });

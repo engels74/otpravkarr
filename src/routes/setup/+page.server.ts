@@ -35,6 +35,8 @@ import {
   sanitizeString,
 } from "$lib/server/validation";
 import { probeXcSurface } from "$lib/url/discover";
+import type { RetryOptions } from "$lib/utils/retry";
+import { retryAsync } from "$lib/utils/retry";
 
 const SETUP_CLAIMED_CONFIG_KEY = "setup_claimed";
 const SETUP_CLAIM_PROOF_CONFIG_KEY = "setup_claim_proof";
@@ -58,6 +60,12 @@ const SETUP_PREREQUISITE_KEYS = [
 ] as const;
 const PLEX_SETUP_KEYS = ["plex_server_url", "plex_admin_token", "plex_machine_id"] as const;
 const DISPATCHARR_SETUP_KEYS = ["dispatcharr_url", "dispatcharr_api_key"] as const;
+const SETUP_CONNECTION_RETRY: RetryOptions = {
+  maxRetries: 4,
+  baseDelayMs: 1_000,
+  maxDelayMs: 5_000,
+  jitter: 0.5,
+};
 const ORIGIN_SETUP_KEY = "allowed_origins";
 const SETUP_CLAIM_COOKIE_OPTIONS = {
   path: "/setup",
@@ -66,6 +74,24 @@ const SETUP_CLAIM_COOKIE_OPTIONS = {
   sameSite: "strict" as const,
   maxAge: SETUP_CLAIM_TTL_SECONDS,
 };
+/**
+ * Setup-specific retry predicate for Plex errors.
+ * Only retries transient PlexConnectionError cases (timeouts, network blips).
+ * Deterministic errors (bad URL, not-found) and all non-PlexConnectionError
+ * errors (including programmer errors) are not retried.
+ */
+function isTransientPlexSetupError(error: unknown): boolean {
+  if (error instanceof PlexConnectionError) {
+    const msg = error.message.toLowerCase();
+    // Deterministic errors — no point retrying
+    if (msg.startsWith("bad request") || msg.startsWith("not found")) {
+      return false;
+    }
+    return true;
+  }
+  return false;
+}
+
 type SetupResumePhase = 1 | 2 | 3 | 4 | 5;
 type SetupSelectionOption = { id: number; name: string };
 
@@ -320,7 +346,11 @@ export const actions: Actions = {
         }
 
         const { plexToken, plexServerUrl } = tokenResult.data;
-        const serverInfo = await validateServerToken(plexServerUrl, plexToken);
+        const serverInfo = await retryAsync(
+          () => validateServerToken(plexServerUrl, plexToken),
+          isTransientPlexSetupError,
+          SETUP_CONNECTION_RETRY,
+        );
 
         await Promise.all([
           setConfig("plex_server_url", plexServerUrl),
@@ -359,7 +389,11 @@ export const actions: Actions = {
         }
 
         const identity = await completeOAuth(oauthId);
-        const serverInfo = await validateServerToken(plexServerUrl, identity.authenticationToken);
+        const serverInfo = await retryAsync(
+          () => validateServerToken(plexServerUrl, identity.authenticationToken),
+          isTransientPlexSetupError,
+          SETUP_CONNECTION_RETRY,
+        );
 
         await Promise.all([
           setConfig("plex_server_url", plexServerUrl),
@@ -380,7 +414,8 @@ export const actions: Actions = {
         return fail(400, { error: "Invalid or expired Plex token" });
       }
       if (err instanceof PlexConnectionError) {
-        return fail(400, { error: "Could not connect to Plex server" });
+        const detail = err.message || "unknown error";
+        return fail(400, { error: `Could not connect to Plex server: ${detail}` });
       }
       throw err;
     }
@@ -407,16 +442,34 @@ export const actions: Actions = {
     const { dispatcharrUrl, dispatcharrApiKey } = dcResult.data;
     const client = new DispatcharrClient(dispatcharrUrl, dispatcharrApiKey);
 
-    const healthResult = await createHealthEndpoints(client).checkHealth();
-    if (!healthResult.ok) {
-      return fail(400, { error: "Could not connect to Dispatcharr" });
+    let healthData: { reachable: boolean; authValid: boolean };
+    try {
+      healthData = await retryAsync(
+        async () => {
+          const result = await createHealthEndpoints(client).checkHealth();
+          // checkHealth() normalizes all errors into { ok: true, data: { reachable, authValid } }.
+          // The !ok guard satisfies the discriminated-union narrowing for TypeScript
+          // but is not reachable at runtime.
+          if (!result.ok) {
+            throw new Error(result.message);
+          }
+          // Only network failures (reachable=false) are worth retrying —
+          // auth and config issues won't self-resolve.
+          if (!result.data.reachable) {
+            throw new Error("Dispatcharr server is unreachable");
+          }
+          return result.data;
+        },
+        (err) => err instanceof Error && err.message === "Dispatcharr server is unreachable",
+        SETUP_CONNECTION_RETRY,
+      );
+    } catch (err: unknown) {
+      const detail = err instanceof Error ? err.message : String(err);
+      console.error(`[setup] Dispatcharr connection failed after retries: ${detail}`);
+      return fail(400, { error: "Could not connect to Dispatcharr after multiple attempts" });
     }
 
-    if (!healthResult.data.reachable) {
-      return fail(400, { error: "Dispatcharr server is unreachable" });
-    }
-
-    if (!healthResult.data.authValid) {
+    if (!healthData.authValid) {
       return fail(400, { error: "Dispatcharr API key is invalid" });
     }
 

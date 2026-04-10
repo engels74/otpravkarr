@@ -585,11 +585,14 @@ function enhanceHandler(nextStep?: number) {
                         <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" class="opacity-25" />
                         <path d="M4 12a8 8 0 018-8" stroke="currentColor" stroke-width="3" stroke-linecap="round" class="opacity-75" />
                       </svg>
-                      Connecting…
+                      Testing connection…
                     {:else}
-                      Connect Plex
+                      Test Connection
                     {/if}
                   </Button>
+                  <p class="text-xs text-muted-foreground mt-2 text-center">
+                    Automatically retries with backoff if the server is temporarily unavailable.
+                  </p>
                 </div>
               </form>
             {:else}
@@ -732,6 +735,9 @@ function enhanceHandler(nextStep?: number) {
                   Test Connection
                 {/if}
               </Button>
+              <p class="text-xs text-muted-foreground mt-2 text-center">
+                Automatically retries with backoff if the server is temporarily unavailable.
+              </p>
             </div>
           </form>
 

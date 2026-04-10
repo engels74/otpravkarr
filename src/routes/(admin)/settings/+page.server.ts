@@ -21,6 +21,7 @@ export const load: PageServerLoad = async (event) => {
     plexMachineId,
     dispatcharrUrl,
     dispatcharrApiKey,
+    dispatcharrExternalUrl,
     syncIntervalMinutes,
     allowedOrigins,
     auditRetentionDays,
@@ -30,6 +31,7 @@ export const load: PageServerLoad = async (event) => {
     getConfig("plex_machine_id"),
     getConfig("dispatcharr_url"),
     getConfig("dispatcharr_api_key"),
+    getConfig("dispatcharr_external_url"),
     getConfig("sync_interval_minutes"),
     getConfig("allowed_origins"),
     getConfig("audit_retention_days"),
@@ -57,6 +59,7 @@ export const load: PageServerLoad = async (event) => {
     dispatcharr: {
       url: dispatcharrUrl ?? "",
       hasApiKey: Boolean(dispatcharrApiKey),
+      externalUrl: dispatcharrExternalUrl ?? "",
     },
     sync: {
       intervalMinutes: syncIntervalMinutes ?? "15",
@@ -142,9 +145,11 @@ export const actions: Actions = {
     const fd = await request.formData();
     const url = sanitizeString(String(fd.get("dispatcharr_url") ?? ""));
     const newKey = sanitizeString(String(fd.get("dispatcharr_api_key") ?? ""));
-    const [currentUrl, currentKey] = await Promise.all([
+    const externalUrl = sanitizeString(String(fd.get("dispatcharr_external_url") ?? ""));
+    const [currentUrl, currentKey, currentExternalUrl] = await Promise.all([
       getConfig("dispatcharr_url"),
       getConfig("dispatcharr_api_key"),
+      getConfig("dispatcharr_external_url"),
     ]);
     const effectiveKey = newKey || (currentKey ?? "").trim();
 
@@ -177,6 +182,19 @@ export const actions: Actions = {
     if (newKey && newKey !== (currentKey ?? "")) {
       await setConfig("dispatcharr_api_key", newKey, true);
       changedFields.push("dispatcharr_api_key");
+    }
+
+    if (externalUrl) {
+      try {
+        new URL(externalUrl);
+      } catch {
+        return fail(400, { error: "External URL is not a valid URL" });
+      }
+    }
+
+    if (externalUrl !== (currentExternalUrl ?? "")) {
+      await setConfig("dispatcharr_external_url", externalUrl);
+      changedFields.push("dispatcharr_external_url");
     }
 
     invalidateConfigCache();

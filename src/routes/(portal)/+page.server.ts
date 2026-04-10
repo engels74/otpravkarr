@@ -18,6 +18,7 @@ import {
   getSupportedPlatforms,
   type PlatformUrlResult,
 } from "$lib/url/platforms";
+import { getDispatcharrPublicUrl } from "$lib/url/resolve";
 import { buildPlayerApiUrl, buildXcUrl } from "$lib/url/xc";
 import { generateQRCodeDataUri } from "$lib/utils/qrcode";
 
@@ -59,7 +60,7 @@ export const load = async ({ locals, cookies }: RequestEvent) => {
       cookies.delete(INITIAL_PASSWORD_COOKIE_NAME, { path: "/" });
     }
 
-    const dispatcharrUrl = await getConfig("dispatcharr_url");
+    const dispatcharrUrl = await getDispatcharrPublicUrl();
     return {
       authenticated: true as const,
       mode: user.provisioning_mode as "self_managed" | "staff",
@@ -79,7 +80,7 @@ export const load = async ({ locals, cookies }: RequestEvent) => {
   }
 
   const password = await decrypt(user.dispatcharr_xc_password_enc, "credential-encryption");
-  const host = (await getConfig("dispatcharr_url")) ?? "";
+  const host = (await getDispatcharrPublicUrl()) ?? "";
   const username = user.dispatcharr_username ?? "";
 
   const xcParams = { host, username, password };
@@ -195,10 +196,11 @@ export const actions: Actions = {
         "credential-encryption",
       );
       const username = locals.user.dispatcharr_username ?? "";
+      const publicHost = (await getDispatcharrPublicUrl()) ?? dispatcharrUrl;
 
       const m3uContent = generateM3U({
         channels: channelsResult.data,
-        host: dispatcharrUrl,
+        host: publicHost,
         username,
         password,
       });

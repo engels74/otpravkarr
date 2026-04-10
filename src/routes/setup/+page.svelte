@@ -713,6 +713,18 @@ function enhanceHandler(nextStep?: number) {
                 />
               </div>
               <div class="grid gap-2">
+                <Label for="dispatcharr-external-url">External URL (optional)</Label>
+                <Input
+                  id="dispatcharr-external-url"
+                  name="dispatcharrExternalUrl"
+                  type="url"
+                  placeholder="https://tv.example.com"
+                />
+                <p class="text-xs text-muted-foreground">
+                  Only needed if generated playlist URLs should point to a different address than the connection URL above (e.g., a public-facing reverse proxy).
+                </p>
+              </div>
+              <div class="grid gap-2">
                 <Label for="dispatcharr-key">API key</Label>
                 <Input
                   id="dispatcharr-key"

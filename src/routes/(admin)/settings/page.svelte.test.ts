@@ -57,6 +57,7 @@ const defaultData = {
   dispatcharr: {
     url: "http://dispatcharr.local",
     hasApiKey: true,
+    externalUrl: "https://external.example.com",
   },
   sync: {
     intervalMinutes: "15",
@@ -75,6 +76,16 @@ describe("admin settings page", () => {
     mocks.applyAction.mockClear();
     mocks.toastSuccess.mockClear();
     mocks.toastError.mockClear();
+  });
+
+  it("renders external URL input with correct value", async () => {
+    const { default: SettingsPage } = await import("./+page.svelte");
+
+    const { container } = render(SettingsPage, { props: { data: defaultData } });
+    const externalUrlInput = container.querySelector<HTMLInputElement>("#dispatcharr_external_url");
+    if (!externalUrlInput) throw new Error("External URL input not found");
+
+    expect(externalUrlInput.value).toBe("https://external.example.com");
   });
 
   it("clears stale Plex errors on server URL correction and shows updated success state", async () => {

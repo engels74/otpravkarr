@@ -415,7 +415,8 @@ export const actions: Actions = {
         return fail(400, { error: "Invalid or expired Plex token" });
       }
       if (err instanceof PlexConnectionError) {
-        return fail(400, { error: "Could not connect to Plex server after multiple attempts" });
+        const detail = err.message || "unknown error";
+        return fail(400, { error: `Could not connect to Plex server: ${detail}` });
       }
       throw err;
     }

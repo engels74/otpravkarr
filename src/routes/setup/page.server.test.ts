@@ -1157,7 +1157,7 @@ describe("configurePlex retry behavior", () => {
 
     expect(result).toMatchObject({
       status: 400,
-      data: { error: expect.stringContaining("multiple attempts") },
+      data: { error: expect.stringContaining("Could not connect to Plex server") },
     });
     expect(plexClient.validateServerToken).toHaveBeenCalledTimes(5);
   });

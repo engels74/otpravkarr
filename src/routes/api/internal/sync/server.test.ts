@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   getConfig: vi.fn((_key: string): Promise<string | null> => Promise.resolve(null)),
   appendAuditLog: vi.fn(),
   reconcileSync: vi.fn(),
+  runExclusive: vi.fn(),
 }));
 
 vi.mock("$lib/server/auth", () => ({
@@ -43,6 +44,12 @@ vi.mock("$lib/bridge/lifecycle", () => ({
   reconcileSync: mocks.reconcileSync,
 }));
 
+vi.mock("$lib/scheduler/runner", () => ({
+  scheduler: {
+    runExclusive: mocks.runExclusive,
+  },
+}));
+
 function createEvent() {
   return {} as Parameters<typeof import("./+server").POST>[0];
 }
@@ -52,11 +59,16 @@ function resetAll() {
   mocks.getConfig.mockClear();
   mocks.appendAuditLog.mockClear();
   mocks.reconcileSync.mockClear();
+  mocks.runExclusive.mockClear();
 }
 
 describe("POST /api/internal/sync", () => {
   beforeEach(() => {
     resetAll();
+    mocks.runExclusive.mockImplementation(async (_name: string, fn: () => Promise<unknown>) => {
+      const result = await fn();
+      return { ok: true, result };
+    });
   });
 
   it("returns 401 when unauthenticated", async () => {
@@ -197,6 +209,52 @@ describe("POST /api/internal/sync", () => {
     expect(mocks.appendAuditLog).toHaveBeenCalledWith({
       action: "sync.failed",
       detail: { error: "Connection refused" },
+    });
+  });
+
+  it("returns 409 when sync is already in progress", async () => {
+    mocks.requireAdminApi.mockResolvedValueOnce({ id: 1, username: "admin" });
+    mocks.getConfig.mockImplementation((key: string) => {
+      const config: Record<string, string> = {
+        dispatcharr_url: "http://dispatcharr:8000",
+        dispatcharr_api_key: "test-key",
+        plex_admin_token: "plex-token",
+      };
+      return Promise.resolve(config[key] ?? null);
+    });
+
+    mocks.runExclusive.mockResolvedValueOnce({ ok: false, reason: "already_running" });
+
+    const { POST } = await import("./+server");
+    const response = await POST(createEvent());
+
+    expect(response.status).toBe(409);
+    const body = await response.json();
+    expect(body).toEqual({ ok: false, error: "sync_in_progress" });
+  });
+
+  it("returns 500 when sync job is not registered", async () => {
+    mocks.requireAdminApi.mockResolvedValueOnce({ id: 1, username: "admin" });
+    mocks.getConfig.mockImplementation((key: string) => {
+      const config: Record<string, string> = {
+        dispatcharr_url: "http://dispatcharr:8000",
+        dispatcharr_api_key: "test-key",
+        plex_admin_token: "plex-token",
+      };
+      return Promise.resolve(config[key] ?? null);
+    });
+
+    mocks.runExclusive.mockResolvedValueOnce({ ok: false, reason: "unknown_job" });
+
+    const { POST } = await import("./+server");
+    const response = await POST(createEvent());
+
+    expect(response.status).toBe(500);
+    const body = await response.json();
+    expect(body).toEqual({
+      ok: false,
+      error: "internal_error",
+      message: "Sync job not registered",
     });
   });
 });

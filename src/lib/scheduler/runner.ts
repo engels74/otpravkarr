@@ -34,6 +34,10 @@ function log(event: string, job: string, extra?: Record<string, unknown>): void 
 /** Maximum safe setTimeout delay (2^31 - 1 ms ≈ 24.85 days). Larger values are clamped to 0 by JS runtimes. */
 const MAX_SAFE_TIMEOUT = 2_147_483_647;
 
+export type RunExclusiveResult<T> =
+  | { ok: true; result: T }
+  | { ok: false; reason: "already_running" | "unknown_job" };
+
 export class Scheduler {
   private jobs = new Map<string, JobEntry>();
   private started = false;
@@ -112,11 +116,34 @@ export class Scheduler {
     };
   }
 
-  notifyRun(name: string, durationMs: number): void {
+  async runExclusive<T>(name: string, fn: () => Promise<T>): Promise<RunExclusiveResult<T>> {
     const entry = this.jobs.get(name);
-    if (!entry) return;
-    entry.lastRunAt = Date.now();
-    entry.lastDurationMs = durationMs;
+    if (!entry) return { ok: false, reason: "unknown_job" };
+    if (entry.running) return { ok: false, reason: "already_running" };
+
+    entry.running = true;
+    const start = performance.now();
+
+    try {
+      const result = await fn();
+      const durationMs = Math.round((performance.now() - start) * 100) / 100;
+      entry.lastRunAt = Date.now();
+      entry.lastDurationMs = durationMs;
+      log("job.completed", name, { duration_ms: durationMs, trigger: "api" });
+      return { ok: true, result };
+    } catch (err) {
+      const durationMs = Math.round((performance.now() - start) * 100) / 100;
+      entry.lastRunAt = Date.now();
+      entry.lastDurationMs = durationMs;
+      log("job.error", name, {
+        duration_ms: durationMs,
+        error: err instanceof Error ? err.message : String(err),
+        trigger: "api",
+      });
+      throw err;
+    } finally {
+      entry.running = false;
+    }
   }
 
   private scheduleTick(entry: JobEntry): void {

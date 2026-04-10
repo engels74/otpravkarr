@@ -26,12 +26,23 @@ export const POST: RequestHandler = async (event) => {
     return Response.json({ ok: false, error: "missing_config", missing }, { status: 503 });
   }
 
-  const start = performance.now();
-
   try {
-    const client = new DispatcharrClient(dispatcharrUrl, apiKey);
-    const report = await reconcileSync(client, plexAdminToken);
-    return Response.json({ ok: true, report }, { status: 200 });
+    const exclusive = await scheduler.runExclusive("plex-dispatcharr-sync", async () => {
+      const client = new DispatcharrClient(dispatcharrUrl, apiKey);
+      return reconcileSync(client, plexAdminToken);
+    });
+
+    if (!exclusive.ok) {
+      if (exclusive.reason === "unknown_job") {
+        return Response.json(
+          { ok: false, error: "internal_error", message: "Sync job not registered" },
+          { status: 500 },
+        );
+      }
+      return Response.json({ ok: false, error: "sync_in_progress" }, { status: 409 });
+    }
+
+    return Response.json({ ok: true, report: exclusive.result }, { status: 200 });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
 
@@ -42,7 +53,5 @@ export const POST: RequestHandler = async (event) => {
     }
 
     return Response.json({ ok: false, error: "sync_failed", message }, { status: 500 });
-  } finally {
-    scheduler.notifyRun("plex-dispatcharr-sync", Math.round(performance.now() - start));
   }
 };

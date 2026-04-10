@@ -1162,6 +1162,68 @@ describe("configurePlex retry behavior", () => {
     expect(plexClient.validateServerToken).toHaveBeenCalledTimes(5);
   });
 
+  it("does not retry deterministic PlexConnectionError (Bad request)", async () => {
+    const { cookies } = createCookies({ [setupClaimCookie]: "proof-123" });
+    const plexClient = await import("$lib/plex/client");
+    const plexTypes = await import("$lib/plex/types");
+    vi.mocked(plexClient.validateServerToken).mockRejectedValueOnce(
+      new plexTypes.PlexConnectionError("Bad request: invalid URL format"),
+    );
+
+    const body = new FormData();
+    body.set("plexMode", "token");
+    body.set("plexServerUrl", "http://plex.local");
+    body.set("plexToken", "test-token");
+    const request = new Request("http://localhost/setup", { method: "POST", body });
+
+    const { actions } = await import("./+page.server");
+    const configurePlex = actions.configurePlex;
+    if (!configurePlex) throw new Error("configurePlex action is undefined");
+
+    const result = await configurePlex({
+      request,
+      url: new URL("http://localhost/setup"),
+      cookies,
+    } as unknown as Parameters<typeof configurePlex>[0]);
+
+    expect(result).toMatchObject({
+      status: 400,
+      data: { error: expect.stringContaining("Could not connect to Plex server") },
+    });
+    expect(plexClient.validateServerToken).toHaveBeenCalledOnce();
+  });
+
+  it("does not retry deterministic PlexConnectionError (Not found)", async () => {
+    const { cookies } = createCookies({ [setupClaimCookie]: "proof-123" });
+    const plexClient = await import("$lib/plex/client");
+    const plexTypes = await import("$lib/plex/types");
+    vi.mocked(plexClient.validateServerToken).mockRejectedValueOnce(
+      new plexTypes.PlexConnectionError("Not found: no server at this address"),
+    );
+
+    const body = new FormData();
+    body.set("plexMode", "token");
+    body.set("plexServerUrl", "http://plex.local");
+    body.set("plexToken", "test-token");
+    const request = new Request("http://localhost/setup", { method: "POST", body });
+
+    const { actions } = await import("./+page.server");
+    const configurePlex = actions.configurePlex;
+    if (!configurePlex) throw new Error("configurePlex action is undefined");
+
+    const result = await configurePlex({
+      request,
+      url: new URL("http://localhost/setup"),
+      cookies,
+    } as unknown as Parameters<typeof configurePlex>[0]);
+
+    expect(result).toMatchObject({
+      status: 400,
+      data: { error: expect.stringContaining("Could not connect to Plex server") },
+    });
+    expect(plexClient.validateServerToken).toHaveBeenCalledOnce();
+  });
+
   it("does not retry auth errors", async () => {
     const { cookies } = createCookies({ [setupClaimCookie]: "proof-123" });
     const plexClient = await import("$lib/plex/client");

@@ -448,9 +448,14 @@ export const actions: Actions = {
       healthData = await retryAsync(
         async () => {
           const result = await createHealthEndpoints(client).checkHealth();
+          // checkHealth() normalizes all errors into { ok: true, data: { reachable, authValid } }.
+          // The !ok guard satisfies the discriminated-union narrowing for TypeScript
+          // but is not reachable at runtime.
           if (!result.ok) {
-            throw new Error(`Dispatcharr health check failed: ${result.error} – ${result.message}`);
+            throw new Error(result.message);
           }
+          // Only network failures (reachable=false) are worth retrying —
+          // auth and config issues won't self-resolve.
           if (!result.data.reachable) {
             throw new Error("Dispatcharr server is unreachable");
           }

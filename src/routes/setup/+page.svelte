@@ -591,7 +591,7 @@ function enhanceHandler(nextStep?: number) {
                     {/if}
                   </Button>
                   <p class="text-xs text-muted-foreground mt-2 text-center">
-                    Automatically retries up to 4 times if the server is temporarily unavailable.
+                    Automatically retries with backoff if the server is temporarily unavailable.
                   </p>
                 </div>
               </form>
@@ -736,7 +736,7 @@ function enhanceHandler(nextStep?: number) {
                 {/if}
               </Button>
               <p class="text-xs text-muted-foreground mt-2 text-center">
-                Automatically retries up to 4 times if the server is temporarily unavailable.
+                Automatically retries with backoff if the server is temporarily unavailable.
               </p>
             </div>
           </form>

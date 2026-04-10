@@ -36,7 +36,7 @@ import {
 } from "$lib/server/validation";
 import { probeXcSurface } from "$lib/url/discover";
 import type { RetryOptions } from "$lib/utils/retry";
-import { isTransientPlexError, retryAsync } from "$lib/utils/retry";
+import { retryAsync } from "$lib/utils/retry";
 
 const SETUP_CLAIMED_CONFIG_KEY = "setup_claimed";
 const SETUP_CLAIM_PROOF_CONFIG_KEY = "setup_claim_proof";
@@ -74,6 +74,25 @@ const SETUP_CLAIM_COOKIE_OPTIONS = {
   sameSite: "strict" as const,
   maxAge: SETUP_CLAIM_TTL_SECONDS,
 };
+/**
+ * Setup-specific retry predicate for Plex errors.
+ * Skips retry on PlexAuthError (invalid credentials) and on deterministic
+ * PlexConnectionError cases (bad URL, not-found) to avoid unnecessary delay
+ * during the setup wizard.
+ */
+function isTransientPlexSetupError(error: unknown): boolean {
+  if (error instanceof PlexAuthError) {
+    return false;
+  }
+  if (error instanceof PlexConnectionError) {
+    const msg = error.message.toLowerCase();
+    if (msg.startsWith("bad request") || msg.startsWith("not found")) {
+      return false;
+    }
+  }
+  return true;
+}
+
 type SetupResumePhase = 1 | 2 | 3 | 4 | 5;
 type SetupSelectionOption = { id: number; name: string };
 
@@ -330,7 +349,7 @@ export const actions: Actions = {
         const { plexToken, plexServerUrl } = tokenResult.data;
         const serverInfo = await retryAsync(
           () => validateServerToken(plexServerUrl, plexToken),
-          isTransientPlexError,
+          isTransientPlexSetupError,
           SETUP_CONNECTION_RETRY,
         );
 
@@ -373,7 +392,7 @@ export const actions: Actions = {
         const identity = await completeOAuth(oauthId);
         const serverInfo = await retryAsync(
           () => validateServerToken(plexServerUrl, identity.authenticationToken),
-          isTransientPlexError,
+          isTransientPlexSetupError,
           SETUP_CONNECTION_RETRY,
         );
 
@@ -428,15 +447,20 @@ export const actions: Actions = {
       healthData = await retryAsync(
         async () => {
           const result = await createHealthEndpoints(client).checkHealth();
-          if (!result.ok || !result.data.reachable) {
-            throw new Error("unreachable");
+          if (!result.ok) {
+            throw new Error(`Dispatcharr health check failed: ${result.error} – ${result.message}`);
+          }
+          if (!result.data.reachable) {
+            throw new Error("Dispatcharr server is unreachable");
           }
           return result.data;
         },
         () => true,
         SETUP_CONNECTION_RETRY,
       );
-    } catch {
+    } catch (err: unknown) {
+      const detail = err instanceof Error ? err.message : String(err);
+      console.error(`[setup] Dispatcharr connection failed after retries: ${detail}`);
       return fail(400, { error: "Could not connect to Dispatcharr after multiple attempts" });
     }
 

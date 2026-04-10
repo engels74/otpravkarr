@@ -52,6 +52,7 @@ describe("signout endpoint", () => {
     await expect(
       POST({
         cookies,
+        request: new Request("http://localhost/api/internal/signout", { method: "POST" }),
         locals: {
           session: { id: "sess-123", type: "user", userRef: "1" },
         },
@@ -77,6 +78,7 @@ describe("signout endpoint", () => {
     await expect(
       POST({
         cookies,
+        request: new Request("http://localhost/api/internal/signout", { method: "POST" }),
         locals: {
           session: { id: "sess-456", type: "admin", userRef: "admin" },
           admin: { id: 1, username: "admin" },
@@ -102,6 +104,7 @@ describe("signout endpoint", () => {
     try {
       await POST({
         cookies,
+        request: new Request("http://localhost/api/internal/signout", { method: "POST" }),
         locals: {
           session: { id: "sess-456", type: "admin", userRef: "admin" },
           admin: { id: 1, username: "admin" },
@@ -128,6 +131,7 @@ describe("signout endpoint", () => {
     await expect(
       POST({
         cookies,
+        request: new Request("http://localhost/api/internal/signout", { method: "POST" }),
         locals: {},
         getClientAddress: () => "127.0.0.1",
       } as unknown as Parameters<typeof POST>[0]),
@@ -139,6 +143,66 @@ describe("signout endpoint", () => {
     expect(mocks.deleteSession).not.toHaveBeenCalled();
   });
 
+  it("returns JSON response when Accept header includes application/json (user session)", async () => {
+    const { POST } = await import("./+server");
+    const { cookies, deleteFn } = createCookies("sess-json-1");
+
+    const response = await POST({
+      cookies,
+      request: new Request("http://localhost/api/internal/signout", {
+        method: "POST",
+        headers: { Accept: "application/json" },
+      }),
+      locals: {
+        session: { id: "sess-json-1", type: "user", userRef: "1" },
+      },
+      getClientAddress: () => "127.0.0.1",
+    } as unknown as Parameters<typeof POST>[0]);
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body).toEqual({ ok: true, redirectTo: "/" });
+    expect(mocks.deleteSession).toHaveBeenCalledWith("sess-json-1");
+    expect(deleteFn).toHaveBeenCalledWith(
+      "otpravkarr_session",
+      expect.objectContaining({ path: "/" }),
+    );
+  });
+
+  it("returns JSON response when Accept header includes application/json (admin session)", async () => {
+    const { POST } = await import("./+server");
+    const { cookies, deleteFn } = createCookies("sess-json-2");
+
+    const response = await POST({
+      cookies,
+      request: new Request("http://localhost/api/internal/signout", {
+        method: "POST",
+        headers: { Accept: "application/json" },
+      }),
+      locals: {
+        session: { id: "sess-json-2", type: "admin", userRef: "admin" },
+        admin: { id: 1, username: "admin" },
+      },
+      getClientAddress: () => "10.0.0.1",
+    } as unknown as Parameters<typeof POST>[0]);
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body).toEqual({ ok: true, redirectTo: "/login" });
+    expect(mocks.deleteSession).toHaveBeenCalledWith("sess-json-2");
+    expect(deleteFn).toHaveBeenCalledWith(
+      "otpravkarr_session",
+      expect.objectContaining({ path: "/" }),
+    );
+    expect(mocks.appendAuditLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actor: "admin",
+        action: "admin.logout",
+        ipAddress: "10.0.0.1",
+      }),
+    );
+  });
+
   it("does not append audit log for non-admin signout", async () => {
     const { POST } = await import("./+server");
     const { cookies } = createCookies("sess-789");
@@ -146,6 +210,7 @@ describe("signout endpoint", () => {
     try {
       await POST({
         cookies,
+        request: new Request("http://localhost/api/internal/signout", { method: "POST" }),
         locals: {
           session: { id: "sess-789", type: "user", userRef: "42" },
         },

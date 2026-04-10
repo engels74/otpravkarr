@@ -117,12 +117,15 @@ function resetStateAndMocks() {
   mocks.DispatcharrClient.mockClear();
 }
 
-function createActionEvent(body: FormData) {
+function createActionEvent(body: FormData, origin?: string) {
+  const headers: HeadersInit = origin ? { Origin: origin } : {};
   return {
     request: new Request("http://localhost/settings", {
       method: "POST",
       body,
+      headers,
     }),
+    url: new URL("http://localhost/settings"),
     locals: { admin: { username: "admin" } },
     getClientAddress: () => "127.0.0.1",
   };
@@ -159,7 +162,10 @@ describe("admin settings actions", () => {
     if (!updateSecurity) throw new Error("updateSecurity action is undefined");
 
     const body = new FormData();
-    body.set("allowed_origins", " https://alpha.example/path \nhttp://localhost:3000/ ");
+    body.set(
+      "allowed_origins",
+      " https://alpha.example/path \nhttp://localhost:3000/ \nhttp://localhost ",
+    );
 
     const result = await updateSecurity(
       createActionEvent(body) as unknown as Parameters<typeof updateSecurity>[0],
@@ -167,7 +173,7 @@ describe("admin settings actions", () => {
 
     expect(result).toEqual({ success: true });
     expect(state.configValues.get("allowed_origins")).toBe(
-      JSON.stringify(["https://alpha.example", "http://localhost:3000"]),
+      JSON.stringify(["https://alpha.example", "http://localhost:3000", "http://localhost"]),
     );
     expect(mocks.invalidateConfigCache).toHaveBeenCalledOnce();
     expect(mocks.appendAuditLog).toHaveBeenCalledWith(
@@ -176,7 +182,7 @@ describe("admin settings actions", () => {
         detail: expect.objectContaining({
           section: "security",
           field: "allowed_origins",
-          count: 2,
+          count: 3,
         }),
       }),
     );
@@ -196,6 +202,76 @@ describe("admin settings actions", () => {
 
     expect(result).toEqual({ success: true });
     expect(state.configValues.get("allowed_origins")).toBe(JSON.stringify([]));
+  });
+
+  it("rejects allowed origins that exclude the request Origin header (lockout guard)", async () => {
+    const { actions } = await import("./+page.server");
+    const updateSecurity = actions.updateSecurity;
+    if (!updateSecurity) throw new Error("updateSecurity action is undefined");
+
+    const body = new FormData();
+    body.set("allowed_origins", "https://other.example");
+
+    const result = await updateSecurity(
+      createActionEvent(body, "http://localhost") as unknown as Parameters<
+        typeof updateSecurity
+      >[0],
+    );
+
+    expect(result).toMatchObject({
+      status: 400,
+      data: {
+        error:
+          "Current origin (http://localhost) must be included in the allowed origins list to avoid locking yourself out.",
+      },
+    });
+    expect(mocks.setConfig).not.toHaveBeenCalled();
+    expect(mocks.invalidateConfigCache).not.toHaveBeenCalled();
+  });
+
+  it("falls back to url.origin for lockout guard when Origin header is missing", async () => {
+    const { actions } = await import("./+page.server");
+    const updateSecurity = actions.updateSecurity;
+    if (!updateSecurity) throw new Error("updateSecurity action is undefined");
+
+    // No Origin header; url.origin is http://localhost which is NOT in the allowed list
+    const body = new FormData();
+    body.set("allowed_origins", "https://other.example");
+
+    const result = await updateSecurity(
+      createActionEvent(body) as unknown as Parameters<typeof updateSecurity>[0],
+    );
+
+    expect(result).toMatchObject({
+      status: 400,
+      data: {
+        error:
+          "Current origin (http://localhost) must be included in the allowed origins list to avoid locking yourself out.",
+      },
+    });
+    expect(mocks.setConfig).not.toHaveBeenCalled();
+    expect(mocks.invalidateConfigCache).not.toHaveBeenCalled();
+  });
+
+  it("allows saving origins when request Origin is in the allowed list", async () => {
+    const { actions } = await import("./+page.server");
+    const updateSecurity = actions.updateSecurity;
+    if (!updateSecurity) throw new Error("updateSecurity action is undefined");
+
+    const body = new FormData();
+    body.set("allowed_origins", "http://localhost\nhttps://app.example");
+
+    const result = await updateSecurity(
+      createActionEvent(body, "http://localhost") as unknown as Parameters<
+        typeof updateSecurity
+      >[0],
+    );
+
+    expect(result).toEqual({ success: true });
+    expect(mocks.setConfig).toHaveBeenCalledWith(
+      "allowed_origins",
+      JSON.stringify(["http://localhost", "https://app.example"]),
+    );
   });
 
   it("rejects oversized sync intervals in updateSyncSettings before persisting", async () => {

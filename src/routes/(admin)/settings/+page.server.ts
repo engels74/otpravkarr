@@ -174,6 +174,14 @@ export const actions: Actions = {
       return fail(400, { error: "Dispatcharr API key is invalid" });
     }
 
+    if (externalUrl) {
+      try {
+        new URL(externalUrl);
+      } catch {
+        return fail(400, { error: "External URL is not a valid URL" });
+      }
+    }
+
     if (url !== (currentUrl ?? "")) {
       await setConfig("dispatcharr_url", url);
       changedFields.push("dispatcharr_url");
@@ -182,14 +190,6 @@ export const actions: Actions = {
     if (newKey && newKey !== (currentKey ?? "")) {
       await setConfig("dispatcharr_api_key", newKey, true);
       changedFields.push("dispatcharr_api_key");
-    }
-
-    if (externalUrl) {
-      try {
-        new URL(externalUrl);
-      } catch {
-        return fail(400, { error: "External URL is not a valid URL" });
-      }
     }
 
     if (externalUrl !== (currentExternalUrl ?? "")) {

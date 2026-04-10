@@ -431,6 +431,7 @@ export const actions: Actions = {
     const dcResult = DispatcharrConfigSchema.safeParse({
       dispatcharrUrl: sanitizeString(String(formData.get("dispatcharrUrl") ?? "")),
       dispatcharrApiKey: sanitizeString(String(formData.get("dispatcharrApiKey") ?? "")),
+      dispatcharrExternalUrl: sanitizeString(String(formData.get("dispatcharrExternalUrl") ?? "")),
     });
 
     if (!dcResult.success) {
@@ -439,7 +440,7 @@ export const actions: Actions = {
       });
     }
 
-    const { dispatcharrUrl, dispatcharrApiKey } = dcResult.data;
+    const { dispatcharrUrl, dispatcharrApiKey, dispatcharrExternalUrl } = dcResult.data;
     const client = new DispatcharrClient(dispatcharrUrl, dispatcharrApiKey);
 
     let healthData: { reachable: boolean; authValid: boolean };
@@ -476,6 +477,7 @@ export const actions: Actions = {
     await Promise.all([
       setConfig("dispatcharr_url", dispatcharrUrl),
       setConfig("dispatcharr_api_key", dispatcharrApiKey, true),
+      setConfig("dispatcharr_external_url", dispatcharrExternalUrl ?? ""),
     ]);
 
     const [groupsResult, profilesResult] = await Promise.all([

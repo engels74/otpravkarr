@@ -1357,6 +1357,68 @@ describe("configureDispatcharr retry behavior", () => {
     expect(mockCheckHealth).toHaveBeenCalledTimes(5);
   });
 
+  it("stores external URL when provided", async () => {
+    const { cookies } = createCookies({ [setupClaimCookie]: "proof-123" });
+    const healthModule = await import("$lib/dispatcharr/endpoints/health");
+    const mockCheckHealth = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      data: { reachable: true, authValid: true },
+    });
+    vi.mocked(healthModule.createHealthEndpoints).mockReturnValue({
+      checkHealth: mockCheckHealth,
+    } as unknown as ReturnType<typeof healthModule.createHealthEndpoints>);
+
+    const body = new FormData();
+    body.set("dispatcharrUrl", "http://dispatcharr.local");
+    body.set("dispatcharrApiKey", "test-key");
+    body.set("dispatcharrExternalUrl", "https://external.example.com");
+    const request = new Request("http://localhost/setup", { method: "POST", body });
+
+    const { actions } = await import("./+page.server");
+    const configureDispatcharr = actions.configureDispatcharr;
+    if (!configureDispatcharr) throw new Error("configureDispatcharr action is undefined");
+
+    const result = await configureDispatcharr({
+      request,
+      cookies,
+    } as unknown as Parameters<typeof configureDispatcharr>[0]);
+
+    expect(result).toMatchObject({ success: true });
+    expect(mocks.setConfig).toHaveBeenCalledWith(
+      "dispatcharr_external_url",
+      "https://external.example.com",
+    );
+  });
+
+  it("stores empty string for external URL when not provided", async () => {
+    const { cookies } = createCookies({ [setupClaimCookie]: "proof-123" });
+    const healthModule = await import("$lib/dispatcharr/endpoints/health");
+    const mockCheckHealth = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      data: { reachable: true, authValid: true },
+    });
+    vi.mocked(healthModule.createHealthEndpoints).mockReturnValue({
+      checkHealth: mockCheckHealth,
+    } as unknown as ReturnType<typeof healthModule.createHealthEndpoints>);
+
+    const body = new FormData();
+    body.set("dispatcharrUrl", "http://dispatcharr.local");
+    body.set("dispatcharrApiKey", "test-key");
+    const request = new Request("http://localhost/setup", { method: "POST", body });
+
+    const { actions } = await import("./+page.server");
+    const configureDispatcharr = actions.configureDispatcharr;
+    if (!configureDispatcharr) throw new Error("configureDispatcharr action is undefined");
+
+    const result = await configureDispatcharr({
+      request,
+      cookies,
+    } as unknown as Parameters<typeof configureDispatcharr>[0]);
+
+    expect(result).toMatchObject({ success: true });
+    expect(mocks.setConfig).toHaveBeenCalledWith("dispatcharr_external_url", "");
+  });
+
   it("does not retry auth failures", async () => {
     const { cookies } = createCookies({ [setupClaimCookie]: "proof-123" });
     const healthModule = await import("$lib/dispatcharr/endpoints/health");

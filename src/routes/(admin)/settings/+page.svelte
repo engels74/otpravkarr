@@ -18,6 +18,7 @@ interface Props {
     dispatcharr: {
       url: string;
       hasApiKey: boolean;
+      externalUrl: string;
     };
     sync: {
       intervalMinutes: string;
@@ -140,7 +141,13 @@ function makeEnhance(section: string) {
       <Card.Content class="grid gap-4">
         <div class="grid gap-1.5">
           <Label for="dispatcharr_url">URL</Label>
-          <Input id="dispatcharr_url" name="dispatcharr_url" value={data.dispatcharr.url} placeholder="http://localhost:8000" />
+          <Input id="dispatcharr_url" name="dispatcharr_url" value={data.dispatcharr.url} placeholder="http://localhost:8000" oninput={() => { delete sectionMessage["dispatcharr"]; }} />
+        </div>
+
+        <div class="grid gap-1.5">
+          <Label for="dispatcharr_external_url">External/Public URL (optional)</Label>
+          <Input id="dispatcharr_external_url" name="dispatcharr_external_url" value={data.dispatcharr.externalUrl} placeholder="https://tv.example.com" oninput={() => { delete sectionMessage["dispatcharr"]; }} />
+          <p class="text-xs text-muted-foreground">When set, generated M3U and stream URLs will use this address instead of the connection URL above.</p>
         </div>
 
         <div class="grid gap-1.5">

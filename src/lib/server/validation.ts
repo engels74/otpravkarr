@@ -71,6 +71,12 @@ export const PlexTokenSchema = z.object({
 export const DispatcharrConfigSchema = z.object({
   dispatcharrUrl: z.string().trim().url("Dispatcharr URL must be a valid URL"),
   dispatcharrApiKey: z.string().trim().min(1, "Dispatcharr API key is required"),
+  dispatcharrExternalUrl: z
+    .string()
+    .trim()
+    .url("External URL must be a valid URL")
+    .optional()
+    .or(z.literal("")),
 });
 
 // ---------------------------------------------------------------------------

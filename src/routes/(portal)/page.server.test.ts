@@ -35,6 +35,7 @@ const mocks = vi.hoisted(() => ({
     type: "url",
     url: "http://host/get.php?username=u&password=p&type=m3u_plus",
   })),
+  getDispatcharrPublicUrl: vi.fn(async () => state.configValues.dispatcharr_url ?? null),
   DispatcharrClient: vi.fn(),
   createChannelEndpoints: vi.fn(() => ({
     getAllChannels: vi.fn(
@@ -99,6 +100,10 @@ vi.mock("$lib/url/m3u", () => ({
 
 vi.mock("$lib/utils/qrcode", () => ({
   generateQRCodeDataUri: mocks.generateQRCodeDataUri,
+}));
+
+vi.mock("$lib/url/resolve.server", () => ({
+  getDispatcharrPublicUrl: mocks.getDispatcharrPublicUrl,
 }));
 
 vi.mock("$lib/dispatcharr/client", () => ({
@@ -289,6 +294,23 @@ describe("portal page server", () => {
       });
       expect(mocks.decrypt).toHaveBeenCalledWith("encrypted-pw", "credential-encryption");
       expect(mocks.updateLastAccessed).toHaveBeenCalledWith(1);
+    });
+
+    it("uses external URL for streaming URLs when configured", async () => {
+      const { load } = await import("./+page.server");
+      const user = createUser();
+      mocks.getDispatcharrPublicUrl.mockResolvedValueOnce("https://external.example.com");
+      const { cookies } = createCookies();
+
+      await load({
+        locals: { user },
+        cookies,
+      } as unknown as Parameters<typeof load>[0]);
+
+      expect(mocks.getDispatcharrPublicUrl).toHaveBeenCalled();
+      expect(mocks.buildXcUrl).toHaveBeenCalledWith(
+        expect.objectContaining({ host: "https://external.example.com" }),
+      );
     });
 
     it("calls updateLastAccessed for active users", async () => {

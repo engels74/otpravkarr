@@ -251,15 +251,15 @@ export const actions: Actions = {
     if (origins.length > 0) {
       // The lockout guard must match what CSRF validation actually checks:
       // the request Origin header (not url.origin, which may differ behind a reverse proxy).
-      const requestOrigin = request.headers.get("Origin");
-      if (requestOrigin) {
-        const normalizedRequestOrigin = requestOrigin.replace(/\/+$/, "").toLowerCase();
-        const normalizedAllowed = origins.map((o) => o.replace(/\/+$/, "").toLowerCase());
-        if (!normalizedAllowed.includes(normalizedRequestOrigin)) {
-          return fail(400, {
-            error: `Current origin (${requestOrigin}) must be included in the allowed origins list to avoid locking yourself out.`,
-          });
-        }
+      // Fall back to event.url.origin when Origin header is absent (e.g. same-origin or
+      // non-browser clients) so the guard is never silently skipped.
+      const requestOrigin = request.headers.get("Origin") ?? event.url.origin;
+      const normalizedRequestOrigin = requestOrigin.replace(/\/+$/, "").toLowerCase();
+      const normalizedAllowed = origins.map((o) => o.replace(/\/+$/, "").toLowerCase());
+      if (!normalizedAllowed.includes(normalizedRequestOrigin)) {
+        return fail(400, {
+          error: `Current origin (${requestOrigin}) must be included in the allowed origins list to avoid locking yourself out.`,
+        });
       }
     }
 

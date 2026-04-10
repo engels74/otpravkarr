@@ -251,7 +251,6 @@ let rangeEnd = $derived(Math.min(data.filters.page * data.filters.limit, data.to
                     aria-expanded={isExpanded}
                     aria-label={isExpanded ? "Collapse detail" : "Expand detail"}
                     onclick={(e: MouseEvent) => { e.stopPropagation(); toggleRow(entry.id); }}
-                    onkeydown={(e: KeyboardEvent) => { if (e.key === "Enter" || e.key === " " || e.key === "Spacebar") { e.preventDefault(); e.stopPropagation(); toggleRow(entry.id); } }}
                   >
                     <ChevronDownIcon
                       class={cn(

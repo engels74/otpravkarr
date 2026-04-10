@@ -76,21 +76,20 @@ const SETUP_CLAIM_COOKIE_OPTIONS = {
 };
 /**
  * Setup-specific retry predicate for Plex errors.
- * Skips retry on PlexAuthError (invalid credentials) and on deterministic
- * PlexConnectionError cases (bad URL, not-found) to avoid unnecessary delay
- * during the setup wizard.
+ * Only retries transient PlexConnectionError cases (timeouts, network blips).
+ * Deterministic errors (bad URL, not-found) and all non-PlexConnectionError
+ * errors (including programmer errors) are not retried.
  */
 function isTransientPlexSetupError(error: unknown): boolean {
-  if (error instanceof PlexAuthError) {
-    return false;
-  }
   if (error instanceof PlexConnectionError) {
     const msg = error.message.toLowerCase();
+    // Deterministic errors — no point retrying
     if (msg.startsWith("bad request") || msg.startsWith("not found")) {
       return false;
     }
+    return true;
   }
-  return true;
+  return false;
 }
 
 type SetupResumePhase = 1 | 2 | 3 | 4 | 5;
@@ -461,7 +460,7 @@ export const actions: Actions = {
           }
           return result.data;
         },
-        () => true,
+        (err) => err instanceof Error && err.message === "Dispatcharr server is unreachable",
         SETUP_CONNECTION_RETRY,
       );
     } catch (err: unknown) {

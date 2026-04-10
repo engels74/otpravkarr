@@ -52,6 +52,7 @@ describe("signout endpoint", () => {
     await expect(
       POST({
         cookies,
+        request: new Request("http://localhost/api/internal/signout", { method: "POST" }),
         locals: {
           session: { id: "sess-123", type: "user", userRef: "1" },
         },
@@ -77,6 +78,7 @@ describe("signout endpoint", () => {
     await expect(
       POST({
         cookies,
+        request: new Request("http://localhost/api/internal/signout", { method: "POST" }),
         locals: {
           session: { id: "sess-456", type: "admin", userRef: "admin" },
           admin: { id: 1, username: "admin" },
@@ -102,6 +104,7 @@ describe("signout endpoint", () => {
     try {
       await POST({
         cookies,
+        request: new Request("http://localhost/api/internal/signout", { method: "POST" }),
         locals: {
           session: { id: "sess-456", type: "admin", userRef: "admin" },
           admin: { id: 1, username: "admin" },
@@ -128,6 +131,7 @@ describe("signout endpoint", () => {
     await expect(
       POST({
         cookies,
+        request: new Request("http://localhost/api/internal/signout", { method: "POST" }),
         locals: {},
         getClientAddress: () => "127.0.0.1",
       } as unknown as Parameters<typeof POST>[0]),
@@ -146,6 +150,7 @@ describe("signout endpoint", () => {
     try {
       await POST({
         cookies,
+        request: new Request("http://localhost/api/internal/signout", { method: "POST" }),
         locals: {
           session: { id: "sess-789", type: "user", userRef: "42" },
         },

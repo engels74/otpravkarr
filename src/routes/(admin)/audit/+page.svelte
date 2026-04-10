@@ -37,7 +37,10 @@ let { data }: Props = $props();
 let expandedRows: Record<number, boolean> = $state({});
 let actorSearchTimeout: ReturnType<typeof setTimeout> | undefined;
 onDestroy(() => clearTimeout(actorSearchTimeout));
-let actorSearchValue = $derived(data.filters.actor ?? "");
+let actorSearchValue = $state(data.filters.actor ?? "");
+$effect(() => {
+  actorSearchValue = data.filters.actor ?? "";
+});
 const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 function toggleRow(id: number) {
@@ -219,7 +222,7 @@ let rangeEnd = $derived(Math.min(data.filters.page * data.filters.limit, data.to
     <Table.Root>
       <Table.Header>
         <Table.Row>
-          <Table.Head class="w-8"></Table.Head>
+          <Table.Head class="w-8"><span class="sr-only">Details</span></Table.Head>
           <Table.Head class="whitespace-nowrap font-mono text-xs">Timestamp</Table.Head>
           <Table.Head class="text-xs">Actor</Table.Head>
           <Table.Head class="text-xs">Action</Table.Head>
@@ -239,6 +242,10 @@ let rangeEnd = $derived(Math.min(data.filters.page * data.filters.limit, data.to
             <Table.Row
               class={entry.detail ? "cursor-pointer" : ""}
               onclick={() => entry.detail && toggleRow(entry.id)}
+              onkeydown={entry.detail ? (e: KeyboardEvent) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleRow(entry.id); } } : undefined}
+              role={entry.detail ? "button" : undefined}
+              aria-expanded={entry.detail ? isExpanded : undefined}
+              tabindex={entry.detail ? 0 : undefined}
             >
               <Table.Cell class="w-8 px-2">
                 {#if entry.detail}

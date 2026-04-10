@@ -262,7 +262,7 @@ describe("plex OAuth callback", () => {
     });
   });
 
-  it("throws 403 when a matching mapping is inactive", async () => {
+  it("redirects to portal when a matching mapping is inactive", async () => {
     state.existingMappingByPlexId = {
       id: 2,
       plex_account_id: 12345,
@@ -287,12 +287,13 @@ describe("plex OAuth callback", () => {
     const { cookies } = createCookies();
 
     await expect(load({ cookies } as unknown as Parameters<typeof load>[0])).rejects.toMatchObject({
-      status: 403,
+      status: 303,
+      location: "/",
     });
 
     expect(mocks.getUserMappingByPlexId).toHaveBeenCalledWith(12345);
+    expect(mocks.createSession).toHaveBeenCalledWith("2", "user", expect.any(Number));
     expect(mocks.provisionUser).not.toHaveBeenCalled();
-    expect(mocks.createSession).not.toHaveBeenCalled();
   });
 
   it("fetches fresh friends for authorization", async () => {

@@ -240,12 +240,21 @@ export const actions: Actions = {
 
   updateSecurity: async (event) => {
     await requireAdmin(event);
-    const { request, locals, getClientAddress } = event;
+    const { request, url, locals, getClientAddress } = event;
     const fd = await request.formData();
     const raw = String(fd.get("allowed_origins") ?? "");
     const { origins, invalidOrigin } = parseAndNormalizeOrigins(raw, /\r?\n/);
     if (invalidOrigin) {
       return fail(400, { error: `Invalid origin: ${invalidOrigin}` });
+    }
+
+    if (origins.length > 0) {
+      const currentOrigin = url.origin;
+      if (!origins.includes(currentOrigin)) {
+        return fail(400, {
+          error: `Current origin (${currentOrigin}) must be included in the allowed origins list to avoid locking yourself out.`,
+        });
+      }
     }
 
     const actor = locals.admin?.username ?? "unknown";

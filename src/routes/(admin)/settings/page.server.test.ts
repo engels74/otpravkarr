@@ -123,6 +123,7 @@ function createActionEvent(body: FormData) {
       method: "POST",
       body,
     }),
+    url: new URL("http://localhost/settings"),
     locals: { admin: { username: "admin" } },
     getClientAddress: () => "127.0.0.1",
   };
@@ -159,7 +160,10 @@ describe("admin settings actions", () => {
     if (!updateSecurity) throw new Error("updateSecurity action is undefined");
 
     const body = new FormData();
-    body.set("allowed_origins", " https://alpha.example/path \nhttp://localhost:3000/ ");
+    body.set(
+      "allowed_origins",
+      " https://alpha.example/path \nhttp://localhost:3000/ \nhttp://localhost ",
+    );
 
     const result = await updateSecurity(
       createActionEvent(body) as unknown as Parameters<typeof updateSecurity>[0],
@@ -167,7 +171,7 @@ describe("admin settings actions", () => {
 
     expect(result).toEqual({ success: true });
     expect(state.configValues.get("allowed_origins")).toBe(
-      JSON.stringify(["https://alpha.example", "http://localhost:3000"]),
+      JSON.stringify(["https://alpha.example", "http://localhost:3000", "http://localhost"]),
     );
     expect(mocks.invalidateConfigCache).toHaveBeenCalledOnce();
     expect(mocks.appendAuditLog).toHaveBeenCalledWith(
@@ -176,7 +180,7 @@ describe("admin settings actions", () => {
         detail: expect.objectContaining({
           section: "security",
           field: "allowed_origins",
-          count: 2,
+          count: 3,
         }),
       }),
     );

@@ -70,7 +70,9 @@ export const load: PageServerLoad = async ({ cookies }) => {
 
   const existingMapping = getUserMappingByPlexId(identity.id);
   if (existingMapping?.is_active === 0) {
-    throw error(403, "Your access to this server has been revoked");
+    const sessionId = createSession(String(existingMapping.id), "user", USER_SESSION_TTL);
+    cookies.set(SESSION_COOKIE_NAME, sessionId, USER_COOKIE_OPTIONS);
+    throw redirect(303, "/");
   }
 
   // 4. Provision user

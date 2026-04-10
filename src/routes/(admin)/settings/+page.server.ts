@@ -240,7 +240,7 @@ export const actions: Actions = {
 
   updateSecurity: async (event) => {
     await requireAdmin(event);
-    const { request, url, locals, getClientAddress } = event;
+    const { request, locals, getClientAddress } = event;
     const fd = await request.formData();
     const raw = String(fd.get("allowed_origins") ?? "");
     const { origins, invalidOrigin } = parseAndNormalizeOrigins(raw, /\r?\n/);
@@ -249,20 +249,17 @@ export const actions: Actions = {
     }
 
     if (origins.length > 0) {
-      const currentOrigins = new Set<string>([url.origin]);
+      // The lockout guard must match what CSRF validation actually checks:
+      // the request Origin header (not url.origin, which may differ behind a reverse proxy).
       const requestOrigin = request.headers.get("Origin");
       if (requestOrigin) {
-        try {
-          currentOrigins.add(new URL(requestOrigin).origin);
-        } catch {
-          // Malformed Origin header — fall through; CSRF validator will reject it later
+        const normalizedRequestOrigin = requestOrigin.replace(/\/+$/, "").toLowerCase();
+        const normalizedAllowed = origins.map((o) => o.replace(/\/+$/, "").toLowerCase());
+        if (!normalizedAllowed.includes(normalizedRequestOrigin)) {
+          return fail(400, {
+            error: `Current origin (${requestOrigin}) must be included in the allowed origins list to avoid locking yourself out.`,
+          });
         }
-      }
-      const missingOrigins = [...currentOrigins].filter((o) => !origins.includes(o));
-      if (missingOrigins.length > 0) {
-        return fail(400, {
-          error: `Current origin(s) (${missingOrigins.join(", ")}) must be included in the allowed origins list to avoid locking yourself out.`,
-        });
       }
     }
 

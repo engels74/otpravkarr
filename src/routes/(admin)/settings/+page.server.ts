@@ -249,10 +249,19 @@ export const actions: Actions = {
     }
 
     if (origins.length > 0) {
-      const currentOrigin = url.origin;
-      if (!origins.includes(currentOrigin)) {
+      const currentOrigins = new Set<string>([url.origin]);
+      const requestOrigin = request.headers.get("Origin");
+      if (requestOrigin) {
+        try {
+          currentOrigins.add(new URL(requestOrigin).origin);
+        } catch {
+          // Malformed Origin header — fall through; CSRF validator will reject it later
+        }
+      }
+      const missingOrigins = [...currentOrigins].filter((o) => !origins.includes(o));
+      if (missingOrigins.length > 0) {
         return fail(400, {
-          error: `Current origin (${currentOrigin}) must be included in the allowed origins list to avoid locking yourself out.`,
+          error: `Current origin(s) (${missingOrigins.join(", ")}) must be included in the allowed origins list to avoid locking yourself out.`,
         });
       }
     }

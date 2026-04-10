@@ -242,20 +242,25 @@ let rangeEnd = $derived(Math.min(data.filters.page * data.filters.limit, data.to
             <Table.Row
               class={entry.detail ? "cursor-pointer" : ""}
               onclick={() => entry.detail && toggleRow(entry.id)}
-              onkeydown={entry.detail ? (e: KeyboardEvent) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleRow(entry.id); } } : undefined}
-              role={entry.detail ? "button" : undefined}
-              aria-expanded={entry.detail ? isExpanded : undefined}
-              tabindex={entry.detail ? 0 : undefined}
             >
               <Table.Cell class="w-8 px-2">
                 {#if entry.detail}
-                  <ChevronDownIcon
-                    class={cn(
-                      "h-3.5 w-3.5 text-muted-foreground transition-transform",
-                      isExpanded && "rotate-0",
-                      !isExpanded && "-rotate-90"
-                    )}
-                  />
+                  <button
+                    type="button"
+                    class="inline-flex items-center justify-center bg-transparent border-none p-0 cursor-pointer"
+                    aria-expanded={isExpanded}
+                    aria-label={isExpanded ? "Collapse detail" : "Expand detail"}
+                    onclick={(e: MouseEvent) => { e.stopPropagation(); toggleRow(entry.id); }}
+                    onkeydown={(e: KeyboardEvent) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); toggleRow(entry.id); } }}
+                  >
+                    <ChevronDownIcon
+                      class={cn(
+                        "h-3.5 w-3.5 text-muted-foreground transition-transform",
+                        isExpanded && "rotate-0",
+                        !isExpanded && "-rotate-90"
+                      )}
+                    />
+                  </button>
                 {:else}
                   <span class="text-xs text-muted-foreground/40">—</span>
                 {/if}

@@ -129,6 +129,6 @@ export const load: PageServerLoad = async ({ cookies }) => {
   // Update last accessed timestamp
   updateLastAccessed(mapping.id);
 
-  // 6. Redirect to portal home
-  throw redirect(303, "/");
+  // 6. Redirect — server owner goes to /welcome, regular users to /
+  throw redirect(303, isServerOwner ? "/welcome" : "/");
 };

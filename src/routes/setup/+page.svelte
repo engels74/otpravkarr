@@ -104,11 +104,11 @@ $effect(() => {
   }
 });
 
-// Gate the template during SSR so the popup never flashes the full wizard.
-// On the client, also require window.opener so a direct navigation to
-// /setup?oauthCallback=1 (without a popup context) falls through to the wizard.
+// Only treat this page as a popup callback on the client when window.opener
+// is present.  Returning false during SSR avoids a hydration mismatch when
+// someone navigates directly to /setup?oauthCallback=1 (no popup context).
 let isOAuthPopupCallback = $derived(
-  data.oauthCallback && (typeof window === "undefined" || !!window.opener),
+  data.oauthCallback && typeof window !== "undefined" && !!window.opener,
 );
 
 // On the client, signal the opener window and close the popup
@@ -161,18 +161,28 @@ function preparePlexOAuthPopup() {
   plexOAuthMessageHandler = onOAuthComplete;
   window.addEventListener("message", onOAuthComplete);
 
-  // Poll for manual popup close so the listener gets cleaned up
+  // Poll for manual popup close so the listener gets cleaned up.
+  // Cap at 5 minutes to avoid running indefinitely if the popup is
+  // left open on a non-callback page.
+  const POLL_INTERVAL_MS = 500;
+  const MAX_POLL_MS = 5 * 60 * 1000;
+  let elapsed = 0;
   const pollId = setInterval(() => {
-    if (popup.closed) {
+    elapsed += POLL_INTERVAL_MS;
+    if (popup.closed || elapsed >= MAX_POLL_MS) {
       clearInterval(pollId);
       if (plexOAuthMessageHandler) {
         window.removeEventListener("message", plexOAuthMessageHandler);
         plexOAuthMessageHandler = null;
-        plexOAuthWaiting = false;
       }
+      if (!popup.closed) {
+        // Timed out — popup still open but we stop polling
+        popup.close();
+      }
+      plexOAuthWaiting = false;
       plexOAuthPopup = null;
     }
-  }, 500);
+  }, POLL_INTERVAL_MS);
 }
 
 // ── Form enhancement ────────────────────────────────────────────

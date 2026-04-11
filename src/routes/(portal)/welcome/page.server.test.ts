@@ -120,4 +120,24 @@ describe("welcome page load", () => {
       location: "/",
     });
   });
+
+  it("redirects to / when getAccount throws PlexAuthError", async () => {
+    const { PlexAuthError } = await import("$lib/plex/types");
+    mocks.getAccount.mockRejectedValueOnce(new PlexAuthError("token expired"));
+    const { load } = await import("./+page.server");
+    await expect(load(createEvent(ownerMapping))).rejects.toMatchObject({
+      status: 303,
+      location: "/",
+    });
+  });
+
+  it("redirects to / when getAccount throws PlexConnectionError", async () => {
+    const { PlexConnectionError } = await import("$lib/plex/types");
+    mocks.getAccount.mockRejectedValueOnce(new PlexConnectionError("network timeout"));
+    const { load } = await import("./+page.server");
+    await expect(load(createEvent(ownerMapping))).rejects.toMatchObject({
+      status: 303,
+      location: "/",
+    });
+  });
 });

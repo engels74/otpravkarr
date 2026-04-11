@@ -19,6 +19,7 @@ type SetupPageData = {
   tokenFromUrl: string | null;
   dispatcharrGroups: Array<{ id: number; name: string }>;
   dispatcharrProfiles: Array<{ id: number; name: string }>;
+  oauthCallback: boolean;
 };
 
 type StepErrors = Record<string, string>;
@@ -57,6 +58,7 @@ let plexOAuthId = $state("");
 let plexOAuthWaiting = $state(false);
 let plexOAuthPopupBlocked = $state(false);
 let plexOAuthPopup: Window | null = null;
+let plexOAuthMessageHandler: ((e: MessageEvent) => void) | null = null;
 
 // Password visibility
 let showPassword = $state(false);
@@ -102,12 +104,31 @@ $effect(() => {
   }
 });
 
+// Detect OAuth callback in popup and signal opener
+let isOAuthPopupCallback = $state(false);
+$effect(() => {
+  if (data.oauthCallback && typeof window !== "undefined" && window.opener) {
+    isOAuthPopupCallback = true;
+    window.opener.postMessage({ type: "plex-oauth-complete" }, window.location.origin);
+    setTimeout(() => window.close(), 500);
+  }
+});
+
 function closePlexOAuthPopup() {
+  if (plexOAuthMessageHandler) {
+    window.removeEventListener("message", plexOAuthMessageHandler);
+    plexOAuthMessageHandler = null;
+  }
   if (plexOAuthPopup && !plexOAuthPopup.closed) {
     plexOAuthPopup.close();
   }
   plexOAuthPopup = null;
 }
+
+// Clean up OAuth resources on component destroy
+$effect(() => {
+  return () => closePlexOAuthPopup();
+});
 
 function preparePlexOAuthPopup() {
   if (typeof window === "undefined") {
@@ -124,6 +145,16 @@ function preparePlexOAuthPopup() {
   plexOAuthPopup = popup;
   plexOAuthPopupBlocked = false;
   popup.focus();
+
+  function onOAuthComplete(event: MessageEvent) {
+    if (event.origin !== window.location.origin) return;
+    if (event.data?.type !== "plex-oauth-complete") return;
+    plexOAuthWaiting = true;
+    window.removeEventListener("message", onOAuthComplete);
+    plexOAuthMessageHandler = null;
+  }
+  plexOAuthMessageHandler = onOAuthComplete;
+  window.addEventListener("message", onOAuthComplete);
 }
 
 // ── Form enhancement ────────────────────────────────────────────
@@ -246,6 +277,11 @@ function enhanceHandler(nextStep?: number) {
   <title>Setup — otpravkarr</title>
 </svelte:head>
 
+{#if isOAuthPopupCallback}
+  <div class="flex items-center justify-center min-h-screen">
+    <p class="text-sm text-muted-foreground">Plex sign-in complete. This window will close automatically.</p>
+  </div>
+{:else}
 <main class="min-h-screen flex flex-col items-center justify-center px-4 py-12 bg-background text-foreground">
   <!-- ─── Header ──────────────────────────────────────────── -->
   <div class="mb-8 text-center">
@@ -986,3 +1022,4 @@ function enhanceHandler(nextStep?: number) {
     Step {step + 1} of {steps.length}
   </p>
 </main>
+{/if}

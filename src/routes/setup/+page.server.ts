@@ -227,6 +227,7 @@ export const load = async ({ url, cookies }: RequestEvent) => {
   await requireSetupIncomplete();
 
   const tokenFromUrl = url.searchParams.get("token");
+  const oauthCallback = url.searchParams.get("oauthCallback") === "1";
   const [claimActive, resumePhase] = await Promise.all([
     hasActiveSetupClaim(cookies),
     deriveSetupResumePhase(),
@@ -240,6 +241,7 @@ export const load = async ({ url, cookies }: RequestEvent) => {
     resumePhase,
     dispatcharrGroups,
     dispatcharrProfiles,
+    oauthCallback,
   };
 };
 
@@ -367,7 +369,7 @@ export const actions: Actions = {
 
       if (plexMode === "oauth_initiate") {
         const forwardOrigin = selectActivePublicOrigin(env.ORIGIN, url.origin);
-        const forwardUrl = `${forwardOrigin}/setup`;
+        const forwardUrl = `${forwardOrigin}/setup?oauthCallback=1`;
         const result = await initiateOAuth(forwardUrl);
         return {
           success: true,

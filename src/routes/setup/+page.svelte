@@ -291,8 +291,9 @@ function enhanceHandler(nextStep?: number) {
             const servers = d.servers as DiscoveredServer[];
             discoveredServers = servers;
             discovering = false;
-            if (servers.length > 0 && (servers[0]?.connections.length ?? 0) > 0) {
-              selectedServerUrl = servers[0]?.connections[0]?.uri ?? "";
+            const serverWithConnections = servers.find((s) => s.connections.length > 0);
+            if (serverWithConnections) {
+              selectedServerUrl = serverWithConnections.connections[0]?.uri ?? "";
             } else {
               discoveredServers = [];
               discoveryFailed = true;

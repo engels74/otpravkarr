@@ -57,6 +57,7 @@ let plexMode = $state<"token" | "oauth">("token");
 let plexOAuthId = $state("");
 let plexOAuthWaiting = $state(false);
 let plexOAuthPopupBlocked = $state(false);
+let plexOAuthPopupActive = $state(false);
 let plexOAuthPopup: Window | null = null;
 let plexOAuthMessageHandler: ((e: MessageEvent) => void) | null = null;
 
@@ -156,6 +157,7 @@ function closePlexOAuthPopup() {
     plexOAuthPopup.close();
   }
   plexOAuthPopup = null;
+  plexOAuthPopupActive = false;
 }
 
 // Clean up OAuth resources on component destroy
@@ -203,10 +205,11 @@ function preparePlexOAuthPopup() {
       if (plexOAuthMessageHandler) {
         window.removeEventListener("message", plexOAuthMessageHandler);
         plexOAuthMessageHandler = null;
-        // Only reset waiting state when OAuth did NOT complete successfully.
+        // Only reset state when OAuth did NOT complete successfully.
         // If onOAuthComplete already fired, plexOAuthMessageHandler is null
         // and plexOAuthWaiting is true — we must not undo that.
         plexOAuthWaiting = false;
+        plexOAuthPopupActive = false;
       }
       if (!popup.closed) {
         // Timed out — popup still open but we stop polling
@@ -265,13 +268,13 @@ function enhanceHandler(nextStep?: number) {
 
         // Step 2: Plex
         if (step === 2) {
-          // OAuth initiate → waiting
+          // OAuth initiate → redirect popup to Plex auth page
           if (d.oauthId && d.oauthUri) {
             plexOAuthId = d.oauthId;
             if (plexOAuthPopup && !plexOAuthPopup.closed) {
               plexOAuthPopup.location.href = d.oauthUri;
               plexOAuthPopup.focus();
-              plexOAuthWaiting = true;
+              plexOAuthPopupActive = true;
               plexOAuthPopupBlocked = false;
             } else {
               plexOAuthWaiting = false;
@@ -714,7 +717,7 @@ function enhanceHandler(nextStep?: number) {
               </form>
             {:else}
               <!-- OAuth flow -->
-              {#if plexOAuthWaiting || discoveredServers.length > 0 || discoveryFailed}
+              {#if plexOAuthPopupActive || plexOAuthWaiting || discoveredServers.length > 0 || discoveryFailed}
                 <!-- Hidden form for auto-submitting oauth_discover -->
                 <form
                   method="POST"
@@ -886,6 +889,8 @@ function enhanceHandler(nextStep?: number) {
             onclick={() => {
               closePlexOAuthPopup();
               plexOAuthWaiting = false;
+              plexOAuthPopupActive = false;
+              submitting = false;
               step = 1;
             }}
             class="w-full text-muted-foreground"

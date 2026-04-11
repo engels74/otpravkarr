@@ -122,7 +122,7 @@ export async function getServerResources(
 /**
  * IPs that are almost never reachable from another host.
  */
-const DEPRIORITIZED_IP_PREFIXES = ["127.", "172.17.", "169.254."];
+const DEPRIORITIZED_IP_PREFIXES = ["127.", "172.17.", "169.254.", "::1", "fe80:"];
 
 function isDeprioritizedAddress(address: string): boolean {
   return DEPRIORITIZED_IP_PREFIXES.some((prefix) => address.startsWith(prefix));

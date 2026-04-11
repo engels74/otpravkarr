@@ -294,6 +294,7 @@ function enhanceHandler(nextStep?: number) {
             if (servers.length > 0 && (servers[0]?.connections.length ?? 0) > 0) {
               selectedServerUrl = servers[0]?.connections[0]?.uri ?? "";
             } else {
+              discoveredServers = [];
               discoveryFailed = true;
             }
             closePlexOAuthPopup();

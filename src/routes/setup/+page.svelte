@@ -164,6 +164,7 @@ function preparePlexOAuthPopup() {
       if (plexOAuthMessageHandler) {
         window.removeEventListener("message", plexOAuthMessageHandler);
         plexOAuthMessageHandler = null;
+        plexOAuthWaiting = false;
       }
       plexOAuthPopup = null;
     }

@@ -440,6 +440,86 @@ describe("plex OAuth callback", () => {
     );
   });
 
+  it("allows server owner through even when not in friends list", async () => {
+    mocks.completeOAuth.mockResolvedValueOnce({
+      id: 99999,
+      uuid: "admin-uuid",
+      username: "admin",
+      email: "admin@example.com",
+      thumb: "",
+      authenticationToken: "admin-token",
+    });
+    state.friends = [];
+    state.provisionResult = {
+      status: "provisioned",
+      mapping: {
+        id: 5,
+        plex_account_id: 99999,
+        plex_uuid: "admin-uuid",
+        plex_username: "admin",
+        plex_email: "admin@example.com",
+        plex_thumb: null,
+        dispatcharr_user_id: 50,
+        dispatcharr_username: "admin",
+        dispatcharr_xc_password_enc: "enc-pw",
+        dispatcharr_group_ids: "[1]",
+        dispatcharr_profile_id: 2,
+        provisioning_mode: "automatic",
+        is_active: 1,
+        created_at: "2024-01-01 00:00:00",
+        updated_at: "2024-01-01 00:00:00",
+        last_synced_at: null,
+        last_accessed_at: null,
+      },
+    };
+
+    const { load } = await import("./+page.server");
+    const { cookies } = createCookies();
+
+    await expect(load({ cookies } as unknown as Parameters<typeof load>[0])).rejects.toMatchObject({
+      status: 303,
+      location: "/",
+    });
+  });
+
+  it("blocks server owner when their mapping is inactive", async () => {
+    mocks.completeOAuth.mockResolvedValueOnce({
+      id: 99999,
+      uuid: "admin-uuid",
+      username: "admin",
+      email: "admin@example.com",
+      thumb: "",
+      authenticationToken: "admin-token",
+    });
+    state.friends = [];
+    state.existingMappingByPlexId = {
+      id: 5,
+      plex_account_id: 99999,
+      plex_uuid: "admin-uuid",
+      plex_username: "admin",
+      plex_email: "admin@example.com",
+      plex_thumb: null,
+      dispatcharr_user_id: 50,
+      dispatcharr_username: "admin",
+      dispatcharr_xc_password_enc: "enc-pw",
+      dispatcharr_group_ids: "[1]",
+      dispatcharr_profile_id: 2,
+      provisioning_mode: "automatic",
+      is_active: 0,
+      created_at: "2024-01-01 00:00:00",
+      updated_at: "2024-01-01 00:00:00",
+      last_synced_at: null,
+      last_accessed_at: null,
+    };
+
+    const { load } = await import("./+page.server");
+    const { cookies } = createCookies();
+
+    await expect(load({ cookies } as unknown as Parameters<typeof load>[0])).rejects.toMatchObject({
+      status: 403,
+    });
+  });
+
   it("defaults to automatic mode when config says self_managed", async () => {
     state.configValues.default_provisioning_mode = "self_managed";
 

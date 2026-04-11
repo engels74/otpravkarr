@@ -104,8 +104,12 @@ $effect(() => {
   }
 });
 
-// Gate the template during SSR so the popup never flashes the full wizard
-let isOAuthPopupCallback = $derived(data.oauthCallback);
+// Gate the template during SSR so the popup never flashes the full wizard.
+// On the client, also require window.opener so a direct navigation to
+// /setup?oauthCallback=1 (without a popup context) falls through to the wizard.
+let isOAuthPopupCallback = $derived(
+  data.oauthCallback && (typeof window === "undefined" || !!window.opener),
+);
 
 // On the client, signal the opener window and close the popup
 $effect(() => {

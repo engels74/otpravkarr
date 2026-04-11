@@ -1,6 +1,5 @@
 import type { Actions, Cookies, RequestEvent } from "@sveltejs/kit";
 import { fail, redirect } from "@sveltejs/kit";
-import { env } from "$env/dynamic/private";
 import { clearBootstrapToken, validateBootstrapToken } from "$lib/crypto/bootstrap";
 import { hashAdminPassword } from "$lib/crypto/passwords";
 import { adminExists, createAdmin as insertAdmin } from "$lib/db/repositories/admin";
@@ -24,7 +23,7 @@ import {
   SESSION_COOKIE_NAME,
   SETUP_COMPLETED_CONFIG_KEY,
 } from "$lib/server/auth";
-import { parseAndNormalizeOrigins, selectActivePublicOrigin } from "$lib/server/origins";
+import { parseAndNormalizeOrigins } from "$lib/server/origins";
 import { setupLimiter } from "$lib/server/ratelimit";
 import {
   CreateAdminSchema,
@@ -368,8 +367,10 @@ export const actions: Actions = {
       }
 
       if (plexMode === "oauth_initiate") {
-        const forwardOrigin = selectActivePublicOrigin(env.ORIGIN, url.origin);
-        const forwardUrl = `${forwardOrigin}/setup?oauthCallback=1`;
+        // Use the request origin (not the configured ORIGIN) so the OAuth
+        // callback popup lands on the same origin as the opener window.
+        // This is required for the postMessage handshake to succeed.
+        const forwardUrl = `${url.origin}/setup?oauthCallback=1`;
         const result = await initiateOAuth(forwardUrl);
         return {
           success: true,

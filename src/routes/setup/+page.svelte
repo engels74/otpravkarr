@@ -143,6 +143,7 @@ $effect(() => {
 // Auto-submit discovery when OAuth popup completes
 $effect(() => {
   if (plexOAuthWaiting && plexOAuthId && discoverFormEl) {
+    discoveryFailed = false;
     discovering = true;
     discoverFormEl.requestSubmit();
   }
@@ -893,6 +894,11 @@ function enhanceHandler(nextStep?: number) {
               plexOAuthWaiting = false;
               plexOAuthPopupActive = false;
               submitting = false;
+              discoveredServers = [];
+              selectedServerUrl = "";
+              discoveryFailed = false;
+              discovering = false;
+              plexOAuthId = "";
               step = 1;
             }}
             class="w-full text-muted-foreground"

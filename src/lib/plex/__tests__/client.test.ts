@@ -68,9 +68,8 @@ vi.mock("@ctrl/plex", () => {
 const { PlexServer, MyPlexAccount, Unauthorized, BadRequest, NotFound } = await import(
   "@ctrl/plex"
 );
-const { validateServerToken, checkServerHealth, getAccount, getServerResources } = await import(
-  "../client"
-);
+const { validateServerToken, checkServerHealth, getAccount, getServerResources, discoverServers } =
+  await import("../client");
 const { PlexAuthError, PlexConnectionError } = await import("../types");
 
 // Reset mocks to default behaviour before each test
@@ -332,5 +331,159 @@ describe("getServerResources", () => {
     await expect(
       getServerResources(account as unknown as InstanceType<typeof MyPlexAccount>),
     ).rejects.toThrow(PlexConnectionError);
+  });
+});
+
+describe("discoverServers", () => {
+  it("returns servers filtered to those providing 'server' with ranked connections", async () => {
+    resetMocks();
+    mockAccountConnect.mockImplementation(async function (
+      this: InstanceType<typeof MyPlexAccount>,
+    ) {
+      return this;
+    });
+    mockResources.mockResolvedValueOnce([
+      {
+        name: "My PMS",
+        clientIdentifier: "pms-1",
+        provides: "server",
+        connections: [
+          {
+            uri: "http://192.168.1.10:32400",
+            protocol: "http",
+            address: "192.168.1.10",
+            port: 32400,
+            local: true,
+            relay: false,
+          },
+          {
+            uri: "https://10-0-0-1.abc123.plex.direct:32400",
+            protocol: "https",
+            address: "10.0.0.1",
+            port: 32400,
+            local: false,
+            relay: false,
+          },
+          {
+            uri: "http://127.0.0.1:32400",
+            protocol: "http",
+            address: "127.0.0.1",
+            port: 32400,
+            local: true,
+            relay: false,
+          },
+        ],
+      },
+      {
+        name: "My Player",
+        clientIdentifier: "player-1",
+        provides: "player",
+        connections: [
+          {
+            uri: "http://192.168.1.11:32500",
+            protocol: "http",
+            address: "192.168.1.11",
+            port: 32500,
+            local: true,
+            relay: false,
+          },
+        ],
+      },
+    ]);
+
+    const result = await discoverServers("valid-token");
+
+    expect(result).toHaveLength(1);
+    const server = result[0];
+    expect(server).toBeDefined();
+    expect(server?.name).toBe("My PMS");
+    expect(server?.machineId).toBe("pms-1");
+    expect(server?.connections).toHaveLength(3);
+
+    // Remote HTTPS should be first (highest score)
+    expect(server?.connections[0]?.uri).toBe("https://10-0-0-1.abc123.plex.direct:32400");
+    // Local HTTP second
+    expect(server?.connections[1]?.uri).toBe("http://192.168.1.10:32400");
+    // Loopback last (deprioritized)
+    expect(server?.connections[2]?.uri).toBe("http://127.0.0.1:32400");
+  });
+
+  it("returns empty array when no servers provide 'server'", async () => {
+    resetMocks();
+    mockAccountConnect.mockImplementation(async function (
+      this: InstanceType<typeof MyPlexAccount>,
+    ) {
+      return this;
+    });
+    mockResources.mockResolvedValueOnce([
+      {
+        name: "Player",
+        clientIdentifier: "p-1",
+        provides: "player",
+        connections: [],
+      },
+    ]);
+
+    const result = await discoverServers("valid-token");
+    expect(result).toHaveLength(0);
+  });
+
+  it("deprioritizes relay connections", async () => {
+    resetMocks();
+    mockAccountConnect.mockImplementation(async function (
+      this: InstanceType<typeof MyPlexAccount>,
+    ) {
+      return this;
+    });
+    mockResources.mockResolvedValueOnce([
+      {
+        name: "PMS",
+        clientIdentifier: "pms-1",
+        provides: "server",
+        connections: [
+          {
+            uri: "https://relay.plex.tv:443",
+            protocol: "https",
+            address: "relay.plex.tv",
+            port: 443,
+            local: false,
+            relay: true,
+          },
+          {
+            uri: "http://192.168.1.10:32400",
+            protocol: "http",
+            address: "192.168.1.10",
+            port: 32400,
+            local: true,
+            relay: false,
+          },
+        ],
+      },
+    ]);
+
+    const result = await discoverServers("token");
+    const server = result[0];
+    expect(server).toBeDefined();
+    // Local HTTP should come before relay
+    expect(server?.connections[0]?.uri).toBe("http://192.168.1.10:32400");
+    expect(server?.connections[1]?.uri).toBe("https://relay.plex.tv:443");
+  });
+
+  it("throws PlexAuthError on Unauthorized", async () => {
+    resetMocks();
+    mockAccountConnect.mockImplementation(async () => {
+      throw new Unauthorized("Unauthorized");
+    });
+
+    await expect(discoverServers("bad-token")).rejects.toThrow(PlexAuthError);
+  });
+
+  it("throws PlexConnectionError on generic error", async () => {
+    resetMocks();
+    mockAccountConnect.mockImplementation(async () => {
+      throw new Error("Network failure");
+    });
+
+    await expect(discoverServers("token")).rejects.toThrow(PlexConnectionError);
   });
 });

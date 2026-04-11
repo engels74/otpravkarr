@@ -10,7 +10,7 @@ interface Props {
   };
 }
 
-const { data }: Props = $props();
+let { data }: Props = $props();
 </script>
 
 <svelte:head>

@@ -153,6 +153,7 @@ function preparePlexOAuthPopup() {
 
   function onOAuthComplete(event: MessageEvent) {
     if (event.origin !== window.location.origin) return;
+    if (event.source !== popup) return;
     if (event.data?.type !== "plex-oauth-complete") return;
     plexOAuthWaiting = true;
     window.removeEventListener("message", onOAuthComplete);
@@ -174,12 +175,15 @@ function preparePlexOAuthPopup() {
       if (plexOAuthMessageHandler) {
         window.removeEventListener("message", plexOAuthMessageHandler);
         plexOAuthMessageHandler = null;
+        // Only reset waiting state when OAuth did NOT complete successfully.
+        // If onOAuthComplete already fired, plexOAuthMessageHandler is null
+        // and plexOAuthWaiting is true — we must not undo that.
+        plexOAuthWaiting = false;
       }
       if (!popup.closed) {
         // Timed out — popup still open but we stop polling
         popup.close();
       }
-      plexOAuthWaiting = false;
       plexOAuthPopup = null;
     }
   }, POLL_INTERVAL_MS);

@@ -354,6 +354,13 @@ function enhanceHandler(nextStep?: number) {
         stepErrors = normalizeStepErrors(result.data as Record<string, unknown>);
       } else if (result.type === "redirect") {
         await update();
+      } else {
+        // Handle unexpected result types (e.g., "error" from 500s)
+        if (step === 2 && discovering) {
+          discovering = false;
+          discoveryFailed = true;
+          closePlexOAuthPopup();
+        }
       }
     };
   };

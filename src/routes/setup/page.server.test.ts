@@ -95,6 +95,7 @@ vi.mock("$lib/plex/client", () => ({
     machineIdentifier: "mid",
     version: "1.0",
   })),
+  discoverServers: vi.fn(async () => []),
 }));
 
 vi.mock("$lib/plex/oauth", () => ({
@@ -1100,6 +1101,167 @@ describe("configurePlex oauth completion retries", () => {
     });
     expect(oauth.completeOAuth).toHaveBeenCalledOnce();
     expect(plexClient.validateServerToken).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("configurePlex oauth_discover", () => {
+  beforeEach(() => {
+    resetStateAndMocks();
+    state.configValues.set(setupClaimedKey, "true");
+    state.configValues.set(setupClaimProofKey, "proof-123");
+    state.configValues.set(setupClaimedAtKey, String(Date.now()));
+  });
+
+  it("returns discovered servers on success", async () => {
+    const { cookies } = createCookies({ [setupClaimCookie]: "proof-123" });
+    const plexClient = await import("$lib/plex/client");
+
+    const mockServers = [
+      {
+        name: "My Plex Server",
+        machineId: "abc123",
+        connections: [
+          {
+            uri: "https://192.168.1.100:32400",
+            protocol: "https",
+            address: "192.168.1.100",
+            port: 32400,
+            local: true,
+            relay: false,
+          },
+        ],
+      },
+    ];
+    vi.mocked(plexClient.discoverServers).mockResolvedValueOnce(mockServers);
+
+    const body = new FormData();
+    body.set("plexMode", "oauth_discover");
+    body.set("oauthId", "oauth-id");
+    const request = new Request("http://localhost/setup", { method: "POST", body });
+
+    const { actions } = await import("./+page.server");
+    const configurePlex = actions.configurePlex;
+    if (!configurePlex) throw new Error("configurePlex action is undefined");
+
+    const result = await configurePlex({
+      request,
+      url: new URL("http://localhost/setup"),
+      cookies,
+    } as unknown as Parameters<typeof configurePlex>[0]);
+
+    expect(result).toMatchObject({
+      success: true,
+      servers: mockServers,
+    });
+    expect(plexClient.discoverServers).toHaveBeenCalledWith("plex-auth-token");
+  });
+
+  it("returns fail(400) when discoverServers throws PlexConnectionError", async () => {
+    const { cookies } = createCookies({ [setupClaimCookie]: "proof-123" });
+    const plexClient = await import("$lib/plex/client");
+    const plexTypes = await import("$lib/plex/types");
+
+    vi.mocked(plexClient.discoverServers).mockRejectedValueOnce(
+      new plexTypes.PlexConnectionError("discovery failed"),
+    );
+
+    const body = new FormData();
+    body.set("plexMode", "oauth_discover");
+    body.set("oauthId", "oauth-id");
+    const request = new Request("http://localhost/setup", { method: "POST", body });
+
+    const { actions } = await import("./+page.server");
+    const configurePlex = actions.configurePlex;
+    if (!configurePlex) throw new Error("configurePlex action is undefined");
+
+    const result = await configurePlex({
+      request,
+      url: new URL("http://localhost/setup"),
+      cookies,
+    } as unknown as Parameters<typeof configurePlex>[0]);
+
+    expect(result).toMatchObject({
+      status: 400,
+      data: { error: expect.stringContaining("Could not connect to Plex server") },
+    });
+  });
+
+  it("returns fail(400) when discoverServers throws PlexAuthError", async () => {
+    const { cookies } = createCookies({ [setupClaimCookie]: "proof-123" });
+    const plexClient = await import("$lib/plex/client");
+    const plexTypes = await import("$lib/plex/types");
+
+    vi.mocked(plexClient.discoverServers).mockRejectedValueOnce(
+      new plexTypes.PlexAuthError("invalid token"),
+    );
+
+    const body = new FormData();
+    body.set("plexMode", "oauth_discover");
+    body.set("oauthId", "oauth-id");
+    const request = new Request("http://localhost/setup", { method: "POST", body });
+
+    const { actions } = await import("./+page.server");
+    const configurePlex = actions.configurePlex;
+    if (!configurePlex) throw new Error("configurePlex action is undefined");
+
+    const result = await configurePlex({
+      request,
+      url: new URL("http://localhost/setup"),
+      cookies,
+    } as unknown as Parameters<typeof configurePlex>[0]);
+
+    expect(result).toMatchObject({
+      status: 400,
+      data: { error: expect.stringContaining("Invalid") },
+    });
+  });
+
+  it("returns fail(400) for missing oauthId", async () => {
+    const { cookies } = createCookies({ [setupClaimCookie]: "proof-123" });
+
+    const body = new FormData();
+    body.set("plexMode", "oauth_discover");
+    // oauthId intentionally omitted
+    const request = new Request("http://localhost/setup", { method: "POST", body });
+
+    const { actions } = await import("./+page.server");
+    const configurePlex = actions.configurePlex;
+    if (!configurePlex) throw new Error("configurePlex action is undefined");
+
+    const result = await configurePlex({
+      request,
+      url: new URL("http://localhost/setup"),
+      cookies,
+    } as unknown as Parameters<typeof configurePlex>[0]);
+
+    expect(result).toMatchObject({
+      status: 400,
+      data: { error: "OAuth session ID is required" },
+    });
+  });
+
+  it("returns fail(400) for empty oauthId", async () => {
+    const { cookies } = createCookies({ [setupClaimCookie]: "proof-123" });
+
+    const body = new FormData();
+    body.set("plexMode", "oauth_discover");
+    body.set("oauthId", "   ");
+    const request = new Request("http://localhost/setup", { method: "POST", body });
+
+    const { actions } = await import("./+page.server");
+    const configurePlex = actions.configurePlex;
+    if (!configurePlex) throw new Error("configurePlex action is undefined");
+
+    const result = await configurePlex({
+      request,
+      url: new URL("http://localhost/setup"),
+      cookies,
+    } as unknown as Parameters<typeof configurePlex>[0]);
+
+    expect(result).toMatchObject({
+      status: 400,
+      data: { error: "OAuth session ID is required" },
+    });
   });
 });
 

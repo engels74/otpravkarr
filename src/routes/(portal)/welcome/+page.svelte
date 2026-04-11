@@ -17,7 +17,7 @@ const { data }: Props = $props();
   <title>Welcome — otpravkarr</title>
 </svelte:head>
 
-<main
+<div
   class="min-h-screen flex flex-col items-center justify-center px-4 py-12 bg-background text-foreground"
 >
   <div class="mb-8 text-center">
@@ -52,4 +52,4 @@ const { data }: Props = $props();
   <form method="POST" action="/api/internal/signout" class="mt-6">
     <Button variant="ghost" type="submit" class="text-sm text-muted-foreground">Sign out</Button>
   </form>
-</main>
+</div>

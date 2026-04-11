@@ -104,11 +104,12 @@ $effect(() => {
   }
 });
 
-// Detect OAuth callback in popup and signal opener
-let isOAuthPopupCallback = $state(false);
+// Gate the template during SSR so the popup never flashes the full wizard
+let isOAuthPopupCallback = $derived(data.oauthCallback);
+
+// On the client, signal the opener window and close the popup
 $effect(() => {
   if (data.oauthCallback && typeof window !== "undefined" && window.opener) {
-    isOAuthPopupCallback = true;
     window.opener.postMessage({ type: "plex-oauth-complete" }, window.location.origin);
     setTimeout(() => window.close(), 500);
   }
@@ -155,6 +156,18 @@ function preparePlexOAuthPopup() {
   }
   plexOAuthMessageHandler = onOAuthComplete;
   window.addEventListener("message", onOAuthComplete);
+
+  // Poll for manual popup close so the listener gets cleaned up
+  const pollId = setInterval(() => {
+    if (popup.closed) {
+      clearInterval(pollId);
+      if (plexOAuthMessageHandler) {
+        window.removeEventListener("message", plexOAuthMessageHandler);
+        plexOAuthMessageHandler = null;
+      }
+      plexOAuthPopup = null;
+    }
+  }, 500);
 }
 
 // ── Form enhancement ────────────────────────────────────────────

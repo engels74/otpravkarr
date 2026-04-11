@@ -764,18 +764,20 @@ function enhanceHandler(nextStep?: number) {
                     <div class="grid gap-2">
                       <Label for="plex-server-select">Select server</Label>
                       <Select.Root type="single" bind:value={selectedServerUrl}>
-                        <Select.Trigger id="plex-server-select" class="w-full">
-                          {#if selectedServerUrl}
-                            {@const allConns = discoveredServers.flatMap(s => s.connections.map(c => ({ server: s, conn: c })))}
-                            {@const match = allConns.find(x => x.conn.uri === selectedServerUrl)}
-                            {#if match}
-                              {match.server.name} — {match.conn.uri}
+                        <Select.Trigger id="plex-server-select" class="w-full min-w-0">
+                          <span class="block min-w-0 truncate">
+                            {#if selectedServerUrl}
+                              {@const allConns = discoveredServers.flatMap(s => s.connections.map(c => ({ server: s, conn: c })))}
+                              {@const match = allConns.find(x => x.conn.uri === selectedServerUrl)}
+                              {#if match}
+                                {match.server.name} — {match.conn.uri}
+                              {:else}
+                                {selectedServerUrl}
+                              {/if}
                             {:else}
-                              {selectedServerUrl}
+                              Select a server
                             {/if}
-                          {:else}
-                            Select a server
-                          {/if}
+                          </span>
                         </Select.Trigger>
                         <Select.Content preventScroll={false}>
                           {#each discoveredServers as server (server.machineId)}

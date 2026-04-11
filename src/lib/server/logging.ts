@@ -10,6 +10,14 @@ export interface RequestLogEntry {
   ip: string;
 }
 
+function safeClientAddress(event: Parameters<Handle>[0]["event"]): string {
+  try {
+    return event.getClientAddress();
+  } catch {
+    return "unknown";
+  }
+}
+
 export function createRequestLogger(): Handle {
   return async ({ event, resolve }) => {
     const start = performance.now();
@@ -30,7 +38,7 @@ export function createRequestLogger(): Handle {
         path: event.url.pathname,
         status,
         duration_ms: Math.round(duration * 100) / 100,
-        ip: event.getClientAddress(),
+        ip: safeClientAddress(event),
       };
       console.log(JSON.stringify(entry));
       throw err;
@@ -43,7 +51,7 @@ export function createRequestLogger(): Handle {
       path: event.url.pathname,
       status: response.status,
       duration_ms: Math.round(duration * 100) / 100,
-      ip: event.getClientAddress(),
+      ip: safeClientAddress(event),
     };
 
     console.log(JSON.stringify(entry));

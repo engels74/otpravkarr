@@ -11,7 +11,7 @@ import { DispatcharrClient } from "$lib/dispatcharr/client";
 import { listGroups } from "$lib/dispatcharr/endpoints/groups";
 import { createHealthEndpoints } from "$lib/dispatcharr/endpoints/health";
 import { listProfiles } from "$lib/dispatcharr/endpoints/profiles";
-import { validateServerToken } from "$lib/plex/client";
+import { discoverServers, validateServerToken } from "$lib/plex/client";
 import { completeOAuth, initiateOAuth } from "$lib/plex/oauth";
 import { PlexAuthError, PlexConnectionError } from "$lib/plex/types";
 import { seedInitialHealth } from "$lib/scheduler/jobs/health";
@@ -377,6 +377,17 @@ export const actions: Actions = {
           oauthId: result.id,
           oauthUri: result.uri,
         };
+      }
+
+      if (plexMode === "oauth_discover") {
+        const oauthId = String(formData.get("oauthId") ?? "").trim();
+        if (!oauthId) {
+          return fail(400, { error: "OAuth session ID is required" });
+        }
+
+        const identity = await completeOAuth(oauthId);
+        const servers = await discoverServers(identity.authenticationToken);
+        return { success: true, servers };
       }
 
       if (plexMode === "oauth_complete") {

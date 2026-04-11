@@ -57,8 +57,29 @@ let plexMode = $state<"token" | "oauth">("token");
 let plexOAuthId = $state("");
 let plexOAuthWaiting = $state(false);
 let plexOAuthPopupBlocked = $state(false);
+let plexOAuthPopupActive = $state(false);
 let plexOAuthPopup: Window | null = null;
 let plexOAuthMessageHandler: ((e: MessageEvent) => void) | null = null;
+
+// Server discovery
+type DiscoveredConnection = {
+  uri: string;
+  protocol: string;
+  address: string;
+  port: number;
+  local: boolean;
+  relay: boolean;
+};
+type DiscoveredServer = {
+  name: string;
+  machineId: string;
+  connections: DiscoveredConnection[];
+};
+let discoveredServers = $state<DiscoveredServer[]>([]);
+let selectedServerUrl = $state("");
+let discoveryFailed = $state(false);
+let discovering = $state(false);
+let discoverFormEl = $state<HTMLFormElement | null>(null);
 
 // Password visibility
 let showPassword = $state(false);
@@ -119,6 +140,15 @@ $effect(() => {
   }
 });
 
+// Auto-submit discovery when OAuth popup completes
+$effect(() => {
+  if (plexOAuthWaiting && plexOAuthId && discoverFormEl) {
+    discoveryFailed = false;
+    discovering = true;
+    discoverFormEl.requestSubmit();
+  }
+});
+
 function closePlexOAuthPopup() {
   if (plexOAuthMessageHandler) {
     window.removeEventListener("message", plexOAuthMessageHandler);
@@ -128,6 +158,7 @@ function closePlexOAuthPopup() {
     plexOAuthPopup.close();
   }
   plexOAuthPopup = null;
+  plexOAuthPopupActive = false;
 }
 
 // Clean up OAuth resources on component destroy
@@ -175,10 +206,11 @@ function preparePlexOAuthPopup() {
       if (plexOAuthMessageHandler) {
         window.removeEventListener("message", plexOAuthMessageHandler);
         plexOAuthMessageHandler = null;
-        // Only reset waiting state when OAuth did NOT complete successfully.
+        // Only reset state when OAuth did NOT complete successfully.
         // If onOAuthComplete already fired, plexOAuthMessageHandler is null
         // and plexOAuthWaiting is true — we must not undo that.
         plexOAuthWaiting = false;
+        plexOAuthPopupActive = false;
       }
       if (!popup.closed) {
         // Timed out — popup still open but we stop polling
@@ -237,13 +269,13 @@ function enhanceHandler(nextStep?: number) {
 
         // Step 2: Plex
         if (step === 2) {
-          // OAuth initiate → waiting
+          // OAuth initiate → redirect popup to Plex auth page
           if (d.oauthId && d.oauthUri) {
             plexOAuthId = d.oauthId;
             if (plexOAuthPopup && !plexOAuthPopup.closed) {
               plexOAuthPopup.location.href = d.oauthUri;
               plexOAuthPopup.focus();
-              plexOAuthWaiting = true;
+              plexOAuthPopupActive = true;
               plexOAuthPopupBlocked = false;
             } else {
               plexOAuthWaiting = false;
@@ -255,6 +287,21 @@ function enhanceHandler(nextStep?: number) {
             }
             return;
           }
+          // OAuth discover → show server picker
+          if (d.success && d.servers) {
+            const servers = d.servers as DiscoveredServer[];
+            discoveredServers = servers;
+            discovering = false;
+            const serverWithConnections = servers.find((s) => s.connections.length > 0);
+            if (serverWithConnections) {
+              selectedServerUrl = serverWithConnections.connections[0]?.uri ?? "";
+            } else {
+              discoveredServers = [];
+              discoveryFailed = true;
+            }
+            closePlexOAuthPopup();
+            return;
+          }
           // Plex configured (token or oauth_complete)
           if (d.success && d.friendlyName) {
             plexServerInfo = {
@@ -264,6 +311,7 @@ function enhanceHandler(nextStep?: number) {
             };
             closePlexOAuthPopup();
             plexOAuthWaiting = false;
+            discoveredServers = [];
             step = 3;
             return;
           }
@@ -293,12 +341,26 @@ function enhanceHandler(nextStep?: number) {
         // Fallback advance
         if (nextStep !== undefined) step = nextStep;
       } else if (result.type === "failure" && result.data) {
+        if (step === 2 && discovering) {
+          // Discovery failed — fall back to manual URL input
+          discovering = false;
+          discoveryFailed = true;
+          closePlexOAuthPopup();
+          return;
+        }
         if (step === 2 && !plexOAuthWaiting) {
           closePlexOAuthPopup();
         }
         stepErrors = normalizeStepErrors(result.data as Record<string, unknown>);
       } else if (result.type === "redirect") {
         await update();
+      } else {
+        // Handle unexpected result types (e.g., "error" from 500s)
+        if (step === 2 && discovering) {
+          discovering = false;
+          discoveryFailed = true;
+          closePlexOAuthPopup();
+        }
       }
     };
   };
@@ -665,25 +727,113 @@ function enhanceHandler(nextStep?: number) {
               </form>
             {:else}
               <!-- OAuth flow -->
-              {#if plexOAuthWaiting}
-                <div class="text-center py-6">
-                  <svg class="mx-auto h-8 w-8 animate-spin text-primary mb-3" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                    <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" class="opacity-25" />
-                    <path d="M4 12a8 8 0 018-8" stroke="currentColor" stroke-width="3" stroke-linecap="round" class="opacity-75" />
-                  </svg>
-                  <p class="text-sm font-medium mb-1">Waiting for Plex authentication…</p>
-                  <p class="text-xs text-muted-foreground mb-4">
-                    Complete the sign-in in the popup window.
-                  </p>
+              {#if plexOAuthPopupActive || plexOAuthWaiting || discoveredServers.length > 0 || discoveryFailed}
+                <!-- Hidden form for auto-submitting oauth_discover -->
+                <form
+                  method="POST"
+                  action="?/configurePlex"
+                  use:enhance={enhanceHandler()}
+                  bind:this={discoverFormEl}
+                  class="hidden"
+                >
+                  <input type="hidden" name="plexMode" value="oauth_discover" />
+                  <input type="hidden" name="oauthId" value={plexOAuthId} />
+                </form>
 
+                {#if discovering}
+                  <div class="text-center py-6">
+                    <svg class="mx-auto h-8 w-8 animate-spin text-primary mb-3" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" class="opacity-25" />
+                      <path d="M4 12a8 8 0 018-8" stroke="currentColor" stroke-width="3" stroke-linecap="round" class="opacity-75" />
+                    </svg>
+                    <p class="text-sm font-medium mb-1">Discovering your Plex servers…</p>
+                    <p class="text-xs text-muted-foreground">
+                      Signed in successfully. Fetching server list.
+                    </p>
+                  </div>
+                {:else if discoveredServers.length > 0}
+                  <!-- Server picker -->
+                  <div class="grid gap-4">
+                    <div class="rounded-lg border border-green-500/20 bg-green-500/5 p-3">
+                      <div class="flex items-center gap-2">
+                        <svg class="h-4 w-4 text-green-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 11-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" /></svg>
+                        <span class="text-sm font-medium">Plex sign-in successful</span>
+                      </div>
+                    </div>
+
+                    <div class="grid gap-2">
+                      <Label for="plex-server-select">Select server</Label>
+                      <Select.Root type="single" bind:value={selectedServerUrl}>
+                        <Select.Trigger id="plex-server-select" class="w-full">
+                          {#if selectedServerUrl}
+                            {@const allConns = discoveredServers.flatMap(s => s.connections.map(c => ({ server: s, conn: c })))}
+                            {@const match = allConns.find(x => x.conn.uri === selectedServerUrl)}
+                            {#if match}
+                              {match.server.name} — {match.conn.uri}
+                            {:else}
+                              {selectedServerUrl}
+                            {/if}
+                          {:else}
+                            Select a server
+                          {/if}
+                        </Select.Trigger>
+                        <Select.Content preventScroll={false}>
+                          {#each discoveredServers as server (server.machineId)}
+                            {#each server.connections as conn (conn.uri)}
+                              <Select.Item value={conn.uri} label="{server.name} — {conn.uri}">
+                                <div class="flex items-center gap-2">
+                                  <span>{server.name}</span>
+                                  <Badge variant="outline" class="text-xs">
+                                    {conn.local ? 'local' : 'remote'}
+                                  </Badge>
+                                  {#if conn.relay}
+                                    <Badge variant="secondary" class="text-xs">relay</Badge>
+                                  {/if}
+                                </div>
+                                <div class="text-xs text-muted-foreground">{conn.uri}</div>
+                              </Select.Item>
+                            {/each}
+                          {/each}
+                        </Select.Content>
+                      </Select.Root>
+                    </div>
+
+                    <form method="POST" action="?/configurePlex" use:enhance={enhanceHandler()}>
+                      <input type="hidden" name="plexMode" value="oauth_complete" />
+                      <input type="hidden" name="oauthId" value={plexOAuthId} />
+                      <input type="hidden" name="plexServerUrl" value={selectedServerUrl} />
+                      <Button type="submit" disabled={submitting || !selectedServerUrl} class="w-full">
+                        {#if submitting}
+                          <svg class="mr-2 h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                            <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" class="opacity-25" />
+                            <path d="M4 12a8 8 0 018-8" stroke="currentColor" stroke-width="3" stroke-linecap="round" class="opacity-75" />
+                          </svg>
+                          Connecting…
+                        {:else}
+                          Complete Connection
+                        {/if}
+                      </Button>
+                    </form>
+                    <p class="text-xs text-muted-foreground text-center">
+                      Automatically retries with backoff if the server is temporarily unavailable.
+                    </p>
+                  </div>
+                {:else if discoveryFailed}
+                  <!-- Fallback to manual URL input -->
+                  <Alert.Root class="mb-4">
+                    <Alert.Title>Server discovery unavailable</Alert.Title>
+                    <Alert.Description>
+                      Could not auto-discover your servers. Enter your Plex server URL manually.
+                    </Alert.Description>
+                  </Alert.Root>
                   <form method="POST" action="?/configurePlex" use:enhance={enhanceHandler()}>
                     <input type="hidden" name="plexMode" value="oauth_complete" />
                     <input type="hidden" name="oauthId" value={plexOAuthId} />
                     <div class="grid gap-3">
                       <div class="grid gap-2">
-                        <Label for="plex-url-oauth">Plex server URL</Label>
+                        <Label for="plex-url-oauth-fallback">Plex server URL</Label>
                         <Input
-                          id="plex-url-oauth"
+                          id="plex-url-oauth-fallback"
                           name="plexServerUrl"
                           type="url"
                           placeholder="http://localhost:32400"
@@ -703,7 +853,19 @@ function enhanceHandler(nextStep?: number) {
                       </Button>
                     </div>
                   </form>
-                </div>
+                {:else}
+                  <!-- Waiting for OAuth popup -->
+                  <div class="text-center py-6">
+                    <svg class="mx-auto h-8 w-8 animate-spin text-primary mb-3" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" class="opacity-25" />
+                      <path d="M4 12a8 8 0 018-8" stroke="currentColor" stroke-width="3" stroke-linecap="round" class="opacity-75" />
+                    </svg>
+                    <p class="text-sm font-medium mb-1">Waiting for Plex authentication…</p>
+                    <p class="text-xs text-muted-foreground">
+                      Complete the sign-in in the popup window.
+                    </p>
+                  </div>
+                {/if}
               {:else}
                 <form method="POST" action="?/configurePlex" use:enhance={enhanceHandler()} onsubmit={preparePlexOAuthPopup}>
                   <input type="hidden" name="plexMode" value="oauth_initiate" />
@@ -737,6 +899,13 @@ function enhanceHandler(nextStep?: number) {
             onclick={() => {
               closePlexOAuthPopup();
               plexOAuthWaiting = false;
+              plexOAuthPopupActive = false;
+              submitting = false;
+              discoveredServers = [];
+              selectedServerUrl = "";
+              discoveryFailed = false;
+              discovering = false;
+              plexOAuthId = "";
               step = 1;
             }}
             class="w-full text-muted-foreground"

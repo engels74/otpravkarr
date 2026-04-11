@@ -26,6 +26,21 @@ export interface PlexServerInfo {
   version: string;
 }
 
+export interface DiscoveredConnection {
+  uri: string;
+  protocol: string;
+  address: string;
+  port: number;
+  local: boolean;
+  relay: boolean;
+}
+
+export interface DiscoveredServer {
+  name: string;
+  machineId: string;
+  connections: DiscoveredConnection[];
+}
+
 export class PlexAuthError extends Error {
   override readonly name = "PlexAuthError" as const;
 }

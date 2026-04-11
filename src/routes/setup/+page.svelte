@@ -765,7 +765,7 @@ function enhanceHandler(nextStep?: number) {
                       <Label for="plex-server-select">Select server</Label>
                       <Select.Root type="single" bind:value={selectedServerUrl}>
                         <Select.Trigger id="plex-server-select" class="w-full min-w-0">
-                          <span class="truncate">
+                          <span class="block min-w-0 truncate">
                             {#if selectedServerUrl}
                               {@const allConns = discoveredServers.flatMap(s => s.connections.map(c => ({ server: s, conn: c })))}
                               {@const match = allConns.find(x => x.conn.uri === selectedServerUrl)}

@@ -96,6 +96,14 @@ describe("welcome page load", () => {
     });
   });
 
+  it("redirects revoked (is_active=0) users to /", async () => {
+    const { load } = await import("./+page.server");
+    await expect(load(createEvent({ ...ownerMapping, is_active: 0 }))).rejects.toMatchObject({
+      status: 303,
+      location: "/",
+    });
+  });
+
   it("redirects non-owner users to /", async () => {
     const { load } = await import("./+page.server");
     await expect(load(createEvent(regularUserMapping))).rejects.toMatchObject({

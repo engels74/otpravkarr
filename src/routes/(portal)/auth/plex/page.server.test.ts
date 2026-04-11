@@ -440,6 +440,47 @@ describe("plex OAuth callback", () => {
     );
   });
 
+  it("redirects server owner to /welcome after sign-in", async () => {
+    mocks.completeOAuth.mockResolvedValueOnce({
+      id: 99999,
+      uuid: "admin-uuid",
+      username: "admin",
+      email: "admin@example.com",
+      thumb: "",
+      authenticationToken: "admin-token",
+    });
+    state.provisionResult = {
+      status: "already_exists",
+      mapping: {
+        id: 5,
+        plex_account_id: 99999,
+        plex_uuid: "admin-uuid",
+        plex_username: "admin",
+        plex_email: "admin@example.com",
+        plex_thumb: null,
+        dispatcharr_user_id: 50,
+        dispatcharr_username: "admin",
+        dispatcharr_xc_password_enc: "enc-pw",
+        dispatcharr_group_ids: "[1]",
+        dispatcharr_profile_id: 2,
+        provisioning_mode: "automatic",
+        is_active: 1,
+        created_at: "2024-01-01 00:00:00",
+        updated_at: "2024-01-01 00:00:00",
+        last_synced_at: null,
+        last_accessed_at: null,
+      },
+    };
+
+    const { load } = await import("./+page.server");
+    const { cookies } = createCookies();
+
+    await expect(load({ cookies } as unknown as Parameters<typeof load>[0])).rejects.toMatchObject({
+      status: 303,
+      location: "/welcome",
+    });
+  });
+
   it("allows server owner through even when not in friends list", async () => {
     mocks.completeOAuth.mockResolvedValueOnce({
       id: 99999,
@@ -478,7 +519,7 @@ describe("plex OAuth callback", () => {
 
     await expect(load({ cookies } as unknown as Parameters<typeof load>[0])).rejects.toMatchObject({
       status: 303,
-      location: "/",
+      location: "/welcome",
     });
   });
 

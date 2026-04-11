@@ -58,13 +58,14 @@ export const load: PageServerLoad = async ({ cookies }) => {
   }
 
   const account = await getAccount(plexAdminToken);
+  const isServerOwner = account.id === identity.id;
   const friends = await fetchFriends(account);
 
   const hasAcceptedAccess = friends.some(
     (friend) => friend.id === identity.id && friend.status.trim().toLowerCase() === "accepted",
   );
 
-  if (!hasAcceptedAccess) {
+  if (!isServerOwner && !hasAcceptedAccess) {
     throw error(403, "Your Plex account does not have access to this server");
   }
 

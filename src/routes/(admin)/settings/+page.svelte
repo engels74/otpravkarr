@@ -190,7 +190,7 @@ function makeEnhance(section: string) {
         <div class="grid gap-1.5">
           <Label for="sync_interval_minutes">Sync interval</Label>
           <div class="flex items-center gap-2">
-            <Input id="sync_interval_minutes" name="sync_interval_minutes" type="number" min="1" value={data.sync.intervalMinutes} class="w-[120px]" />
+            <Input id="sync_interval_minutes" name="sync_interval_minutes" type="number" value={data.sync.intervalMinutes} class="w-[120px]" />
             <span class="text-sm text-muted-foreground">minutes</span>
           </div>
         </div>
@@ -266,7 +266,7 @@ function makeEnhance(section: string) {
         <div class="grid gap-1.5">
           <Label for="audit_retention_days">Retention period</Label>
           <div class="flex items-center gap-2">
-            <Input id="audit_retention_days" name="audit_retention_days" type="number" min="1" value={data.audit.retentionDays} class="w-[120px]" />
+            <Input id="audit_retention_days" name="audit_retention_days" type="number" value={data.audit.retentionDays} class="w-[120px]" />
             <span class="text-sm text-muted-foreground">days</span>
           </div>
           <p class="text-xs text-muted-foreground">Audit log entries older than this will be automatically purged.</p>

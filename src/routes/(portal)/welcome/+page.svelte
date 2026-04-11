@@ -26,12 +26,14 @@ const { data }: Props = $props();
   </div>
 
   <div class="w-full max-w-lg grid grid-cols-1 sm:grid-cols-2 gap-4">
-    <a href="/dashboard" class="no-underline">
+    <a href="/login" class="no-underline">
       <Card.Root class="h-full transition-colors hover:border-primary">
         <Card.Header class="text-center">
           <LayoutDashboardIcon class="mx-auto h-8 w-8 text-primary" />
           <Card.Title class="text-lg">Admin Dashboard</Card.Title>
-          <Card.Description>Manage users, settings, and sync</Card.Description>
+          <Card.Description
+            >Sign in as admin to manage users, settings, and sync</Card.Description
+          >
         </Card.Header>
       </Card.Root>
     </a>

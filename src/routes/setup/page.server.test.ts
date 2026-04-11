@@ -686,6 +686,48 @@ describe("setup claim ownership", () => {
   });
 });
 
+describe("oauthCallback query parameter", () => {
+  beforeEach(() => {
+    resetStateAndMocks();
+  });
+
+  it("returns oauthCallback true when URL has ?oauthCallback=1", async () => {
+    const { cookies } = createCookies();
+
+    const { load } = await import("./+page.server");
+    const result = await load({
+      url: new URL("http://localhost/setup?oauthCallback=1"),
+      cookies,
+    } as unknown as Parameters<typeof load>[0]);
+
+    expect(result.oauthCallback).toBe(true);
+  });
+
+  it("returns oauthCallback false when param is absent", async () => {
+    const { cookies } = createCookies();
+
+    const { load } = await import("./+page.server");
+    const result = await load({
+      url: new URL("http://localhost/setup"),
+      cookies,
+    } as unknown as Parameters<typeof load>[0]);
+
+    expect(result.oauthCallback).toBe(false);
+  });
+
+  it("returns oauthCallback false when param has wrong value", async () => {
+    const { cookies } = createCookies();
+
+    const { load } = await import("./+page.server");
+    const result = await load({
+      url: new URL("http://localhost/setup?oauthCallback=0"),
+      cookies,
+    } as unknown as Parameters<typeof load>[0]);
+
+    expect(result.oauthCallback).toBe(false);
+  });
+});
+
 describe("createAdmin", () => {
   beforeEach(() => {
     resetStateAndMocks();
@@ -906,7 +948,7 @@ describe("configurePlex oauth initiate origin selection", () => {
     state.configValues.set(setupClaimedAtKey, String(Date.now()));
   });
 
-  it("uses ORIGIN when configured for OAuth forward URL", async () => {
+  it("uses request origin (not configured ORIGIN) for OAuth forward URL so postMessage succeeds", async () => {
     state.env.ORIGIN = "https://public.example.com";
     const { cookies } = createCookies({ [setupClaimCookie]: "proof-123" });
 
@@ -937,10 +979,12 @@ describe("configurePlex oauth initiate origin selection", () => {
       oauthId: "oauth-id",
       oauthUri: "https://app.plex.tv/auth",
     });
-    expect(oauth.initiateOAuth).toHaveBeenCalledWith("https://public.example.com/setup");
+    // Must use request origin so the popup callback lands on the same
+    // origin as the opener, allowing the postMessage handshake to work.
+    expect(oauth.initiateOAuth).toHaveBeenCalledWith("http://127.0.0.1:3000/setup?oauthCallback=1");
   });
 
-  it("uses configured origin when ORIGIN is a stale loopback (avoids Host header influence)", async () => {
+  it("uses request origin even when ORIGIN is a different loopback", async () => {
     state.env.ORIGIN = "http://localhost:3000";
     const { cookies } = createCookies({ [setupClaimCookie]: "proof-123" });
 
@@ -966,7 +1010,7 @@ describe("configurePlex oauth initiate origin selection", () => {
       cookies,
     } as unknown as Parameters<typeof configurePlex>[0]);
 
-    expect(oauth.initiateOAuth).toHaveBeenCalledWith("http://localhost:3000/setup");
+    expect(oauth.initiateOAuth).toHaveBeenCalledWith("http://127.0.0.1:5173/setup?oauthCallback=1");
   });
 
   it("falls back to request origin when ORIGIN is unset", async () => {
@@ -995,7 +1039,7 @@ describe("configurePlex oauth initiate origin selection", () => {
       cookies,
     } as unknown as Parameters<typeof configurePlex>[0]);
 
-    expect(oauth.initiateOAuth).toHaveBeenCalledWith("http://127.0.0.1:3000/setup");
+    expect(oauth.initiateOAuth).toHaveBeenCalledWith("http://127.0.0.1:3000/setup?oauthCallback=1");
   });
 });
 

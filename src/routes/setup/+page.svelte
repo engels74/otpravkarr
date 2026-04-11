@@ -19,6 +19,7 @@ type SetupPageData = {
   tokenFromUrl: string | null;
   dispatcharrGroups: Array<{ id: number; name: string }>;
   dispatcharrProfiles: Array<{ id: number; name: string }>;
+  oauthCallback: boolean;
 };
 
 type StepErrors = Record<string, string>;
@@ -57,6 +58,7 @@ let plexOAuthId = $state("");
 let plexOAuthWaiting = $state(false);
 let plexOAuthPopupBlocked = $state(false);
 let plexOAuthPopup: Window | null = null;
+let plexOAuthMessageHandler: ((e: MessageEvent) => void) | null = null;
 
 // Password visibility
 let showPassword = $state(false);
@@ -102,12 +104,36 @@ $effect(() => {
   }
 });
 
+// Only treat this page as a popup callback on the client when window.opener
+// is present.  Returning false during SSR avoids a hydration mismatch when
+// someone navigates directly to /setup?oauthCallback=1 (no popup context).
+let isOAuthPopupCallback = $derived(
+  data.oauthCallback && typeof window !== "undefined" && !!window.opener,
+);
+
+// On the client, signal the opener window and close the popup
+$effect(() => {
+  if (data.oauthCallback && typeof window !== "undefined" && window.opener) {
+    window.opener.postMessage({ type: "plex-oauth-complete" }, window.location.origin);
+    setTimeout(() => window.close(), 500);
+  }
+});
+
 function closePlexOAuthPopup() {
+  if (plexOAuthMessageHandler) {
+    window.removeEventListener("message", plexOAuthMessageHandler);
+    plexOAuthMessageHandler = null;
+  }
   if (plexOAuthPopup && !plexOAuthPopup.closed) {
     plexOAuthPopup.close();
   }
   plexOAuthPopup = null;
 }
+
+// Clean up OAuth resources on component destroy
+$effect(() => {
+  return () => closePlexOAuthPopup();
+});
 
 function preparePlexOAuthPopup() {
   if (typeof window === "undefined") {
@@ -124,6 +150,43 @@ function preparePlexOAuthPopup() {
   plexOAuthPopup = popup;
   plexOAuthPopupBlocked = false;
   popup.focus();
+
+  function onOAuthComplete(event: MessageEvent) {
+    if (event.origin !== window.location.origin) return;
+    if (event.source !== popup) return;
+    if (event.data?.type !== "plex-oauth-complete") return;
+    plexOAuthWaiting = true;
+    window.removeEventListener("message", onOAuthComplete);
+    plexOAuthMessageHandler = null;
+  }
+  plexOAuthMessageHandler = onOAuthComplete;
+  window.addEventListener("message", onOAuthComplete);
+
+  // Poll for manual popup close so the listener gets cleaned up.
+  // Cap at 5 minutes to avoid running indefinitely if the popup is
+  // left open on a non-callback page.
+  const POLL_INTERVAL_MS = 500;
+  const MAX_POLL_MS = 5 * 60 * 1000;
+  let elapsed = 0;
+  const pollId = setInterval(() => {
+    elapsed += POLL_INTERVAL_MS;
+    if (popup.closed || elapsed >= MAX_POLL_MS) {
+      clearInterval(pollId);
+      if (plexOAuthMessageHandler) {
+        window.removeEventListener("message", plexOAuthMessageHandler);
+        plexOAuthMessageHandler = null;
+        // Only reset waiting state when OAuth did NOT complete successfully.
+        // If onOAuthComplete already fired, plexOAuthMessageHandler is null
+        // and plexOAuthWaiting is true — we must not undo that.
+        plexOAuthWaiting = false;
+      }
+      if (!popup.closed) {
+        // Timed out — popup still open but we stop polling
+        popup.close();
+      }
+      plexOAuthPopup = null;
+    }
+  }, POLL_INTERVAL_MS);
 }
 
 // ── Form enhancement ────────────────────────────────────────────
@@ -246,6 +309,11 @@ function enhanceHandler(nextStep?: number) {
   <title>Setup — otpravkarr</title>
 </svelte:head>
 
+{#if isOAuthPopupCallback}
+  <div class="flex items-center justify-center min-h-screen">
+    <p class="text-sm text-muted-foreground">Plex sign-in complete. This window will close automatically.</p>
+  </div>
+{:else}
 <main class="min-h-screen flex flex-col items-center justify-center px-4 py-12 bg-background text-foreground">
   <!-- ─── Header ──────────────────────────────────────────── -->
   <div class="mb-8 text-center">
@@ -986,3 +1054,4 @@ function enhanceHandler(nextStep?: number) {
     Step {step + 1} of {steps.length}
   </p>
 </main>
+{/if}

@@ -25,7 +25,7 @@ export default defineConfig({
       md: "0.625rem",
       lg: "0.75rem",
     },
-    fontFamily: {
+    font: {
       sans: '"Geist", "Geist Mono", ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif',
       mono: '"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
       display: '"Instrument Serif", ui-serif, Georgia, serif',
@@ -46,11 +46,11 @@ export default defineConfig({
     ["display-hero", "font-display text-4xl md:text-5xl font-normal tracking-tight leading-[1.05]"],
     [
       "hero-glow-bg",
-      "bg-[radial-gradient(ellipse_60%_50%_at_50%_-10%,hsl(var(--primary)/0.18),transparent_70%)]",
+      "bg-[radial-gradient(ellipse_60%_50%_at_50%_-10%,oklch(var(--primary)/0.2),transparent_70%)]",
     ],
     [
       "cta-glow",
-      "shadow-[0_8px_24px_-10px_hsl(var(--primary)/0.55)] hover:shadow-[0_12px_32px_-10px_hsl(var(--primary)/0.7)] transition-shadow",
+      "shadow-[0_8px_24px_-10px_oklch(var(--primary)/0.55)] hover:shadow-[0_12px_32px_-10px_oklch(var(--primary)/0.7)] transition-shadow",
     ],
   ],
 

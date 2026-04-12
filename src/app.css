@@ -1,62 +1,63 @@
 /*
  * "Dark Matter" theme tokens — adapted from the TweakCN Dark Matter theme.
- * OKLCH source colors are converted to HSL channel tuples (the format
- * `unocss-preset-shadcn` consumes via `bg-primary`, `text-foreground`, etc.).
+ *
+ * Values are OKLCH channel tuples (no wrapper) because `unocss-preset-shadcn`
+ * references them as `oklch(var(--primary))`. Supplying HSL here would be
+ * interpreted as OKLCH and clamp to black/white.
  *
  * Notes:
- * - Destructive uses a real red rather than Dark Matter's muted teal so that
- *   delete/danger actions remain semantically obvious.
- * - --sidebar-background aliases --sidebar to work around a preset mismatch
- *   (the preset references --sidebar-background in its theme colors but only
- *   generates --sidebar).
+ * - Destructive keeps a real red in both modes so delete/danger actions read
+ *   correctly (Dark Matter's own destructive is a muted teal).
+ * - --sidebar-background aliases --sidebar: the preset references
+ *   `--sidebar-background` in its theme colors while only generating `--sidebar`.
  */
 
 :root {
   /* Surfaces */
-  --background: 0 0% 100%;
-  --foreground: 225 18% 11%;
-  --card: 0 0% 100%;
-  --card-foreground: 225 18% 11%;
-  --popover: 0 0% 100%;
-  --popover-foreground: 225 18% 11%;
+  --background: 1 0 0;
+  --foreground: 0.2101 0.0318 264.6645;
+  --card: 1 0 0;
+  --card-foreground: 0.2101 0.0318 264.6645;
+  --popover: 1 0 0;
+  --popover-foreground: 0.2101 0.0318 264.6645;
 
   /* Brand */
-  --primary: 27 60% 50%;
-  --primary-foreground: 0 0% 100%;
-  --secondary: 196 18% 45%;
-  --secondary-foreground: 0 0% 100%;
+  --primary: 0.6716 0.1368 48.513;
+  --primary-foreground: 1 0 0;
+  --secondary: 0.536 0.0398 196.028;
+  --secondary-foreground: 1 0 0;
 
   /* Neutrals */
-  --muted: 0 0% 96%;
-  --muted-foreground: 225 8% 40%;
-  --accent: 0 0% 94%;
-  --accent-foreground: 225 18% 11%;
+  --muted: 0.967 0.0029 264.5419;
+  --muted-foreground: 0.551 0.0234 264.3637;
+  --accent: 0.9491 0 0;
+  --accent-foreground: 0.2101 0.0318 264.6645;
 
-  /* Status */
-  --destructive: 0 72% 50%;
-  --destructive-foreground: 0 0% 100%;
+  /* Status — red, not teal */
+  --destructive: 0.6368 0.2078 25.3313;
+  --destructive-foreground: 0.9851 0 0;
 
   /* Form */
-  --border: 0 0% 90%;
-  --input: 0 0% 90%;
-  --ring: 27 60% 50%;
+  --border: 0.9276 0.0058 264.5313;
+  --input: 0.9276 0.0058 264.5313;
+  --ring: 0.6716 0.1368 48.513;
 
   /* Charts */
-  --chart-1: 196 18% 45%;
-  --chart-2: 27 60% 50%;
-  --chart-3: 38 70% 55%;
-  --chart-4: 225 8% 60%;
-  --chart-5: 225 8% 40%;
+  --chart-1: 0.594 0.0443 196.0233;
+  --chart-2: 0.7214 0.1337 49.9802;
+  --chart-3: 0.8721 0.0864 68.5474;
+  --chart-4: 0.6268 0 0;
+  --chart-5: 0.683 0 0;
 
-  /* Sidebar mirror */
-  --sidebar: 0 0% 98%;
-  --sidebar-foreground: 225 18% 11%;
-  --sidebar-primary: 27 60% 50%;
-  --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 0 0% 94%;
-  --sidebar-accent-foreground: 225 18% 11%;
-  --sidebar-border: 0 0% 90%;
-  --sidebar-ring: 27 60% 50%;
+  /* Sidebar */
+  --sidebar: 0.967 0.0029 264.5419;
+  --sidebar-foreground: 0.2101 0.0318 264.6645;
+  --sidebar-primary: 0.6716 0.1368 48.513;
+  --sidebar-primary-foreground: 1 0 0;
+  --sidebar-accent: 1 0 0;
+  --sidebar-accent-foreground: 0.2101 0.0318 264.6645;
+  --sidebar-border: 0.9276 0.0058 264.5313;
+  --sidebar-ring: 0.6716 0.1368 48.513;
 
   --radius: 0.75rem;
 
@@ -65,51 +66,51 @@
 }
 
 .dark {
-  /* Surfaces — deep neutral with faint purple cast */
-  --background: 270 6% 11%;
-  --foreground: 0 0% 81%;
-  --card: 0 0% 11%;
-  --card-foreground: 0 0% 81%;
-  --popover: 0 0% 11%;
-  --popover-foreground: 0 0% 81%;
+  /* Surfaces — near-black with faint purple cast */
+  --background: 0.1797 0.0043 308.1928;
+  --foreground: 0.8109 0 0;
+  --card: 0.1822 0 0;
+  --card-foreground: 0.8109 0 0;
+  --popover: 0.1797 0.0043 308.1928;
+  --popover-foreground: 0.8109 0 0;
 
   /* Brand — warm orange voice */
-  --primary: 27 60% 56%;
-  --primary-foreground: 270 6% 11%;
-  --secondary: 196 18% 45%;
-  --secondary-foreground: 270 6% 11%;
+  --primary: 0.7214 0.1337 49.9802;
+  --primary-foreground: 0.1797 0.0043 308.1928;
+  --secondary: 0.594 0.0443 196.0233;
+  --secondary-foreground: 0.1797 0.0043 308.1928;
 
   /* Neutrals */
-  --muted: 0 0% 16%;
-  --muted-foreground: 0 0% 56%;
-  --accent: 0 0% 22%;
-  --accent-foreground: 0 0% 81%;
+  --muted: 0.252 0 0;
+  --muted-foreground: 0.6268 0 0;
+  --accent: 0.3211 0 0;
+  --accent-foreground: 0.8109 0 0;
 
-  /* Status — real red, not teal */
-  --destructive: 0 70% 55%;
-  --destructive-foreground: 0 0% 100%;
+  /* Status — red, not teal */
+  --destructive: 0.704 0.191 22.216;
+  --destructive-foreground: 0.9851 0 0;
 
   /* Form */
-  --border: 0 0% 16%;
-  --input: 0 0% 16%;
-  --ring: 27 60% 56%;
+  --border: 0.252 0 0;
+  --input: 0.252 0 0;
+  --ring: 0.7214 0.1337 49.9802;
 
   /* Charts */
-  --chart-1: 196 18% 50%;
-  --chart-2: 27 60% 56%;
-  --chart-3: 38 70% 60%;
-  --chart-4: 0 0% 56%;
-  --chart-5: 0 0% 40%;
+  --chart-1: 0.594 0.0443 196.0233;
+  --chart-2: 0.7214 0.1337 49.9802;
+  --chart-3: 0.8721 0.0864 68.5474;
+  --chart-4: 0.6268 0 0;
+  --chart-5: 0.683 0 0;
 
-  /* Sidebar mirror */
-  --sidebar: 0 0% 11%;
-  --sidebar-foreground: 0 0% 81%;
-  --sidebar-primary: 27 60% 56%;
-  --sidebar-primary-foreground: 270 6% 11%;
-  --sidebar-accent: 0 0% 22%;
-  --sidebar-accent-foreground: 0 0% 81%;
-  --sidebar-border: 0 0% 16%;
-  --sidebar-ring: 27 60% 56%;
+  /* Sidebar */
+  --sidebar: 0.1822 0 0;
+  --sidebar-foreground: 0.8109 0 0;
+  --sidebar-primary: 0.7214 0.1337 49.9802;
+  --sidebar-primary-foreground: 0.1797 0.0043 308.1928;
+  --sidebar-accent: 0.3211 0 0;
+  --sidebar-accent-foreground: 0.8109 0 0;
+  --sidebar-border: 0.252 0 0;
+  --sidebar-ring: 0.7214 0.1337 49.9802;
 
   --sidebar-background: var(--sidebar);
 }
@@ -128,7 +129,7 @@ body {
   inset: 0;
   pointer-events: none;
   z-index: 0;
-  opacity: 0.04;
+  opacity: 0.035;
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
 }
 :where(.page-shell) > * {

@@ -7,6 +7,7 @@ import RefreshCwIcon from "lucide-svelte/icons/refresh-cw";
 import ShieldAlertIcon from "lucide-svelte/icons/shield-alert";
 import { enhance } from "$app/forms";
 import { invalidateAll } from "$app/navigation";
+import { page } from "$app/state";
 import ConfirmDialog from "$lib/components/ConfirmDialog.svelte";
 import CopyableField from "$lib/components/CopyableField.svelte";
 import QRCodeDisplay from "$lib/components/QRCodeDisplay.svelte";
@@ -78,6 +79,15 @@ let confirmRefreshOpen = $state(false);
 
 let errorMessage = $derived(
   form?.error ? (form.message ?? ERROR_MESSAGES[form.error] ?? "An error occurred.") : null,
+);
+
+let activeStatus = $derived(
+  page.data.user?.isActive
+    ? { label: "Active", class: "bg-primary/15 text-primary border border-primary/20" }
+    : {
+        label: "Inactive",
+        class: "bg-destructive/15 text-destructive border border-destructive/20",
+      },
 );
 
 // Handle M3U download when form returns content
@@ -261,8 +271,8 @@ function enhanceDownload() {
             {userSession.plexUsername ?? data.dispatcharrUsername}
           </h1>
         </div>
-        <Badge variant="secondary" class="bg-primary/15 text-primary border border-primary/20">
-          Active
+        <Badge variant="secondary" class={activeStatus.class}>
+          {activeStatus.label}
         </Badge>
       </div>
 

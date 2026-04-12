@@ -61,7 +61,7 @@ let progressPct = $derived(
           </div>
           <span
             class={cn(
-              "text-xs hidden sm:block",
+              "text-xs sr-only sm:not-sr-only sm:block",
               isCurrent && "text-foreground font-medium",
               !isCurrent && "text-muted-foreground",
             )}

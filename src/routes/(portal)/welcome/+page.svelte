@@ -18,18 +18,21 @@ let { data }: Props = $props();
 </svelte:head>
 
 <div
-  class="min-h-screen flex flex-col items-center justify-center px-4 py-12 bg-background text-foreground"
+  class="hero-glow-bg min-h-screen flex flex-col items-center justify-center px-4 py-12 text-foreground"
 >
-  <div class="mb-8 text-center">
-    <h1 class="text-2xl font-semibold tracking-tight">Welcome, {data.plexUsername}</h1>
-    <p class="mt-1 text-sm text-muted-foreground">Where would you like to go?</p>
+  <div class="reveal reveal-1 mb-8 text-center">
+    <p class="eyebrow">WELCOME</p>
+    <h1 class="display-hero mt-2">Hi, {data.plexUsername}.</h1>
+    <p class="mt-3 text-sm text-muted-foreground">Where would you like to go?</p>
   </div>
 
-  <div class="w-full max-w-lg grid grid-cols-1 sm:grid-cols-2 gap-4">
+  <div class="reveal reveal-2 w-full max-w-lg grid grid-cols-1 sm:grid-cols-2 gap-4">
     <a href="/login" class="no-underline">
-      <Card.Root class="h-full transition-colors hover:border-primary">
+      <Card.Root class="h-full transition hover:-translate-y-0.5 hover:shadow-md hover:border-primary">
         <Card.Header class="text-center">
-          <LayoutDashboardIcon class="mx-auto h-8 w-8 text-primary" />
+          <span class="mx-auto inline-flex h-10 w-10 items-center justify-center rounded-md bg-primary/10 text-primary">
+            <LayoutDashboardIcon class="h-5 w-5" />
+          </span>
           <Card.Title class="text-lg">Admin Dashboard</Card.Title>
           <Card.Description
             >Sign in as admin to manage users, settings, and sync</Card.Description
@@ -39,9 +42,11 @@ let { data }: Props = $props();
     </a>
 
     <a href="/" class="no-underline">
-      <Card.Root class="h-full transition-colors hover:border-primary">
+      <Card.Root class="h-full transition hover:-translate-y-0.5 hover:shadow-md hover:border-primary">
         <Card.Header class="text-center">
-          <MonitorSmartphoneIcon class="mx-auto h-8 w-8 text-primary" />
+          <span class="mx-auto inline-flex h-10 w-10 items-center justify-center rounded-md bg-primary/10 text-primary">
+            <MonitorSmartphoneIcon class="h-5 w-5" />
+          </span>
           <Card.Title class="text-lg">Setup Guide</Card.Title>
           <Card.Description>View your streaming credentials and player setup</Card.Description>
         </Card.Header>

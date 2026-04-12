@@ -2,6 +2,7 @@
 import AlertCircleIcon from "lucide-svelte/icons/alert-circle";
 import DownloadIcon from "lucide-svelte/icons/download";
 import ExternalLinkIcon from "lucide-svelte/icons/external-link";
+import Loader2Icon from "lucide-svelte/icons/loader-2";
 import RefreshCwIcon from "lucide-svelte/icons/refresh-cw";
 import ShieldAlertIcon from "lucide-svelte/icons/shield-alert";
 import { enhance } from "$app/forms";
@@ -10,9 +11,11 @@ import ConfirmDialog from "$lib/components/ConfirmDialog.svelte";
 import CopyableField from "$lib/components/CopyableField.svelte";
 import QRCodeDisplay from "$lib/components/QRCodeDisplay.svelte";
 import * as Alert from "$lib/components/ui/alert";
+import { Badge } from "$lib/components/ui/badge";
 import { Button } from "$lib/components/ui/button";
 import * as Card from "$lib/components/ui/card";
 import * as Tabs from "$lib/components/ui/tabs";
+import { userSession } from "$lib/state/user-session.svelte";
 import type { PlatformUrlResult } from "$lib/url/platforms";
 
 interface PlatformEntry {
@@ -122,14 +125,17 @@ function enhanceDownload() {
 
 {#if !data.authenticated}
   <!-- Sign-in view -->
-  <main class="min-h-screen flex flex-col items-center justify-center px-4 py-12 bg-background text-foreground">
-    <div class="mb-8 text-center">
-      <h1 class="text-2xl font-semibold tracking-tight">otpravkarr</h1>
-      <p class="mt-1 text-sm text-muted-foreground">Stream access portal</p>
+  <main class="hero-glow-bg min-h-screen flex flex-col items-center justify-center px-4 py-12 text-foreground">
+    <div class="reveal reveal-1 mb-8 text-center">
+      <p class="eyebrow">OTPRAVKARR</p>
+      <h1 class="display-hero mt-2">Stream access.</h1>
+      <p class="mt-3 text-sm text-muted-foreground">
+        Sign in with your Plex account to view your credentials.
+      </p>
     </div>
 
-    <div class="w-full max-w-sm">
-      <Card.Root>
+    <div class="reveal reveal-2 w-full max-w-sm">
+      <Card.Root class="surface-elevated">
         <Card.Header>
           <Card.Title class="text-lg">Welcome</Card.Title>
           <Card.Description>
@@ -145,12 +151,9 @@ function enhanceDownload() {
           {/if}
 
           <form method="POST" action="?/signInWithPlex" use:enhance={enhanceSignIn}>
-            <Button type="submit" disabled={submitting} class="w-full">
+            <Button type="submit" disabled={submitting} class="cta-glow w-full">
               {#if submitting}
-                <svg class="mr-2 h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                  <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" class="opacity-25" />
-                  <path d="M4 12a8 8 0 018-8" stroke="currentColor" stroke-width="3" stroke-linecap="round" class="opacity-75" />
-                </svg>
+                <Loader2Icon class="mr-2 h-4 w-4 animate-spin" />
                 Redirecting to Plex…
               {:else}
                 Sign in with Plex
@@ -250,37 +253,42 @@ function enhanceDownload() {
         </Alert.Root>
       {/if}
 
-      <Tabs.Root value="credentials">
-        <Tabs.List>
+      <!-- Page header row -->
+      <div class="reveal reveal-1 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p class="eyebrow">YOUR STREAM</p>
+          <h1 class="font-display text-3xl md:text-4xl font-normal tracking-tight leading-[1.05] mt-1">
+            {userSession.plexUsername ?? data.dispatcharrUsername}
+          </h1>
+        </div>
+        <Badge variant="secondary" class="bg-primary/15 text-primary border border-primary/20">
+          Active
+        </Badge>
+      </div>
+
+      <Tabs.Root value="credentials" class="reveal reveal-2">
+        <Tabs.List variant="line">
           <Tabs.Trigger value="credentials">Credentials</Tabs.Trigger>
           <Tabs.Trigger value="setup">Setup Guide</Tabs.Trigger>
         </Tabs.List>
 
         <Tabs.Content value="credentials" class="mt-4 space-y-4">
-          <!-- Streaming URLs -->
-          <Card.Root>
-            <Card.Header>
-              <Card.Title class="text-base">Streaming URLs</Card.Title>
-              <Card.Description>
-                Use these URLs to connect your IPTV player.
-              </Card.Description>
-            </Card.Header>
-            <Card.Content class="space-y-4">
-              <CopyableField label="M3U Playlist URL" value={data.xcUrl} />
-              <CopyableField label="Player API URL" value={data.playerApiUrl} />
-            </Card.Content>
-          </Card.Root>
-
-          <!-- QR Code -->
-          <Card.Root>
+          <!-- Quick Setup: QR + URLs side-by-side on md+ -->
+          <Card.Root class="surface-elevated">
             <Card.Header>
               <Card.Title class="text-base">Quick Setup</Card.Title>
               <Card.Description>
-                Scan this QR code with your device to import the playlist URL.
+                Scan with your device or copy the URLs below.
               </Card.Description>
             </Card.Header>
-            <Card.Content class="flex justify-center">
-              <QRCodeDisplay dataUri={data.qrCodeDataUri} alt="Playlist URL QR code" />
+            <Card.Content class="grid gap-6 md:grid-cols-[auto_1fr] md:items-center">
+              <div class="flex justify-center md:justify-start">
+                <QRCodeDisplay dataUri={data.qrCodeDataUri} alt="Playlist URL QR code" />
+              </div>
+              <div class="space-y-4">
+                <CopyableField label="M3U Playlist URL" value={data.xcUrl} />
+                <CopyableField label="Player API URL" value={data.playerApiUrl} />
+              </div>
             </Card.Content>
           </Card.Root>
 

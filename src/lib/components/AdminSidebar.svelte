@@ -24,6 +24,7 @@ import {
   SidebarSeparator,
   SidebarTrigger,
 } from "$lib/components/ui/sidebar";
+import { cn } from "$lib/utils";
 
 interface Props {
   username: string;
@@ -44,8 +45,9 @@ const navItems = [
 <SidebarProvider>
   <Sidebar>
     <SidebarHeader>
-      <div class="flex items-center gap-2 px-2 py-1.5">
+      <div class="flex flex-col gap-1 px-2 py-2">
         <AppLogo size="sm" />
+        <span class="eyebrow pl-8">Admin console</span>
       </div>
     </SidebarHeader>
 
@@ -57,8 +59,17 @@ const navItems = [
         <SidebarGroupContent>
           <SidebarMenu>
             {#each navItems as item (item.href)}
+              {@const isActive = page.url.pathname === item.href}
               <SidebarMenuItem>
-                <SidebarMenuButton isActive={page.url.pathname === item.href} tooltipContent={item.label}>
+                <SidebarMenuButton
+                  {isActive}
+                  tooltipContent={item.label}
+                  class={cn(
+                    "relative",
+                    isActive &&
+                      "bg-sidebar-accent/60 before:absolute before:left-0 before:top-1/2 before:h-5 before:w-0.5 before:-translate-y-1/2 before:rounded-r before:bg-primary [&_svg]:text-primary",
+                  )}
+                >
                   {#snippet child({ props })}
                     <a href={item.href} {...props}>
                       <item.icon />
@@ -80,7 +91,7 @@ const navItems = [
         <form method="POST" action="/api/internal/signout">
           <button
             type="submit"
-            class="inline-flex items-center justify-center rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+            class="inline-flex items-center justify-center rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
             aria-label="Sign out"
           >
             <LogOutIcon class="h-4 w-4" />
@@ -96,7 +107,7 @@ const navItems = [
       <Separator orientation="vertical" class="mr-2 !h-4" />
       <span class="text-sm font-medium text-muted-foreground">Admin</span>
     </header>
-    <div class="flex-1 p-6">
+    <div class={cn("flex-1 p-6", className)}>
       {@render children()}
     </div>
   </SidebarInset>

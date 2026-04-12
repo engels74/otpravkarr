@@ -13,12 +13,12 @@ interface Props {
 let { plexUsername, plexThumb, class: className }: Props = $props();
 </script>
 
-<header class="flex h-14 items-center justify-between border-b border-[hsl(var(--border))] px-4 {className ?? ''}">
+<header class="glass-header flex h-14 items-center justify-between px-4 {className ?? ''}">
   <AppLogo />
 
   <div class="flex items-center gap-3">
     <PlexAvatar thumbUrl={plexThumb} username={plexUsername} size="sm" />
-    <span class="text-sm text-[hsl(var(--muted-foreground))]">{plexUsername}</span>
+    <span class="text-sm text-muted-foreground">{plexUsername}</span>
 
     <form method="POST" action="/api/internal/signout">
       <Button variant="ghost" size="icon" type="submit" aria-label="Sign out">

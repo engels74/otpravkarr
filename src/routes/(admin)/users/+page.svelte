@@ -307,7 +307,7 @@ async function copyOneTimePassword() {
                 <DropdownMenu.Root>
                   <DropdownMenu.Trigger>
                     {#snippet child({ props })}
-                      <Button variant="ghost" size="icon-xs" {...props}>
+                      <Button variant="ghost" size="icon-sm" {...props}>
                         <EllipsisIcon class="h-4 w-4" />
                       </Button>
                     {/snippet}

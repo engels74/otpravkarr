@@ -12,7 +12,9 @@ let { steps, currentStep, class: className }: Props = $props();
 // Progress percentage along the connector line. With N steps, the line spans
 // from the centre of step 0 to the centre of step N-1. We fill it relative
 // to the current step (0..N-1).
-let progressPct = $derived(steps.length > 1 ? (currentStep / (steps.length - 1)) * 100 : 0);
+let progressPct = $derived(
+  steps.length > 1 ? Math.max(0, Math.min(100, (currentStep / (steps.length - 1)) * 100)) : 0,
+);
 </script>
 
 <nav aria-label="Setup progress" class={cn("w-full", className)}>
@@ -37,7 +39,7 @@ let progressPct = $derived(steps.length > 1 ? (currentStep / (steps.length - 1))
             class={cn(
               "relative z-10 inline-flex h-7 min-w-7 items-center justify-center rounded-full border-2 px-2 text-xs font-medium transition-colors",
               isCompleted && "bg-primary border-primary text-primary-foreground",
-              isCurrent && "border-primary bg-background text-primary animate-pulse",
+              isCurrent && "border-primary bg-background text-primary animate-pulse motion-reduce:animate-none",
               !isCompleted && !isCurrent && "border-border bg-background text-muted-foreground",
             )}
             aria-current={isCurrent ? "step" : undefined}

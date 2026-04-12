@@ -31,6 +31,12 @@ interface Props {
 
 let { data }: Props = $props();
 
+let plexHealthy = $derived(data.health.plex.status === "healthy");
+let dispatcharrHealthy = $derived(
+  data.health.dispatcharr.reachable && data.health.dispatcharr.authValid,
+);
+let dbHealthy = $derived(data.health.database.status === "healthy");
+
 $effect(() => {
   setHealthStatus(data.health);
 });
@@ -76,52 +82,64 @@ function friendInitials(f: PlexFriend): string {
 </svelte:head>
 
 <div class="space-y-6">
+  <!-- ─── Page header ────────────────────────────────────── -->
+  <div>
+    <p class="eyebrow">DASHBOARD</p>
+    <h1 class="font-display text-4xl font-normal tracking-tight leading-[1.05] mt-1">Overview.</h1>
+  </div>
+
   <!-- ─── Health Status ──────────────────────────────────── -->
   <div class="grid gap-4 sm:grid-cols-3">
     <!-- Plex -->
-    <Card.Root>
-      <Card.Header class="pb-2">
-        <Card.Title class="text-sm font-medium">Plex</Card.Title>
-      </Card.Header>
-      <Card.Content>
-        <div class="flex items-center justify-between">
-          <HealthBadge type="plex" status={data.health.plex.status} />
-          <span class="text-xs text-muted-foreground">
-            {formatRelativeTime(data.health.plex.lastChecked)}
-          </span>
-        </div>
-      </Card.Content>
-    </Card.Root>
+    <div class="kpi-tile">
+      <div class="flex items-center justify-between">
+        <span class="eyebrow">Plex</span>
+        <span
+          class={`h-2 w-2 rounded-full ${plexHealthy ? "bg-green-500" : "bg-destructive"}`}
+          aria-hidden="true"
+        ></span>
+      </div>
+      <HealthBadge type="plex" status={data.health.plex.status} class="w-fit" />
+      <span class="text-xs text-muted-foreground">
+        Checked {formatRelativeTime(data.health.plex.lastChecked)}
+      </span>
+    </div>
 
     <!-- Dispatcharr -->
-    <Card.Root>
-      <Card.Header class="pb-2">
-        <Card.Title class="text-sm font-medium">Dispatcharr</Card.Title>
-      </Card.Header>
-      <Card.Content>
-        <div class="flex items-center justify-between">
-          <HealthBadge type="dispatcharr" status="" reachable={data.health.dispatcharr.reachable} authValid={data.health.dispatcharr.authValid} />
-          <span class="text-xs text-muted-foreground">
-            {formatRelativeTime(data.health.dispatcharr.lastChecked)}
-          </span>
-        </div>
-      </Card.Content>
-    </Card.Root>
+    <div class="kpi-tile">
+      <div class="flex items-center justify-between">
+        <span class="eyebrow">Dispatcharr</span>
+        <span
+          class={`h-2 w-2 rounded-full ${dispatcharrHealthy ? "bg-green-500" : "bg-destructive"}`}
+          aria-hidden="true"
+        ></span>
+      </div>
+      <HealthBadge
+        type="dispatcharr"
+        status=""
+        reachable={data.health.dispatcharr.reachable}
+        authValid={data.health.dispatcharr.authValid}
+        class="w-fit"
+      />
+      <span class="text-xs text-muted-foreground">
+        Checked {formatRelativeTime(data.health.dispatcharr.lastChecked)}
+      </span>
+    </div>
 
     <!-- SQLite -->
-    <Card.Root>
-      <Card.Header class="pb-2">
-        <Card.Title class="text-sm font-medium">SQLite</Card.Title>
-      </Card.Header>
-      <Card.Content>
-        <div class="flex items-center justify-between">
-          <HealthBadge type="database" status={data.health.database.status} />
-          <span class="text-xs text-muted-foreground">
-            {formatRelativeTime(data.health.database.lastChecked)}
-          </span>
-        </div>
-      </Card.Content>
-    </Card.Root>
+    <div class="kpi-tile">
+      <div class="flex items-center justify-between">
+        <span class="eyebrow">SQLite</span>
+        <span
+          class={`h-2 w-2 rounded-full ${dbHealthy ? "bg-green-500" : "bg-destructive"}`}
+          aria-hidden="true"
+        ></span>
+      </div>
+      <HealthBadge type="database" status={data.health.database.status} class="w-fit" />
+      <span class="text-xs text-muted-foreground">
+        Checked {formatRelativeTime(data.health.database.lastChecked)}
+      </span>
+    </div>
   </div>
 
   <div class="grid gap-4 lg:grid-cols-2">

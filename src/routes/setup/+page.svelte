@@ -394,7 +394,7 @@ function enhanceHandler(nextStep?: number) {
   <div class="w-full max-w-xl">
     <!-- ─────────── Step 0: Claim Instance ─────────── -->
     {#if step === 0}
-      <Card.Root>
+      <Card.Root class="surface-elevated">
         <Card.Header>
           <Card.Title class="text-lg">Claim this instance</Card.Title>
           <Card.Description>
@@ -457,7 +457,7 @@ function enhanceHandler(nextStep?: number) {
 
     <!-- ─────────── Step 1: Create Admin ─────────── -->
     {#if step === 1}
-      <Card.Root>
+      <Card.Root class="surface-elevated">
         <Card.Header>
           <Card.Title class="text-lg">Create admin account</Card.Title>
           <Card.Description>
@@ -593,7 +593,7 @@ function enhanceHandler(nextStep?: number) {
 
     <!-- ─────────── Step 2: Connect Plex ─────────── -->
     {#if step === 2}
-      <Card.Root>
+      <Card.Root class="surface-elevated">
         <Card.Header>
           <Card.Title class="text-lg">Connect your Plex server</Card.Title>
           <Card.Description>
@@ -922,7 +922,7 @@ function enhanceHandler(nextStep?: number) {
 
     <!-- ─────────── Step 3: Connect Dispatcharr ─────────── -->
     {#if step === 3}
-      <Card.Root>
+      <Card.Root class="surface-elevated">
         <Card.Header>
           <Card.Title class="text-lg">Connect Dispatcharr</Card.Title>
           <Card.Description>
@@ -1003,7 +1003,7 @@ function enhanceHandler(nextStep?: number) {
 
     <!-- ─────────── Step 4: Configure Origins ─────────── -->
     {#if step === 4}
-      <Card.Root>
+      <Card.Root class="surface-elevated">
         <Card.Header>
           <Card.Title class="text-lg">Security: Allowed Origins</Card.Title>
           <Card.Description>
@@ -1068,7 +1068,7 @@ function enhanceHandler(nextStep?: number) {
 
     <!-- ─────────── Step 5: Set Defaults ─────────── -->
     {#if step === 5}
-      <Card.Root>
+      <Card.Root class="surface-elevated">
         <Card.Header>
           <Card.Title class="text-lg">Default Settings</Card.Title>
           <Card.Description>

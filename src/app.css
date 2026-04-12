@@ -1,12 +1,169 @@
 /*
- * Fix for unocss-preset-shadcn mismatch: the preset generates --sidebar
- * as the CSS variable but references --sidebar-background in theme colors.
- * Alias the missing variable so bg-sidebar works correctly.
+ * "Dark Matter" theme tokens — adapted from the TweakCN Dark Matter theme.
+ * OKLCH source colors are converted to HSL channel tuples (the format
+ * `unocss-preset-shadcn` consumes via `bg-primary`, `text-foreground`, etc.).
+ *
+ * Notes:
+ * - Destructive uses a real red rather than Dark Matter's muted teal so that
+ *   delete/danger actions remain semantically obvious.
+ * - --sidebar-background aliases --sidebar to work around a preset mismatch
+ *   (the preset references --sidebar-background in its theme colors but only
+ *   generates --sidebar).
  */
+
 :root {
+  /* Surfaces */
+  --background: 0 0% 100%;
+  --foreground: 225 18% 11%;
+  --card: 0 0% 100%;
+  --card-foreground: 225 18% 11%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 225 18% 11%;
+
+  /* Brand */
+  --primary: 27 60% 50%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 196 18% 45%;
+  --secondary-foreground: 0 0% 100%;
+
+  /* Neutrals */
+  --muted: 0 0% 96%;
+  --muted-foreground: 225 8% 40%;
+  --accent: 0 0% 94%;
+  --accent-foreground: 225 18% 11%;
+
+  /* Status */
+  --destructive: 0 72% 50%;
+  --destructive-foreground: 0 0% 100%;
+
+  /* Form */
+  --border: 0 0% 90%;
+  --input: 0 0% 90%;
+  --ring: 27 60% 50%;
+
+  /* Charts */
+  --chart-1: 196 18% 45%;
+  --chart-2: 27 60% 50%;
+  --chart-3: 38 70% 55%;
+  --chart-4: 225 8% 60%;
+  --chart-5: 225 8% 40%;
+
+  /* Sidebar mirror */
+  --sidebar: 0 0% 98%;
+  --sidebar-foreground: 225 18% 11%;
+  --sidebar-primary: 27 60% 50%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 0 0% 94%;
+  --sidebar-accent-foreground: 225 18% 11%;
+  --sidebar-border: 0 0% 90%;
+  --sidebar-ring: 27 60% 50%;
+
+  --radius: 0.75rem;
+
+  /* Preset alias */
   --sidebar-background: var(--sidebar);
 }
 
 .dark {
+  /* Surfaces — deep neutral with faint purple cast */
+  --background: 270 6% 11%;
+  --foreground: 0 0% 81%;
+  --card: 0 0% 11%;
+  --card-foreground: 0 0% 81%;
+  --popover: 0 0% 11%;
+  --popover-foreground: 0 0% 81%;
+
+  /* Brand — warm orange voice */
+  --primary: 27 60% 56%;
+  --primary-foreground: 270 6% 11%;
+  --secondary: 196 18% 45%;
+  --secondary-foreground: 270 6% 11%;
+
+  /* Neutrals */
+  --muted: 0 0% 16%;
+  --muted-foreground: 0 0% 56%;
+  --accent: 0 0% 22%;
+  --accent-foreground: 0 0% 81%;
+
+  /* Status — real red, not teal */
+  --destructive: 0 70% 55%;
+  --destructive-foreground: 0 0% 100%;
+
+  /* Form */
+  --border: 0 0% 16%;
+  --input: 0 0% 16%;
+  --ring: 27 60% 56%;
+
+  /* Charts */
+  --chart-1: 196 18% 50%;
+  --chart-2: 27 60% 56%;
+  --chart-3: 38 70% 60%;
+  --chart-4: 0 0% 56%;
+  --chart-5: 0 0% 40%;
+
+  /* Sidebar mirror */
+  --sidebar: 0 0% 11%;
+  --sidebar-foreground: 0 0% 81%;
+  --sidebar-primary: 27 60% 56%;
+  --sidebar-primary-foreground: 270 6% 11%;
+  --sidebar-accent: 0 0% 22%;
+  --sidebar-accent-foreground: 0 0% 81%;
+  --sidebar-border: 0 0% 16%;
+  --sidebar-ring: 27 60% 56%;
+
   --sidebar-background: var(--sidebar);
+}
+
+/* ── Typographic refinement ─────────────────────────────────── */
+body {
+  letter-spacing: -0.005em;
+}
+
+/* ── Page-level grain (dark mode only) ──────────────────────────
+ * Inline data URI keeps it CSP-safe and zero-network. No mix-blend
+ * mode so it doesn't interfere with backdrop-blur on glass headers. */
+.dark .page-shell::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.04;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+}
+:where(.page-shell) > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* ── Hero stagger reveal ────────────────────────────────────── */
+@keyframes hero-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.reveal {
+  animation: hero-up 600ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+.reveal-1 {
+  animation-delay: 60ms;
+}
+.reveal-2 {
+  animation-delay: 140ms;
+}
+.reveal-3 {
+  animation-delay: 220ms;
+}
+@media (prefers-reduced-motion: reduce) {
+  .reveal,
+  .reveal-1,
+  .reveal-2,
+  .reveal-3 {
+    animation: none;
+  }
 }

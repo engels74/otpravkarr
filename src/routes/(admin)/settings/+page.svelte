@@ -71,8 +71,17 @@ function makeEnhance(section: string) {
   <title>Settings — otpravkarr</title>
 </svelte:head>
 
-<div class="space-y-6">
-  <h1 class="text-lg font-semibold text-foreground">Settings</h1>
+<div class="space-y-8">
+  <div>
+    <p class="eyebrow">SETTINGS</p>
+    <h1 class="font-display text-4xl font-normal tracking-tight leading-[1.05] mt-1">
+      System configuration.
+    </h1>
+  </div>
+
+  <!-- ─── Connections ───────────────────────────────────── -->
+  <section class="space-y-4">
+    <p class="eyebrow">Connections</p>
 
   <!-- Plex Connection -->
   <Card.Root>
@@ -179,6 +188,12 @@ function makeEnhance(section: string) {
     </form>
   </Card.Root>
 
+  </section>
+
+  <!-- ─── Sync ──────────────────────────────────────────── -->
+  <section class="space-y-4">
+    <p class="eyebrow">Sync</p>
+
   <!-- Sync Settings -->
   <Card.Root>
     <Card.Header>
@@ -222,6 +237,12 @@ function makeEnhance(section: string) {
     </Card.Content>
   </Card.Root>
 
+  </section>
+
+  <!-- ─── Security ──────────────────────────────────────── -->
+  <section class="space-y-4">
+    <p class="eyebrow">Security</p>
+
   <!-- Security -->
   <Card.Root>
     <Card.Header>
@@ -255,6 +276,12 @@ function makeEnhance(section: string) {
     </form>
   </Card.Root>
 
+  </section>
+
+  <!-- ─── Audit ─────────────────────────────────────────── -->
+  <section class="space-y-4">
+    <p class="eyebrow">Audit</p>
+
   <!-- Audit Log -->
   <Card.Root>
     <Card.Header>
@@ -284,4 +311,5 @@ function makeEnhance(section: string) {
       </Card.Footer>
     </form>
   </Card.Root>
+  </section>
 </div>

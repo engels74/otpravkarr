@@ -1,4 +1,5 @@
 <script lang="ts">
+import Loader2Icon from "lucide-svelte/icons/loader-2";
 import { enhance } from "$app/forms";
 import * as Alert from "$lib/components/ui/alert";
 import { Button } from "$lib/components/ui/button";
@@ -72,14 +73,15 @@ function enhanceHandler() {
   <title>Login — otpravkarr</title>
 </svelte:head>
 
-<main class="min-h-screen flex flex-col items-center justify-center px-4 py-12 bg-background text-foreground">
-  <div class="mb-8 text-center">
-    <h1 class="text-2xl font-semibold tracking-tight">otpravkarr</h1>
-    <p class="mt-1 text-sm text-muted-foreground">Admin login</p>
+<main class="hero-glow-bg min-h-screen flex flex-col items-center justify-center px-4 py-12 text-foreground">
+  <div class="reveal reveal-1 mb-8 text-center">
+    <p class="eyebrow">OTPRAVKARR</p>
+    <h1 class="display-hero mt-2">Welcome back.</h1>
+    <p class="mt-3 text-sm text-muted-foreground">Sign in to the admin console.</p>
   </div>
 
-  <div class="w-full max-w-sm">
-    <Card.Root>
+  <div class="reveal reveal-2 w-full max-w-sm">
+    <Card.Root class="surface-elevated">
       <Card.Header>
         <Card.Title class="text-lg">Sign in</Card.Title>
         <Card.Description>
@@ -95,7 +97,7 @@ function enhanceHandler() {
         {/if}
 
         <form method="POST" use:enhance={enhanceHandler}>
-          <div class="grid gap-4">
+          <div class="reveal reveal-3 grid gap-4">
             <div class="grid gap-2">
               <Label for="login-username">Username</Label>
               <Input
@@ -118,12 +120,9 @@ function enhanceHandler() {
               />
             </div>
 
-            <Button type="submit" disabled={submitting} class="w-full">
+            <Button type="submit" disabled={submitting} class="cta-glow w-full">
               {#if submitting}
-                <svg class="mr-2 h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                  <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" class="opacity-25" />
-                  <path d="M4 12a8 8 0 018-8" stroke="currentColor" stroke-width="3" stroke-linecap="round" class="opacity-75" />
-                </svg>
+                <Loader2Icon class="mr-2 h-4 w-4 animate-spin" />
                 Signing in…
               {:else}
                 Sign In

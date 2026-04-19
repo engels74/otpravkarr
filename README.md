@@ -1,8 +1,16 @@
-# Otpravkarr
+<p align="center">
+  <img src="./static/otpravkarr-icon.svg" alt="Otpravkarr" width="140" height="140" />
+</p>
 
-[![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](LICENSE)
+<h1 align="center">Otpravkarr</h1>
 
-Bridges Plex user accounts to [Dispatcharr](https://github.com/Dispatcharr/Dispatcharr) IPTV — generates per-user M3U/EPG URLs, syncs Plex friends automatically, and provides an admin dashboard for management.
+<p align="center">
+  Bridges Plex user accounts to <a href="https://github.com/Dispatcharr/Dispatcharr">Dispatcharr</a> IPTV — generates per-user M3U/EPG URLs, syncs Plex friends automatically, and provides an admin dashboard for management.
+</p>
+
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg" alt="License: AGPL-3.0" /></a>
+</p>
 
 ## Prerequisites
 

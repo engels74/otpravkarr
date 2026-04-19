@@ -222,7 +222,7 @@ describe("provisionUser — already_exists", () => {
 // ---------------------------------------------------------------------------
 
 describe("provisionUser — reactivation", () => {
-  it("reactivates inactive mapping and re-asserts custom_properties.xc_password on Dispatcharr", async () => {
+  it("reactivates inactive mapping and re-asserts custom_properties.xc_password on Dispatcharr, merging existing keys", async () => {
     const inactive = makeMapping({
       is_active: 0,
       dispatcharr_user_id: 42,
@@ -235,9 +235,10 @@ describe("provisionUser — reactivation", () => {
       .mockReturnValueOnce(inactive) // initial lookup
       .mockReturnValueOnce(reactivated); // re-read after update
 
+    // Remote user already has an existing_key in custom_properties that must be preserved
     vi.mocked(getUser).mockResolvedValue({
       ok: true,
-      data: makeDispatcharrUser(),
+      data: makeDispatcharrUser({ custom_properties: { existing_key: "foo", xc_password: "old" } }),
     } as DispatcharrResult<DispatcharrUser>);
 
     const result = await provisionUser(mockClient, {
@@ -253,13 +254,47 @@ describe("provisionUser — reactivation", () => {
     expect(getUser).toHaveBeenCalledWith(mockClient, 42);
     // Stored password is decrypted and pushed to Dispatcharr — no churn, bookmarked URLs keep working
     expect(decrypt).toHaveBeenCalledWith("encrypted:legacy-password", "credential-encryption");
+    // existing_key must be preserved; xc_password is updated (not replaced wholesale)
     expect(updateUser).toHaveBeenCalledWith(mockClient, 42, {
-      custom_properties: { xc_password: "legacy-password" },
+      custom_properties: { existing_key: "foo", xc_password: "legacy-password" },
     });
     expect(updateUserMapping).toHaveBeenCalledWith(inactive.id, { is_active: 1 });
     expect(appendAuditLog).toHaveBeenCalledWith({
       action: "user.provisioned",
       detail: { plex_username: "TestUser", reactivated: true },
+    });
+  });
+
+  it("defaults custom_properties to {} when remote user has no custom_properties", async () => {
+    const inactive = makeMapping({
+      is_active: 0,
+      dispatcharr_user_id: 42,
+      dispatcharr_xc_password_enc: "encrypted:legacy-password",
+      provisioning_mode: "automatic",
+    });
+    const reactivated = makeMapping({ is_active: 1, dispatcharr_user_id: 42 });
+
+    vi.mocked(getUserMappingByPlexId)
+      .mockReturnValueOnce(inactive)
+      .mockReturnValueOnce(reactivated);
+
+    // Remote user has no custom_properties field at all
+    vi.mocked(getUser).mockResolvedValue({
+      ok: true,
+      data: makeDispatcharrUser(),
+    } as DispatcharrResult<DispatcharrUser>);
+
+    const result = await provisionUser(mockClient, {
+      plexIdentity: makePlexIdentity(),
+      mode: "automatic",
+      groupIds: [1, 2],
+    });
+
+    expect(result.status).toBe("reactivated");
+    expect(decrypt).toHaveBeenCalledWith("encrypted:legacy-password", "credential-encryption");
+    // No existing keys — only xc_password should be in the PATCH
+    expect(updateUser).toHaveBeenCalledWith(mockClient, 42, {
+      custom_properties: { xc_password: "legacy-password" },
     });
   });
 

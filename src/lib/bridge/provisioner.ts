@@ -125,10 +125,22 @@ export async function provisionUser(
             };
           }
 
+          // Merge xc_password into the existing custom_properties object rather
+          // than replacing it wholesale. Django DRF's default PATCH semantics
+          // for a JSONField replace the entire value, so sending only
+          // { xc_password } would drop any other keys Dispatcharr stores there
+          // (e.g. device fingerprints, UI preferences). We already have the
+          // remote user from `result.data` — no second round-trip needed.
+          const existingCustomProps =
+            result.data.custom_properties != null &&
+            typeof result.data.custom_properties === "object" &&
+            !Array.isArray(result.data.custom_properties)
+              ? (result.data.custom_properties as Record<string, unknown>)
+              : {};
           const patchResult = await retryResult(
             () =>
               updateUser(client, dispatcharrUserId, {
-                custom_properties: { xc_password: xcPassword },
+                custom_properties: { ...existingCustomProps, xc_password: xcPassword },
               }),
             isTransientResultError,
           );

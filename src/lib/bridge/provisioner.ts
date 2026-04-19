@@ -180,6 +180,7 @@ export async function provisionUser(
       createUser(client, {
         username: sanitizedUsername,
         password,
+        custom_properties: { xc_password: password },
         ...(request.mode === "staff" && { is_staff: true }),
       }),
     isTransientResultError,

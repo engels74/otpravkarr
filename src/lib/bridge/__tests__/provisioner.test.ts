@@ -393,10 +393,13 @@ describe("provisionUser — create (automatic mode)", () => {
     }
 
     // Verify createUser was called with correct data (no is_active/groups — not in API)
-    // is_staff is omitted for non-staff users to avoid sending unnecessary fields
+    // is_staff is omitted for non-staff users to avoid sending unnecessary fields.
+    // custom_properties.xc_password mirrors the Django password so Dispatcharr's
+    // Xtream-Codes endpoints (/get.php, /player_api.php) authenticate correctly.
     expect(createUser).toHaveBeenCalledWith(mockClient, {
       username: "testuser",
       password: "generated-password-24",
+      custom_properties: { xc_password: "generated-password-24" },
     });
 
     // Verify password was encrypted for automatic mode
@@ -462,10 +465,12 @@ describe("provisionUser — create (self_managed mode)", () => {
       }),
     );
 
-    // is_staff should be omitted for non-staff users
+    // is_staff should be omitted for non-staff users; xc_password is set so
+    // /get.php authenticates even when the Django password is admin-reset later.
     expect(createUser).toHaveBeenCalledWith(mockClient, {
       username: "testuser",
       password: "generated-password-24",
+      custom_properties: { xc_password: "generated-password-24" },
     });
   });
 });
@@ -499,10 +504,14 @@ describe("provisionUser — create (staff mode)", () => {
       expect(result.initialPassword).toBe("generated-password-24");
     }
 
-    // is_staff should be true
+    // is_staff should be true, and xc_password must still be forwarded so the
+    // staff user's /get.php URL works.
     expect(createUser).toHaveBeenCalledWith(
       mockClient,
-      expect.objectContaining({ is_staff: true }),
+      expect.objectContaining({
+        is_staff: true,
+        custom_properties: { xc_password: "generated-password-24" },
+      }),
     );
 
     // No password encryption

@@ -1,4 +1,4 @@
-import { encrypt } from "$lib/crypto/encryption";
+import { decrypt, encrypt } from "$lib/crypto/encryption";
 import { generateXcPassword } from "$lib/crypto/passwords";
 import { appendAuditLog } from "$lib/db/repositories/audit";
 import {
@@ -10,7 +10,7 @@ import {
 import type { UserMapping } from "$lib/db/types";
 import { AuditAction } from "$lib/db/types";
 import type { DispatcharrClient } from "$lib/dispatcharr/client";
-import { createUser, getUser } from "$lib/dispatcharr/endpoints/users";
+import { createUser, getUser, updateUser } from "$lib/dispatcharr/endpoints/users";
 import { fetchAllPages } from "$lib/dispatcharr/pagination";
 import { DispatcharrUserSchema } from "$lib/dispatcharr/schemas";
 import { isTransientResultError, retryResult } from "$lib/utils/retry";
@@ -102,6 +102,53 @@ export async function provisionUser(
       }
     } else {
       try {
+        // Re-assert custom_properties.xc_password on the remote. Pre-`ddfbff5`
+        // mappings were created without this field, so Xtream endpoints return
+        // 401 after reactivation. Push the locally-stored password (no churn —
+        // bookmarked M3U/EPG URLs keep working; intentional rotation lives in
+        // rotateCredentials). Only `automatic` mappings have a stored password;
+        // `self_managed`/`staff` have no local state to re-sync.
+        if (
+          existingMapping.provisioning_mode === "automatic" &&
+          existingMapping.dispatcharr_xc_password_enc != null
+        ) {
+          let xcPassword: string;
+          try {
+            xcPassword = await decrypt(
+              existingMapping.dispatcharr_xc_password_enc,
+              CREDENTIAL_PURPOSE,
+            );
+          } catch (err) {
+            return {
+              status: "failed",
+              error: `Failed to decrypt stored xc_password during reactivation: ${err instanceof Error ? err.message : String(err)}`,
+            };
+          }
+
+          // Merge xc_password into the existing custom_properties object rather
+          // than replacing it wholesale. Django DRF's default PATCH semantics
+          // for a JSONField replace the entire value, so sending only
+          // { xc_password } would drop any other keys Dispatcharr stores there
+          // (e.g. device fingerprints, UI preferences). We already have the
+          // remote user from `result.data` — no second round-trip needed.
+          const existingCustomProps =
+            result.data.custom_properties != null &&
+            typeof result.data.custom_properties === "object" &&
+            !Array.isArray(result.data.custom_properties)
+              ? (result.data.custom_properties as Record<string, unknown>)
+              : {};
+          const patchResult = await retryResult(
+            () =>
+              updateUser(client, dispatcharrUserId, {
+                custom_properties: { ...existingCustomProps, xc_password: xcPassword },
+              }),
+            isTransientResultError,
+          );
+          if (!patchResult.ok) {
+            return { status: "failed", error: patchResult.message };
+          }
+        }
+
         updateUserMapping(existingMapping.id, { is_active: 1 });
 
         appendAuditLog({
@@ -180,6 +227,7 @@ export async function provisionUser(
       createUser(client, {
         username: sanitizedUsername,
         password,
+        custom_properties: { xc_password: password },
         ...(request.mode === "staff" && { is_staff: true }),
       }),
     isTransientResultError,

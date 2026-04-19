@@ -21,6 +21,7 @@ vi.mock("$lib/db/repositories/audit", () => ({
 vi.mock("$lib/dispatcharr/endpoints/users", () => ({
   createUser: vi.fn(),
   getUser: vi.fn(),
+  updateUser: vi.fn(),
 }));
 
 vi.mock("$lib/dispatcharr/pagination", () => ({
@@ -29,6 +30,9 @@ vi.mock("$lib/dispatcharr/pagination", () => ({
 
 vi.mock("$lib/crypto/encryption", () => ({
   encrypt: vi.fn(async (plaintext: string, _purpose: string) => `encrypted:${plaintext}`),
+  decrypt: vi.fn(async (ciphertext: string, _purpose: string) =>
+    ciphertext.replace(/^encrypted:/, ""),
+  ),
 }));
 
 vi.mock("$lib/crypto/passwords", () => ({
@@ -48,9 +52,9 @@ vi.mock("$lib/utils/retry", async (importOriginal) => {
 const { getUserMappingByPlexId, createUserMapping, updateUserMapping, getAllUserMappings } =
   await import("$lib/db/repositories/users");
 const { appendAuditLog } = await import("$lib/db/repositories/audit");
-const { createUser, getUser } = await import("$lib/dispatcharr/endpoints/users");
+const { createUser, getUser, updateUser } = await import("$lib/dispatcharr/endpoints/users");
 const { fetchAllPages } = await import("$lib/dispatcharr/pagination");
-const { encrypt } = await import("$lib/crypto/encryption");
+const { encrypt, decrypt } = await import("$lib/crypto/encryption");
 const { generateXcPassword } = await import("$lib/crypto/passwords");
 const { sanitizeUsername, provisionUser } = await import("../provisioner");
 
@@ -118,15 +122,25 @@ beforeEach(() => {
   vi.mocked(appendAuditLog).mockReset();
   vi.mocked(createUser).mockReset();
   vi.mocked(getUser).mockReset();
+  vi.mocked(updateUser).mockReset();
   vi.mocked(fetchAllPages).mockReset();
   vi.mocked(encrypt)
     .mockReset()
     .mockImplementation(async (plaintext: string) => `encrypted:${plaintext}`);
+  vi.mocked(decrypt)
+    .mockReset()
+    .mockImplementation(async (ciphertext: string) => ciphertext.replace(/^encrypted:/, ""));
   vi.mocked(generateXcPassword).mockReset().mockReturnValue("generated-password-24");
 
   // Default: no existing mappings
   vi.mocked(getUserMappingByPlexId).mockReturnValue(null);
   vi.mocked(getAllUserMappings).mockReturnValue([]);
+
+  // Default: updateUser succeeds (reactivation re-asserts custom_properties.xc_password)
+  vi.mocked(updateUser).mockResolvedValue({
+    ok: true,
+    data: makeDispatcharrUser(),
+  } as DispatcharrResult<DispatcharrUser>);
 
   // Default: remote fetch fails (no client.baseUrl in mockClient), matching pre-existing behavior
   vi.mocked(fetchAllPages).mockResolvedValue({
@@ -208,17 +222,23 @@ describe("provisionUser — already_exists", () => {
 // ---------------------------------------------------------------------------
 
 describe("provisionUser — reactivation", () => {
-  it("reactivates inactive mapping by verifying user exists on Dispatcharr", async () => {
-    const inactive = makeMapping({ is_active: 0, dispatcharr_user_id: 42 });
+  it("reactivates inactive mapping and re-asserts custom_properties.xc_password on Dispatcharr, merging existing keys", async () => {
+    const inactive = makeMapping({
+      is_active: 0,
+      dispatcharr_user_id: 42,
+      dispatcharr_xc_password_enc: "encrypted:legacy-password",
+      provisioning_mode: "automatic",
+    });
     const reactivated = makeMapping({ is_active: 1, dispatcharr_user_id: 42 });
 
     vi.mocked(getUserMappingByPlexId)
       .mockReturnValueOnce(inactive) // initial lookup
       .mockReturnValueOnce(reactivated); // re-read after update
 
+    // Remote user already has an existing_key in custom_properties that must be preserved
     vi.mocked(getUser).mockResolvedValue({
       ok: true,
-      data: makeDispatcharrUser(),
+      data: makeDispatcharrUser({ custom_properties: { existing_key: "foo", xc_password: "old" } }),
     } as DispatcharrResult<DispatcharrUser>);
 
     const result = await provisionUser(mockClient, {
@@ -232,11 +252,174 @@ describe("provisionUser — reactivation", () => {
       expect(result.mapping.is_active).toBe(1);
     }
     expect(getUser).toHaveBeenCalledWith(mockClient, 42);
+    // Stored password is decrypted and pushed to Dispatcharr — no churn, bookmarked URLs keep working
+    expect(decrypt).toHaveBeenCalledWith("encrypted:legacy-password", "credential-encryption");
+    // existing_key must be preserved; xc_password is updated (not replaced wholesale)
+    expect(updateUser).toHaveBeenCalledWith(mockClient, 42, {
+      custom_properties: { existing_key: "foo", xc_password: "legacy-password" },
+    });
     expect(updateUserMapping).toHaveBeenCalledWith(inactive.id, { is_active: 1 });
     expect(appendAuditLog).toHaveBeenCalledWith({
       action: "user.provisioned",
       detail: { plex_username: "TestUser", reactivated: true },
     });
+  });
+
+  it("defaults custom_properties to {} when remote user has no custom_properties", async () => {
+    const inactive = makeMapping({
+      is_active: 0,
+      dispatcharr_user_id: 42,
+      dispatcharr_xc_password_enc: "encrypted:legacy-password",
+      provisioning_mode: "automatic",
+    });
+    const reactivated = makeMapping({ is_active: 1, dispatcharr_user_id: 42 });
+
+    vi.mocked(getUserMappingByPlexId)
+      .mockReturnValueOnce(inactive)
+      .mockReturnValueOnce(reactivated);
+
+    // Remote user has no custom_properties field at all
+    vi.mocked(getUser).mockResolvedValue({
+      ok: true,
+      data: makeDispatcharrUser(),
+    } as DispatcharrResult<DispatcharrUser>);
+
+    const result = await provisionUser(mockClient, {
+      plexIdentity: makePlexIdentity(),
+      mode: "automatic",
+      groupIds: [1, 2],
+    });
+
+    expect(result.status).toBe("reactivated");
+    expect(decrypt).toHaveBeenCalledWith("encrypted:legacy-password", "credential-encryption");
+    // No existing keys — only xc_password should be in the PATCH
+    expect(updateUser).toHaveBeenCalledWith(mockClient, 42, {
+      custom_properties: { xc_password: "legacy-password" },
+    });
+  });
+
+  it("skips remote xc_password refresh for self_managed reactivation (no local password)", async () => {
+    const inactive = makeMapping({
+      is_active: 0,
+      dispatcharr_user_id: 42,
+      dispatcharr_xc_password_enc: null,
+      provisioning_mode: "self_managed",
+    });
+    const reactivated = makeMapping({ is_active: 1, dispatcharr_user_id: 42 });
+
+    vi.mocked(getUserMappingByPlexId)
+      .mockReturnValueOnce(inactive)
+      .mockReturnValueOnce(reactivated);
+
+    vi.mocked(getUser).mockResolvedValue({
+      ok: true,
+      data: makeDispatcharrUser(),
+    } as DispatcharrResult<DispatcharrUser>);
+
+    const result = await provisionUser(mockClient, {
+      plexIdentity: makePlexIdentity(),
+      mode: "self_managed",
+      groupIds: [1, 2],
+    });
+
+    expect(result.status).toBe("reactivated");
+    expect(updateUser).not.toHaveBeenCalled();
+    expect(decrypt).not.toHaveBeenCalled();
+    expect(updateUserMapping).toHaveBeenCalledWith(inactive.id, { is_active: 1 });
+  });
+
+  it("skips remote xc_password refresh for automatic mapping with null stored password", async () => {
+    const inactive = makeMapping({
+      is_active: 0,
+      dispatcharr_user_id: 42,
+      dispatcharr_xc_password_enc: null,
+      provisioning_mode: "automatic",
+    });
+    const reactivated = makeMapping({ is_active: 1, dispatcharr_user_id: 42 });
+
+    vi.mocked(getUserMappingByPlexId)
+      .mockReturnValueOnce(inactive)
+      .mockReturnValueOnce(reactivated);
+
+    vi.mocked(getUser).mockResolvedValue({
+      ok: true,
+      data: makeDispatcharrUser(),
+    } as DispatcharrResult<DispatcharrUser>);
+
+    const result = await provisionUser(mockClient, {
+      plexIdentity: makePlexIdentity(),
+      mode: "automatic",
+      groupIds: [1, 2],
+    });
+
+    expect(result.status).toBe("reactivated");
+    expect(updateUser).not.toHaveBeenCalled();
+    expect(decrypt).not.toHaveBeenCalled();
+  });
+
+  it("returns failed when decrypting the stored xc_password throws", async () => {
+    const inactive = makeMapping({
+      is_active: 0,
+      dispatcharr_user_id: 42,
+      dispatcharr_xc_password_enc: "encrypted:legacy-password",
+      provisioning_mode: "automatic",
+    });
+    vi.mocked(getUserMappingByPlexId).mockReturnValue(inactive);
+
+    vi.mocked(getUser).mockResolvedValue({
+      ok: true,
+      data: makeDispatcharrUser(),
+    } as DispatcharrResult<DispatcharrUser>);
+
+    vi.mocked(decrypt).mockRejectedValueOnce(new Error("authentication tag mismatch"));
+
+    const result = await provisionUser(mockClient, {
+      plexIdentity: makePlexIdentity(),
+      mode: "automatic",
+      groupIds: [1, 2],
+    });
+
+    expect(result.status).toBe("failed");
+    if (result.status === "failed") {
+      expect(result.error).toContain("Failed to decrypt stored xc_password");
+    }
+    expect(updateUser).not.toHaveBeenCalled();
+    expect(updateUserMapping).not.toHaveBeenCalled();
+  });
+
+  it("returns failed when the remote xc_password PATCH fails", async () => {
+    const inactive = makeMapping({
+      is_active: 0,
+      dispatcharr_user_id: 42,
+      dispatcharr_xc_password_enc: "encrypted:legacy-password",
+      provisioning_mode: "automatic",
+    });
+    vi.mocked(getUserMappingByPlexId).mockReturnValue(inactive);
+
+    vi.mocked(getUser).mockResolvedValue({
+      ok: true,
+      data: makeDispatcharrUser(),
+    } as DispatcharrResult<DispatcharrUser>);
+
+    vi.mocked(updateUser).mockResolvedValueOnce({
+      ok: false,
+      error: "validation_error",
+      message: "Dispatcharr rejected custom_properties update",
+    } as DispatcharrResult<DispatcharrUser>);
+
+    const result = await provisionUser(mockClient, {
+      plexIdentity: makePlexIdentity(),
+      mode: "automatic",
+      groupIds: [1, 2],
+    });
+
+    expect(result.status).toBe("failed");
+    if (result.status === "failed") {
+      expect(result.error).toBe("Dispatcharr rejected custom_properties update");
+    }
+    // Must NOT flip is_active or audit before the remote refresh succeeds
+    expect(updateUserMapping).not.toHaveBeenCalled();
+    expect(appendAuditLog).not.toHaveBeenCalled();
   });
 
   it("returns failed when Dispatcharr getUser fails with non-not_found error", async () => {
@@ -393,10 +576,13 @@ describe("provisionUser — create (automatic mode)", () => {
     }
 
     // Verify createUser was called with correct data (no is_active/groups — not in API)
-    // is_staff is omitted for non-staff users to avoid sending unnecessary fields
+    // is_staff is omitted for non-staff users to avoid sending unnecessary fields.
+    // custom_properties.xc_password mirrors the Django password so Dispatcharr's
+    // Xtream-Codes endpoints (/get.php, /player_api.php) authenticate correctly.
     expect(createUser).toHaveBeenCalledWith(mockClient, {
       username: "testuser",
       password: "generated-password-24",
+      custom_properties: { xc_password: "generated-password-24" },
     });
 
     // Verify password was encrypted for automatic mode
@@ -462,10 +648,12 @@ describe("provisionUser — create (self_managed mode)", () => {
       }),
     );
 
-    // is_staff should be omitted for non-staff users
+    // is_staff should be omitted for non-staff users; xc_password is set so
+    // /get.php authenticates even when the Django password is admin-reset later.
     expect(createUser).toHaveBeenCalledWith(mockClient, {
       username: "testuser",
       password: "generated-password-24",
+      custom_properties: { xc_password: "generated-password-24" },
     });
   });
 });
@@ -499,10 +687,14 @@ describe("provisionUser — create (staff mode)", () => {
       expect(result.initialPassword).toBe("generated-password-24");
     }
 
-    // is_staff should be true
+    // is_staff should be true, and xc_password must still be forwarded so the
+    // staff user's /get.php URL works.
     expect(createUser).toHaveBeenCalledWith(
       mockClient,
-      expect.objectContaining({ is_staff: true }),
+      expect.objectContaining({
+        is_staff: true,
+        custom_properties: { xc_password: "generated-password-24" },
+      }),
     );
 
     // No password encryption

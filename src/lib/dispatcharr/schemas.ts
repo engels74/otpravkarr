@@ -15,6 +15,11 @@ import { z } from "zod";
  * Fields the API returns but we don't use locally (accepted via passthrough):
  *   api_key, user_level, channel_profiles, custom_properties, avatar_config,
  *   stream_limit, is_superuser, last_login, date_joined, first_name, last_name
+ *
+ * Note: `custom_properties.xc_password` is the credential Dispatcharr's
+ * Xtream-Codes endpoints (`/get.php`, `/player_api.php`) authenticate against.
+ * It is written during provisioning (see CreateUserData) and is distinct from
+ * the Django `password` field used for admin/UI login.
  */
 export const DispatcharrUserSchema = z
   .object({

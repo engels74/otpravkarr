@@ -10,6 +10,10 @@ const flatArraySchema = z.array(DispatcharrUserSchema);
 /**
  * Fields accepted by POST /api/accounts/users/ per the Dispatcharr OpenAPI spec.
  * Only `username` and `password` are required. Other writable fields are optional.
+ *
+ * `custom_properties.xc_password` is the credential checked by Dispatcharr's
+ * Xtream-Codes endpoints (`/get.php`, `/player_api.php`); the Django `password`
+ * field above only covers the admin/UI login.
  */
 export interface CreateUserData {
   username: string;
@@ -22,6 +26,7 @@ export interface CreateUserData {
   stream_limit?: number;
   first_name?: string;
   last_name?: string;
+  custom_properties?: Record<string, unknown>;
 }
 
 /**
@@ -39,6 +44,7 @@ export type UpdateUserData = Partial<{
   stream_limit: number;
   first_name: string;
   last_name: string;
+  custom_properties: Record<string, unknown>;
 }>;
 
 export async function listUsers(

@@ -9,6 +9,7 @@ interface Props {
 let { size = "default", class: className }: Props = $props();
 
 const iconSize = $derived(size === "sm" ? "h-6 w-6" : "h-7 w-7");
+const intrinsicSize = $derived(size === "sm" ? 24 : 28);
 const labelSize = $derived(size === "sm" ? "text-xs" : "text-sm");
 </script>
 
@@ -17,8 +18,8 @@ const labelSize = $derived(size === "sm" ? "text-xs" : "text-sm");
     src="/otpravkarr-icon.svg"
     alt=""
     aria-hidden="true"
-    width="28"
-    height="28"
+    width={intrinsicSize}
+    height={intrinsicSize}
     decoding="async"
     class={cn(
       "shrink-0 rounded-md ring-1 ring-border/60 shadow-sm",

@@ -148,6 +148,7 @@ const setupGate: Handle = async ({ event, resolve }) => {
     event.url.pathname !== "/api/health" &&
     !event.url.pathname.startsWith("/_app/") &&
     event.url.pathname !== "/favicon.ico" &&
+    event.url.pathname !== "/favicon.svg" &&
     event.url.pathname !== "/otpravkarr-icon.svg" &&
     event.url.pathname !== "/robots.txt"
   ) {

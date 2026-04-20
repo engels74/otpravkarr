@@ -288,4 +288,24 @@ describe("isTransientPlexError", () => {
     expect(isTransientPlexError(null)).toBe(true);
     expect(isTransientPlexError(undefined)).toBe(true);
   });
+
+  it("returns true for PlexAuthError wrapping the plex-api network signature", () => {
+    const err = new Error(
+      "OAuth initiation failed: Unable to connect. Is the computer able to access the url?",
+    );
+    err.name = "PlexAuthError";
+    expect(isTransientPlexError(err)).toBe(true);
+  });
+
+  it("returns true for plain Error carrying the plex-api network signature", () => {
+    expect(
+      isTransientPlexError(new Error("Unable to connect. Is the computer able to access the url?")),
+    ).toBe(true);
+  });
+
+  it("returns false for PlexAuthError with a non-transient message", () => {
+    const err = new Error("OAuth initiation failed: unauthorized");
+    err.name = "PlexAuthError";
+    expect(isTransientPlexError(err)).toBe(false);
+  });
 });

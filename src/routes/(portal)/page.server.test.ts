@@ -441,6 +441,91 @@ describe("portal page server", () => {
 
       expect(mocks.initiateOAuth).toHaveBeenCalledWith("http://localhost:3000/auth/plex");
     });
+
+    it("retries transient Plex network failures then succeeds", async () => {
+      vi.useFakeTimers();
+      try {
+        const { PlexAuthError } = await import("$lib/plex/types");
+        const transientMessage =
+          "OAuth initiation failed: Unable to connect. Is the computer able to access the url?";
+        mocks.initiateOAuth
+          .mockRejectedValueOnce(new PlexAuthError(transientMessage))
+          .mockRejectedValueOnce(new PlexAuthError(transientMessage))
+          .mockResolvedValueOnce({
+            id: "oauth-pin-id",
+            uri: "https://app.plex.tv/auth#?clientID=xxx&code=yyy",
+          });
+
+        const { actions } = await import("./+page.server");
+        const action = actions.signInWithPlex;
+        if (!action) throw new Error("signInWithPlex action is undefined");
+
+        const { cookies, set } = createCookies();
+        const promise = Promise.resolve(
+          action({
+            url: new URL("http://localhost"),
+            cookies,
+            getClientAddress: () => "127.0.0.1",
+          } as unknown as Parameters<typeof action>[0]),
+        );
+        // Catch redirect early so the rejection is not unhandled while we pump timers.
+        const settled = promise.catch((e: unknown) => e);
+
+        // Advance past every retry delay (max 4s per attempt with jitter).
+        await vi.advanceTimersByTimeAsync(10_000);
+
+        await expect(settled).resolves.toMatchObject({
+          status: 303,
+          location: "https://app.plex.tv/auth#?clientID=xxx&code=yyy",
+        });
+        expect(mocks.initiateOAuth).toHaveBeenCalledTimes(3);
+        expect(set).toHaveBeenCalledWith(
+          "otpravkarr_oauth_id",
+          "oauth-pin-id",
+          expect.objectContaining({ path: "/" }),
+        );
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("returns plex_unreachable after exhausting transient retries", async () => {
+      vi.useFakeTimers();
+      try {
+        const { PlexAuthError } = await import("$lib/plex/types");
+        const transientMessage =
+          "OAuth initiation failed: Unable to connect. Is the computer able to access the url?";
+        mocks.initiateOAuth.mockRejectedValue(new PlexAuthError(transientMessage));
+
+        const { actions } = await import("./+page.server");
+        const action = actions.signInWithPlex;
+        if (!action) throw new Error("signInWithPlex action is undefined");
+
+        const { cookies } = createCookies();
+        const promise = action({
+          url: new URL("http://localhost"),
+          cookies,
+          getClientAddress: () => "127.0.0.1",
+        } as unknown as Parameters<typeof action>[0]);
+
+        await vi.advanceTimersByTimeAsync(30_000);
+
+        const result = await promise;
+        expect(result).toMatchObject({
+          status: 502,
+          data: { error: "plex_unreachable" },
+        });
+        // 1 initial attempt + 3 retries (OAUTH_INITIATE_RETRY.maxRetries).
+        expect(mocks.initiateOAuth).toHaveBeenCalledTimes(4);
+      } finally {
+        mocks.initiateOAuth.mockReset();
+        mocks.initiateOAuth.mockImplementation(async (_forwardUrl: string) => ({
+          id: "oauth-pin-id",
+          uri: "https://app.plex.tv/auth#?clientID=xxx&code=yyy",
+        }));
+        vi.useRealTimers();
+      }
+    });
   });
 
   // ── refreshCredentials ──

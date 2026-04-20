@@ -62,9 +62,12 @@ export async function getFredTvAssets(): Promise<FredTvAssets> {
     return data;
   } catch {
     if (cache) {
+      cache = { data: cache.data, fetchedAt: now };
       return cache.data;
     }
-    return { msi: null, deb: null, rpm: null };
+    const fallback: FredTvAssets = { msi: null, deb: null, rpm: null };
+    cache = { data: fallback, fetchedAt: now };
+    return fallback;
   }
 }
 

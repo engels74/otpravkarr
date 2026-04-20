@@ -92,6 +92,42 @@ describe("getFredTvAssets", () => {
     expect(result).toEqual({ msi: null, deb: null, rpm: null });
   });
 
+  it("does not re-hit GitHub on subsequent calls after a cold-start failure", async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new Error("network unavailable"));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await getFredTvAssets();
+    await getFredTvAssets();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not re-hit GitHub on subsequent calls after a stale-cache failure", async () => {
+    vi.useFakeTimers();
+    try {
+      const primeMock = mockFetchOnce({
+        ok: true,
+        json: () => ({
+          assets: [{ name: "release.msi", browser_download_url: "https://example.com/fred.msi" }],
+        }),
+      });
+      await getFredTvAssets();
+      expect(primeMock).toHaveBeenCalledTimes(1);
+
+      vi.advanceTimersByTime(3_700_000);
+      const failMock = vi.fn().mockRejectedValue(new Error("outage"));
+      vi.stubGlobal("fetch", failMock);
+
+      const first = await getFredTvAssets();
+      const second = await getFredTvAssets();
+
+      expect(failMock).toHaveBeenCalledTimes(1);
+      expect(second).toEqual(first);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("leaves an asset key null when the matching extension is missing", async () => {
     mockFetchOnce({
       ok: true,

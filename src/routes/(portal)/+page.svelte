@@ -368,13 +368,16 @@ function enhanceDownload() {
                 {#if platform.installMethods.length > 0}
                   <div class="flex flex-wrap gap-2">
                     {#each platform.installMethods as method, mi (method.label)}
+                      {@const isFirstLink =
+                        method.type === "link" &&
+                        platform.installMethods.slice(0, mi).every((m) => m.type !== "link")}
                       {#if method.type === "link"}
                         <Button
                           href={method.value}
                           target="_blank"
                           rel="noopener noreferrer"
                           variant="outline"
-                          class={mi === 0 ? "cta-glow" : ""}
+                          class={isFirstLink ? "cta-glow" : ""}
                         >
                           <DownloadIcon class="mr-2 h-4 w-4" aria-hidden="true" />
                           {method.label}

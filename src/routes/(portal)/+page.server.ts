@@ -21,6 +21,7 @@ import {
 import { getDispatcharrPublicUrl } from "$lib/url/resolve.server";
 import { buildPlayerApiUrl, buildXcUrl } from "$lib/url/xc";
 import { generateQRCodeDataUri } from "$lib/utils/qrcode";
+import { isTransientPlexError, type RetryOptions, retryAsync } from "$lib/utils/retry";
 
 const OAUTH_COOKIE_NAME = "otpravkarr_oauth_id";
 const INITIAL_PASSWORD_COOKIE_NAME = "otpravkarr_initial_password";
@@ -30,6 +31,12 @@ const OAUTH_COOKIE_OPTIONS = {
   secure: isSecure,
   sameSite: "lax" as const,
   maxAge: 600,
+};
+const OAUTH_INITIATE_RETRY: RetryOptions = {
+  maxRetries: 3,
+  baseDelayMs: 500,
+  maxDelayMs: 4_000,
+  jitter: 0.5,
 };
 
 interface PlatformEntry {
@@ -119,13 +126,20 @@ export const actions: Actions = {
       const forwardOrigin = selectActivePublicOrigin(env.ORIGIN, url.origin);
       const forwardUrl = `${forwardOrigin}/auth/plex`;
 
-      const result = await initiateOAuth(forwardUrl);
+      const result = await retryAsync(
+        () => initiateOAuth(forwardUrl),
+        isTransientPlexError,
+        OAUTH_INITIATE_RETRY,
+      );
 
       cookies.set(OAUTH_COOKIE_NAME, result.id, OAUTH_COOKIE_OPTIONS);
 
       throw redirect(303, result.uri);
     } catch (err: unknown) {
       if (err instanceof PlexAuthError) {
+        if (isTransientPlexError(err)) {
+          return fail(502, { error: "plex_unreachable" });
+        }
         return fail(502, { error: "plex_error", message: err.message });
       }
       throw err;

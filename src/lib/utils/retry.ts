@@ -108,8 +108,15 @@ export function isTransientResultError(result: { error: string; retryable?: bool
 }
 
 export function isTransientPlexError(error: unknown): boolean {
-  if (error instanceof Error && error.name === "PlexAuthError") {
-    return false;
+  if (error instanceof Error) {
+    // plex-api surfaces transient network failures with this exact message,
+    // which oauth.ts re-wraps into PlexAuthError("OAuth initiation failed: ...").
+    if (error.message.includes("Unable to connect. Is the computer able to access the url?")) {
+      return true;
+    }
+    if (error.name === "PlexAuthError") {
+      return false;
+    }
   }
   return true;
 }

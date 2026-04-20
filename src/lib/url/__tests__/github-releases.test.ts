@@ -58,6 +58,7 @@ describe("getFredTvAssets", () => {
         Accept: "application/vnd.github+json",
         "User-Agent": "otpravkarr",
       },
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -141,6 +142,61 @@ describe("getFredTvAssets", () => {
       msi: "https://example.com/fred.msi",
       deb: null,
       rpm: null,
+    });
+  });
+
+  it("dedupes concurrent callers — fetch called only once when cache is cold", async () => {
+    let resolveFetch!: (value: unknown) => void;
+    const fetchPromise = new Promise((resolve) => {
+      resolveFetch = resolve;
+    });
+    const fetchMock = vi.fn().mockReturnValue(fetchPromise);
+    vi.stubGlobal("fetch", fetchMock);
+
+    // Fire two concurrent calls before the first fetch resolves
+    const p1 = getFredTvAssets();
+    const p2 = getFredTvAssets();
+
+    // Resolve the single in-flight fetch
+    resolveFetch({
+      ok: true,
+      json: async () => ({
+        assets: [
+          {
+            name: "Fred.TV_1.9.1_x64_en-US.msi",
+            browser_download_url: "https://example.com/fred.msi",
+          },
+        ],
+      }),
+    });
+
+    const [r1, r2] = await Promise.all([p1, p2]);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(r1).toEqual(r2);
+    expect(r1.msi).toBe("https://example.com/fred.msi");
+  });
+
+  it("resolves assets with uppercase extensions (case-insensitive matching)", async () => {
+    mockFetchOnce({
+      ok: true,
+      json: () => ({
+        assets: [
+          { name: "Fred.TV_1.9.1.MSI", browser_download_url: "https://example.com/fred.msi" },
+          { name: "fred-tv_1.9.1_amd64.DEB", browser_download_url: "https://example.com/fred.deb" },
+          {
+            name: "fred-tv-1.9.1.x86_64.RPM",
+            browser_download_url: "https://example.com/fred.rpm",
+          },
+        ],
+      }),
+    });
+
+    const result = await getFredTvAssets();
+    expect(result).toEqual({
+      msi: "https://example.com/fred.msi",
+      deb: "https://example.com/fred.deb",
+      rpm: "https://example.com/fred.rpm",
     });
   });
 });

@@ -13,6 +13,7 @@ interface CacheEntry {
 }
 
 let cache: CacheEntry | null = null;
+let inFlight: Promise<FredTvAssets> | null = null;
 
 interface GitHubAsset {
   name: string;
@@ -24,7 +25,9 @@ interface GitHubRelease {
 }
 
 function findAsset(assets: GitHubAsset[], ext: ".msi" | ".deb" | ".rpm"): string | null {
-  const match = assets.find((a) => typeof a.name === "string" && a.name.endsWith(ext));
+  const match = assets.find(
+    (a) => typeof a.name === "string" && a.name.toLowerCase().endsWith(ext),
+  );
   return match ? match.browser_download_url : null;
 }
 
@@ -41,12 +44,24 @@ export async function getFredTvAssets(): Promise<FredTvAssets> {
     return cache.data;
   }
 
+  if (inFlight) {
+    return inFlight;
+  }
+
+  inFlight = _doFetch(now).finally(() => {
+    inFlight = null;
+  });
+  return inFlight;
+}
+
+async function _doFetch(now: number): Promise<FredTvAssets> {
   try {
     const res = await fetch(RELEASES_API_URL, {
       headers: {
         Accept: "application/vnd.github+json",
         "User-Agent": "otpravkarr",
       },
+      signal: AbortSignal.timeout(10_000),
     });
     if (!res.ok) {
       throw new Error(`GitHub API returned ${res.status}`);
@@ -74,4 +89,5 @@ export async function getFredTvAssets(): Promise<FredTvAssets> {
 /** Test-only: clear the module-level cache between runs. */
 export function _resetCacheForTesting(): void {
   cache = null;
+  inFlight = null;
 }

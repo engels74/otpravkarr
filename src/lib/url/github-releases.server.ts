@@ -26,7 +26,10 @@ interface GitHubRelease {
 
 function findAsset(assets: GitHubAsset[], ext: ".msi" | ".deb" | ".rpm"): string | null {
   const match = assets.find(
-    (a) => typeof a.name === "string" && a.name.toLowerCase().endsWith(ext),
+    (a) =>
+      typeof a.name === "string" &&
+      typeof a.browser_download_url === "string" &&
+      a.name.toLowerCase().endsWith(ext),
   );
   return match ? match.browser_download_url : null;
 }
@@ -67,7 +70,7 @@ async function _doFetch(now: number): Promise<FredTvAssets> {
       throw new Error(`GitHub API returned ${res.status}`);
     }
     const release = (await res.json()) as GitHubRelease;
-    const assets = release.assets ?? [];
+    const assets = Array.isArray(release.assets) ? release.assets : [];
     const data: FredTvAssets = {
       msi: findAsset(assets, ".msi"),
       deb: findAsset(assets, ".deb"),

@@ -93,6 +93,28 @@ describe("getFredTvAssets", () => {
     expect(result).toEqual({ msi: null, deb: null, rpm: null });
   });
 
+  it("returns null assets when the API returns a non-array assets field", async () => {
+    mockFetchOnce({
+      ok: true,
+      json: () => ({ assets: "broken" }),
+    });
+
+    const result = await getFredTvAssets();
+    expect(result).toEqual({ msi: null, deb: null, rpm: null });
+  });
+
+  it("returns null for an asset whose browser_download_url is not a string", async () => {
+    mockFetchOnce({
+      ok: true,
+      json: () => ({
+        assets: [{ name: "release.msi", browser_download_url: 42 }],
+      }),
+    });
+
+    const result = await getFredTvAssets();
+    expect(result).toEqual({ msi: null, deb: null, rpm: null });
+  });
+
   it("does not re-hit GitHub on subsequent calls after a cold-start failure", async () => {
     const fetchMock = vi.fn().mockRejectedValue(new Error("network unavailable"));
     vi.stubGlobal("fetch", fetchMock);

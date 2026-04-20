@@ -29,12 +29,22 @@ const mocks = vi.hoisted(() => ({
   ),
   generateQRCodeDataUri: vi.fn(async (_url: string) => "data:image/png;base64,qrcode"),
   getSupportedPlatforms: vi.fn(() => [
-    { id: "generic", name: "Generic", description: "Standard M3U playlist URL" },
+    {
+      id: "generic",
+      name: "Generic",
+      description: "Standard M3U playlist URL",
+      tier: "legacy",
+      supportedOS: ["windows", "linux", "macos"],
+      homepageUrl: "",
+      setupInstructions: "Copy the URL into your player.",
+    },
   ]),
   buildPlatformUrl: vi.fn((_id: string, _params: unknown) => ({
     type: "url",
     url: "http://host/get.php?username=u&password=p&type=m3u_plus",
   })),
+  resolveInstallMethods: vi.fn((_id: string, _assets: unknown) => []),
+  getFredTvAssets: vi.fn(async () => ({ msi: null, deb: null, rpm: null })),
   getDispatcharrPublicUrl: vi.fn(async () => state.configValues.dispatcharr_url ?? null),
   DispatcharrClient: vi.fn(),
   createChannelEndpoints: vi.fn(() => ({
@@ -92,6 +102,11 @@ vi.mock("$lib/url/xc", () => ({
 vi.mock("$lib/url/platforms", () => ({
   getSupportedPlatforms: mocks.getSupportedPlatforms,
   buildPlatformUrl: mocks.buildPlatformUrl,
+  resolveInstallMethods: mocks.resolveInstallMethods,
+}));
+
+vi.mock("$lib/url/github-releases.server", () => ({
+  getFredTvAssets: mocks.getFredTvAssets,
 }));
 
 vi.mock("$lib/url/m3u", () => ({

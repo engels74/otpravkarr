@@ -23,7 +23,7 @@ export class DispatcharrClient {
   constructor(baseUrl: string, apiKey: string) {
     if (!isSafeDispatcharrUrl(baseUrl)) {
       throw new Error(
-        "Refusing to send Dispatcharr API key over insecure transport — HTTPS required for non-loopback hosts",
+        "Refusing to send Dispatcharr API key over insecure transport — only https:// is accepted (http:// is allowed for loopback hosts only)",
       );
     }
     // Strip trailing slash for consistent URL joining

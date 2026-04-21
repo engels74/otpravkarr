@@ -98,7 +98,7 @@ export const DispatcharrConfigSchema = z.object({
     .url("Dispatcharr URL must be a valid URL")
     .refine(
       isSafeDispatcharrUrl,
-      "Dispatcharr URL must use HTTPS (HTTP is only allowed for localhost)",
+      "Dispatcharr URL must use HTTPS (HTTP only allowed for localhost, 127.0.0.1, or [::1])",
     ),
   dispatcharrApiKey: z.string().trim().min(1, "Dispatcharr API key is required"),
   dispatcharrExternalUrl: z

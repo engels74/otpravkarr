@@ -293,7 +293,7 @@ describe("DispatcharrConfigSchema", () => {
     expect(result.success).toBe(false);
     if (!result.success) {
       expect(result.error.issues[0]?.message).toBe(
-        "Dispatcharr URL must use HTTPS (HTTP is only allowed for localhost)",
+        "Dispatcharr URL must use HTTPS (HTTP only allowed for localhost, 127.0.0.1, or [::1])",
       );
     }
   });
@@ -356,7 +356,7 @@ describe("DispatcharrConfigSchema", () => {
     expect(result.success).toBe(false);
     if (!result.success) {
       expect(result.error.issues[0]?.message).toBe(
-        "Dispatcharr URL must use HTTPS (HTTP is only allowed for localhost)",
+        "Dispatcharr URL must use HTTPS (HTTP only allowed for localhost, 127.0.0.1, or [::1])",
       );
     }
   });

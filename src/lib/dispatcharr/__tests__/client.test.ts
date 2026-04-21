@@ -54,6 +54,30 @@ describe("DispatcharrClient constructor", () => {
     const client = createClient("https://dispatch.example.com");
     expect(client.baseUrl).toBe("https://dispatch.example.com");
   });
+
+  it("accepts http scheme for loopback hosts", () => {
+    expect(() => createClient("http://localhost:8000", "key")).not.toThrow();
+    expect(() => createClient("http://127.0.0.1:8000", "key")).not.toThrow();
+    expect(() => createClient("http://[::1]:8000", "key")).not.toThrow();
+  });
+
+  it("throws when baseUrl uses http scheme for non-loopback host", () => {
+    expect(() => createClient("http://dispatcharr.lan:8000", "key")).toThrow(
+      /only https:\/\/ is accepted/,
+    );
+  });
+
+  it("throws when baseUrl uses http scheme for non-loopback IPv4", () => {
+    expect(() => createClient("http://192.168.1.10:8000", "key")).toThrow(
+      /only https:\/\/ is accepted/,
+    );
+  });
+
+  it("throws when baseUrl uses disallowed protocol", () => {
+    expect(() => createClient("ftp://dispatch.example.com", "key")).toThrow(
+      /only https:\/\/ is accepted/,
+    );
+  });
 });
 
 describe("DispatcharrClient.request", () => {

@@ -78,12 +78,28 @@ export function isHttpUrl(value: string): boolean {
   }
 }
 
+const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
+
+export function isSafeDispatcharrUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol === "https:") return true;
+    if (parsed.protocol !== "http:") return false;
+    return LOOPBACK_HOSTS.has(parsed.hostname);
+  } catch {
+    return false;
+  }
+}
+
 export const DispatcharrConfigSchema = z.object({
   dispatcharrUrl: z
     .string()
     .trim()
     .url("Dispatcharr URL must be a valid URL")
-    .refine(isHttpUrl, "Dispatcharr URL must use http or https"),
+    .refine(
+      isSafeDispatcharrUrl,
+      "Dispatcharr URL must use HTTPS (HTTP only allowed for localhost, 127.0.0.1, or [::1])",
+    ),
   dispatcharrApiKey: z.string().trim().min(1, "Dispatcharr API key is required"),
   dispatcharrExternalUrl: z
     .string()

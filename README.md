@@ -76,15 +76,23 @@ Complete the wizard immediately; the bootstrap token is single-use.
 
 ## API
 
-**`GET /api/health`** — Returns application health status.
+**`GET /api/health`** — Returns coarse application health status (unauthenticated). The `status` field is one of `"ok"`, `"degraded"`, or `"unhealthy"`.
 
 ```json
 {
-  "status": "ok | degraded | unhealthy",
+  "status": "ok"
+}
+```
+
+**`GET /api/internal/health`** — Returns the full health payload (admin session required). The top-level `status` is one of `"ok"`, `"degraded"`, or `"unhealthy"`; `checks.dispatcharr.status` is `"connected"` or `"disconnected"`.
+
+```json
+{
+  "status": "ok",
   "checks": {
-    "plex": { "status": "...", "lastChecked": "..." },
-    "dispatcharr": { "status": "connected | disconnected", "reachable": true, "authValid": true, "lastChecked": "..." },
-    "database": { "status": "...", "lastChecked": "..." }
+    "plex": { "status": "healthy", "lastChecked": "2026-01-01T00:00:00.000Z" },
+    "dispatcharr": { "status": "connected", "reachable": true, "authValid": true, "lastChecked": "2026-01-01T00:00:00.000Z" },
+    "database": { "status": "healthy", "lastChecked": "2026-01-01T00:00:00.000Z" }
   },
   "uptime": 3600,
   "version": "0.0.1"

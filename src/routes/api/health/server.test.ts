@@ -4,19 +4,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   getHealthStatus: vi.fn(),
-  getServerStartTime: vi.fn(() => Date.now() - 60_000),
 }));
 
 vi.mock("$lib/scheduler/jobs/health", () => ({
   getHealthStatus: mocks.getHealthStatus,
-}));
-
-vi.mock("$lib/server/uptime", () => ({
-  getServerStartTime: mocks.getServerStartTime,
-}));
-
-vi.mock("../../../../package.json", () => ({
-  version: "0.0.1",
 }));
 
 function healthyStatus() {
@@ -46,11 +37,9 @@ function unhealthyStatus() {
 describe("GET /api/health", () => {
   beforeEach(() => {
     mocks.getHealthStatus.mockReset();
-    mocks.getServerStartTime.mockReset();
-    mocks.getServerStartTime.mockReturnValue(Date.now() - 60_000);
   });
 
-  it("returns ok when all checks pass", async () => {
+  it("returns only { status } with status ok when all checks pass", async () => {
     mocks.getHealthStatus.mockReturnValue(healthyStatus());
 
     const { GET } = await import("./+server");
@@ -60,15 +49,7 @@ describe("GET /api/health", () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(body.status).toBe("ok");
-    expect(body.version).toBe("0.0.1");
-    expect(body.uptime).toBeGreaterThanOrEqual(0);
-    expect(body.checks.plex.status).toBe("healthy");
-    expect(body.checks.dispatcharr.status).toBe("connected");
-    expect(body.checks.dispatcharr.reachable).toBe(true);
-    expect(body.checks.dispatcharr.authValid).toBe(true);
-    expect(body.checks.database.status).toBe("healthy");
-    expect(body.checks.database.lastChecked).toBe("2026-01-01T00:00:00.000Z");
+    expect(body).toEqual({ status: "ok" });
   });
 
   it("returns degraded when plex is unreachable", async () => {
@@ -81,8 +62,7 @@ describe("GET /api/health", () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(body.status).toBe("degraded");
-    expect(body.checks.plex.status).toBe("unreachable");
+    expect(body).toEqual({ status: "degraded" });
   });
 
   it("returns unhealthy when database is unhealthy", async () => {
@@ -95,8 +75,7 @@ describe("GET /api/health", () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(body.status).toBe("unhealthy");
-    expect(body.checks.database.status).toBe("unhealthy");
+    expect(body).toEqual({ status: "unhealthy" });
   });
 
   it("returns degraded when dispatcharr auth is invalid", async () => {
@@ -111,15 +90,10 @@ describe("GET /api/health", () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(body.status).toBe("degraded");
-    expect(body.checks.dispatcharr.status).toBe("disconnected");
-    expect(body.checks.dispatcharr.reachable).toBe(true);
-    expect(body.checks.dispatcharr.authValid).toBe(false);
+    expect(body).toEqual({ status: "degraded" });
   });
 
-  it("computes uptime from server start time", async () => {
-    const startTime = Date.now() - 120_000;
-    mocks.getServerStartTime.mockReturnValue(startTime);
+  it("does not expose version, uptime, or component details", async () => {
     mocks.getHealthStatus.mockReturnValue(healthyStatus());
 
     const { GET } = await import("./+server");
@@ -128,7 +102,9 @@ describe("GET /api/health", () => {
     >[0]);
     const body = await response.json();
 
-    expect(body.uptime).toBeGreaterThanOrEqual(119);
-    expect(body.uptime).toBeLessThanOrEqual(121);
+    expect(body).not.toHaveProperty("version");
+    expect(body).not.toHaveProperty("uptime");
+    expect(body).not.toHaveProperty("checks");
+    expect(Object.keys(body)).toEqual(["status"]);
   });
 });

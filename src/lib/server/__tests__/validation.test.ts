@@ -261,12 +261,57 @@ describe("DispatcharrConfigSchema", () => {
     expect(result.success).toBe(true);
   });
 
-  it("accepts http scheme for dispatcharrUrl", () => {
+  it("accepts http scheme for loopback hostname localhost", () => {
     const result = DispatcharrConfigSchema.safeParse({
-      dispatcharrUrl: "http://dispatcharr.internal",
+      dispatcharrUrl: "http://localhost:8000",
       dispatcharrApiKey: "api-key-123",
     });
     expect(result.success).toBe(true);
+  });
+
+  it("accepts http scheme for loopback IPv4 127.0.0.1", () => {
+    const result = DispatcharrConfigSchema.safeParse({
+      dispatcharrUrl: "http://127.0.0.1:8000",
+      dispatcharrApiKey: "api-key-123",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts http scheme for loopback IPv6 [::1]", () => {
+    const result = DispatcharrConfigSchema.safeParse({
+      dispatcharrUrl: "http://[::1]:8000",
+      dispatcharrApiKey: "api-key-123",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects http scheme for non-loopback hostname", () => {
+    const result = DispatcharrConfigSchema.safeParse({
+      dispatcharrUrl: "http://dispatcharr.lan:8000",
+      dispatcharrApiKey: "api-key-123",
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues[0]?.message).toBe(
+        "Dispatcharr URL must use HTTPS (HTTP only allowed for localhost, 127.0.0.1, or [::1])",
+      );
+    }
+  });
+
+  it("rejects http scheme for non-loopback IPv4", () => {
+    const result = DispatcharrConfigSchema.safeParse({
+      dispatcharrUrl: "http://192.168.1.10:8000",
+      dispatcharrApiKey: "api-key-123",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects ftp scheme for dispatcharrUrl", () => {
+    const result = DispatcharrConfigSchema.safeParse({
+      dispatcharrUrl: "ftp://dispatcharr.example.com",
+      dispatcharrApiKey: "api-key-123",
+    });
+    expect(result.success).toBe(false);
   });
 
   it("accepts optional dispatcharrExternalUrl with https scheme", () => {
@@ -310,7 +355,9 @@ describe("DispatcharrConfigSchema", () => {
     });
     expect(result.success).toBe(false);
     if (!result.success) {
-      expect(result.error.issues[0]?.message).toBe("Dispatcharr URL must use http or https");
+      expect(result.error.issues[0]?.message).toBe(
+        "Dispatcharr URL must use HTTPS (HTTP only allowed for localhost, 127.0.0.1, or [::1])",
+      );
     }
   });
 

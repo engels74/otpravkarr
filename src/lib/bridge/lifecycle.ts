@@ -47,8 +47,44 @@ export async function rotateCredentials(
   // Encrypt before pushing to Dispatcharr — if encrypt fails, remote state is unchanged
   const encryptedPassword = await encrypt(newPassword, CREDENTIAL_PURPOSE);
 
+  const getResult = await retryResult(
+    () => getUser(client, dispatcharrUserId),
+    isTransientResultError,
+  );
+  if (!getResult.ok) {
+    if (getResult.error === "not_found") {
+      try {
+        updateUserMapping(mapping.id, {
+          is_active: 0,
+          dispatcharr_user_id: null,
+          dispatcharr_username: null,
+          dispatcharr_xc_password_enc: null,
+        });
+      } catch (dbErr) {
+        throw new Error(
+          `Cannot rotate credentials: Dispatcharr user no longer exists and cleanup failed: ${dbErr instanceof Error ? dbErr.message : String(dbErr)}`,
+        );
+      }
+      throw new Error(
+        "Cannot rotate credentials: Dispatcharr user no longer exists (cleaned up stale mapping)",
+      );
+    }
+    throw new Error(`Failed to rotate credentials on Dispatcharr: ${getResult.message}`);
+  }
+
+  const existingCustomProps =
+    getResult.data.custom_properties != null &&
+    typeof getResult.data.custom_properties === "object" &&
+    !Array.isArray(getResult.data.custom_properties)
+      ? (getResult.data.custom_properties as Record<string, unknown>)
+      : {};
+
   const result = await retryResult(
-    () => updateUser(client, dispatcharrUserId, { password: newPassword }),
+    () =>
+      updateUser(client, dispatcharrUserId, {
+        password: newPassword,
+        custom_properties: { ...existingCustomProps, xc_password: newPassword },
+      }),
     isTransientResultError,
   );
   if (!result.ok) {

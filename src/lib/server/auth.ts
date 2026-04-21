@@ -100,6 +100,14 @@ export async function requireUser(event: RequestEvent): Promise<UserMapping> {
     throw redirect(303, "/");
   }
 
+  if (user.is_active !== 1) {
+    // Do not destroy the session here — the portal root page displays a
+    // revoked view for inactive users by reading locals.user directly, and
+    // the user may still want to sign out cleanly. Sensitive routes that go
+    // through requireUser() must not see an inactive user.
+    throw redirect(303, "/");
+  }
+
   return user;
 }
 

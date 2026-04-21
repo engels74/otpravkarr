@@ -102,4 +102,50 @@ describe("validateOrigin", () => {
       validateOrigin(makeRequest("POST", "http://Example.com"), ["http://example.com"]),
     ).not.toThrow();
   });
+
+  it("canonicalizes explicit http default port (:80) on Origin header", () => {
+    expect(() =>
+      validateOrigin(makeRequest("POST", "http://example.com:80"), ["http://example.com"]),
+    ).not.toThrow();
+  });
+
+  it("canonicalizes explicit http default port (:80) on allowed origin", () => {
+    expect(() =>
+      validateOrigin(makeRequest("POST", "http://example.com"), ["http://example.com:80"]),
+    ).not.toThrow();
+  });
+
+  it("canonicalizes explicit https default port (:443) on Origin header", () => {
+    expect(() =>
+      validateOrigin(makeRequest("POST", "https://example.com:443"), ["https://example.com"]),
+    ).not.toThrow();
+  });
+
+  it("canonicalizes explicit https default port (:443) on allowed origin", () => {
+    expect(() =>
+      validateOrigin(makeRequest("POST", "https://example.com"), ["https://example.com:443"]),
+    ).not.toThrow();
+  });
+
+  it("throws 403 with 'invalid Origin header' on Origin: null", () => {
+    try {
+      validateOrigin(makeRequest("POST", "null"), ["http://example.com"]);
+      expect.unreachable("should have thrown");
+    } catch (e: unknown) {
+      const err = e as { status: number; body: { message: string } };
+      expect(err.status).toBe(403);
+      expect(err.body.message).toBe("CSRF validation failed: invalid Origin header");
+    }
+  });
+
+  it("throws 403 with 'invalid Origin header' on malformed Origin", () => {
+    try {
+      validateOrigin(makeRequest("POST", "not-a-url"), ["http://example.com"]);
+      expect.unreachable("should have thrown");
+    } catch (e: unknown) {
+      const err = e as { status: number; body: { message: string } };
+      expect(err.status).toBe(403);
+      expect(err.body.message).toBe("CSRF validation failed: invalid Origin header");
+    }
+  });
 });

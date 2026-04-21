@@ -261,6 +261,32 @@ describe("DispatcharrConfigSchema", () => {
     expect(result.success).toBe(true);
   });
 
+  it("accepts http scheme for dispatcharrUrl", () => {
+    const result = DispatcharrConfigSchema.safeParse({
+      dispatcharrUrl: "http://dispatcharr.internal",
+      dispatcharrApiKey: "api-key-123",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts optional dispatcharrExternalUrl with https scheme", () => {
+    const result = DispatcharrConfigSchema.safeParse({
+      dispatcharrUrl: "https://dispatcharr.example.com",
+      dispatcharrApiKey: "api-key-123",
+      dispatcharrExternalUrl: "https://public.example.com",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts empty string for dispatcharrExternalUrl", () => {
+    const result = DispatcharrConfigSchema.safeParse({
+      dispatcharrUrl: "https://dispatcharr.example.com",
+      dispatcharrApiKey: "api-key-123",
+      dispatcharrExternalUrl: "",
+    });
+    expect(result.success).toBe(true);
+  });
+
   it("rejects invalid URL", () => {
     const result = DispatcharrConfigSchema.safeParse({
       dispatcharrUrl: "not-a-url",
@@ -273,6 +299,63 @@ describe("DispatcharrConfigSchema", () => {
     const result = DispatcharrConfigSchema.safeParse({
       dispatcharrUrl: "https://dispatcharr.example.com",
       dispatcharrApiKey: "",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects javascript: protocol for dispatcharrUrl", () => {
+    const result = DispatcharrConfigSchema.safeParse({
+      dispatcharrUrl: "javascript:alert(1)",
+      dispatcharrApiKey: "api-key-123",
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues[0]?.message).toBe("Dispatcharr URL must use http or https");
+    }
+  });
+
+  it("rejects data: protocol for dispatcharrUrl", () => {
+    const result = DispatcharrConfigSchema.safeParse({
+      dispatcharrUrl: "data:text/html,<script>alert(1)</script>",
+      dispatcharrApiKey: "api-key-123",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects file: protocol for dispatcharrUrl", () => {
+    const result = DispatcharrConfigSchema.safeParse({
+      dispatcharrUrl: "file:///etc/passwd",
+      dispatcharrApiKey: "api-key-123",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects javascript: protocol for dispatcharrExternalUrl", () => {
+    const result = DispatcharrConfigSchema.safeParse({
+      dispatcharrUrl: "https://dispatcharr.example.com",
+      dispatcharrApiKey: "api-key-123",
+      dispatcharrExternalUrl: "javascript:alert(1)",
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues[0]?.message).toBe("External URL must use http or https");
+    }
+  });
+
+  it("rejects data: protocol for dispatcharrExternalUrl", () => {
+    const result = DispatcharrConfigSchema.safeParse({
+      dispatcharrUrl: "https://dispatcharr.example.com",
+      dispatcharrApiKey: "api-key-123",
+      dispatcharrExternalUrl: "data:text/html,<script>alert(1)</script>",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects file: protocol for dispatcharrExternalUrl", () => {
+    const result = DispatcharrConfigSchema.safeParse({
+      dispatcharrUrl: "https://dispatcharr.example.com",
+      dispatcharrApiKey: "api-key-123",
+      dispatcharrExternalUrl: "file:///etc/passwd",
     });
     expect(result.success).toBe(false);
   });

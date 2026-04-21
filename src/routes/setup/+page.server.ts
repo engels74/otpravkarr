@@ -288,6 +288,13 @@ export const actions: Actions = {
       return claimError;
     }
 
+    if (adminExists()) {
+      return fail(409, {
+        error: "An admin account already exists for this installation",
+        field: "username",
+      });
+    }
+
     const formData = await request.formData();
     const parsed = CreateAdminSchema.safeParse({
       username: sanitizeString(String(formData.get("username") ?? "")),

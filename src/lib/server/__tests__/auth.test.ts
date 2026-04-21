@@ -495,6 +495,24 @@ describe("auth guards", () => {
       expect(result).toEqual(validUser);
     });
 
+    it("throws redirect when user is_active is 0 without deleting the session cookie", async () => {
+      mockSession = { ...validUserSession };
+      mockUser = { ...validUser, is_active: 0 };
+      const { event, deleteSpy } = createMockEvent("sess-user-1");
+
+      try {
+        await requireUser(event);
+        expect.unreachable("should have thrown");
+      } catch (e: unknown) {
+        const err = e as { type: string; status: number; location: string };
+        expect(err.type).toBe("redirect");
+        expect(err.status).toBe(303);
+        expect(err.location).toBe("/");
+      }
+
+      expect(deleteSpy).not.toHaveBeenCalled();
+    });
+
     it("does not delete cookie on missing cookie path", async () => {
       const { event, deleteSpy } = createMockEvent(undefined);
 

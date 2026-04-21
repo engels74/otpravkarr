@@ -68,13 +68,28 @@ export const PlexTokenSchema = z.object({
 // Setup — Dispatcharr Config
 // ---------------------------------------------------------------------------
 
+const HTTP_PROTOCOLS = new Set(["http:", "https:"]);
+
+export function isHttpUrl(value: string): boolean {
+  try {
+    return HTTP_PROTOCOLS.has(new URL(value).protocol);
+  } catch {
+    return false;
+  }
+}
+
 export const DispatcharrConfigSchema = z.object({
-  dispatcharrUrl: z.string().trim().url("Dispatcharr URL must be a valid URL"),
+  dispatcharrUrl: z
+    .string()
+    .trim()
+    .url("Dispatcharr URL must be a valid URL")
+    .refine(isHttpUrl, "Dispatcharr URL must use http or https"),
   dispatcharrApiKey: z.string().trim().min(1, "Dispatcharr API key is required"),
   dispatcharrExternalUrl: z
     .string()
     .trim()
     .url("External URL must be a valid URL")
+    .refine(isHttpUrl, "External URL must use http or https")
     .optional()
     .or(z.literal("")),
 });

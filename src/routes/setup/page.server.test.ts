@@ -801,6 +801,38 @@ describe("createAdmin", () => {
       data: { error: "Admin account could not be created", field: "username" },
     });
   });
+
+  it("returns 409 and does not insert a second admin when one already exists", async () => {
+    mocks.adminExists.mockReturnValue(true);
+    const { cookies } = createCookies({ [setupClaimCookie]: "proof-123" });
+    const body = new FormData();
+    body.set("username", "admin");
+    body.set("password", "passwordpassword");
+    body.set("confirmPassword", "passwordpassword");
+
+    const request = new Request("http://localhost/setup", { method: "POST", body });
+
+    const { actions } = await import("./+page.server");
+    const createAdmin = actions.createAdmin;
+    if (!createAdmin) {
+      throw new Error("createAdmin action is undefined");
+    }
+
+    const result = await createAdmin({
+      request,
+      cookies,
+    } as unknown as Parameters<typeof createAdmin>[0]);
+
+    expect(result).toMatchObject({
+      status: 409,
+      data: {
+        error: "An admin account already exists for this installation",
+        field: "username",
+      },
+    });
+    expect(mocks.createAdmin).not.toHaveBeenCalled();
+    expect(mocks.hashAdminPassword).not.toHaveBeenCalled();
+  });
 });
 
 describe("configureOrigin", () => {

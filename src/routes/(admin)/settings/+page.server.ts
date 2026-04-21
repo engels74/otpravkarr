@@ -10,7 +10,12 @@ import { createSyncJob } from "$lib/scheduler/jobs/sync";
 import { scheduler } from "$lib/scheduler/runner";
 import { requireAdmin } from "$lib/server/auth";
 import { parseAndNormalizeOrigins } from "$lib/server/origins";
-import { AuditRetentionSchema, SyncIntervalSchema, sanitizeString } from "$lib/server/validation";
+import {
+  AuditRetentionSchema,
+  isHttpUrl,
+  SyncIntervalSchema,
+  sanitizeString,
+} from "$lib/server/validation";
 import type { Actions, PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async (event) => {
@@ -160,6 +165,14 @@ export const actions: Actions = {
       return fail(400, { error: "Dispatcharr URL and API key are required" });
     }
 
+    if (!isHttpUrl(url)) {
+      return fail(400, { error: "Dispatcharr URL must use http or https" });
+    }
+
+    if (externalUrl && !isHttpUrl(externalUrl)) {
+      return fail(400, { error: "External URL must use http or https" });
+    }
+
     const client = new DispatcharrClient(url, effectiveKey);
     const healthResult = await createHealthEndpoints(client).checkHealth();
     if (!healthResult.ok) {
@@ -172,14 +185,6 @@ export const actions: Actions = {
 
     if (!healthResult.data.authValid) {
       return fail(400, { error: "Dispatcharr API key is invalid" });
-    }
-
-    if (externalUrl) {
-      try {
-        new URL(externalUrl);
-      } catch {
-        return fail(400, { error: "External URL is not a valid URL" });
-      }
     }
 
     if (url !== (currentUrl ?? "")) {

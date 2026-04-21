@@ -12,11 +12,16 @@ import { PlexAuthError } from "$lib/plex/types";
 import { isSecure } from "$lib/server/auth";
 import { selectActivePublicOrigin } from "$lib/server/origins";
 import { oauthLimiter } from "$lib/server/ratelimit";
+import { getFredTvAssets } from "$lib/url/github-releases.server";
 import { generateM3U } from "$lib/url/m3u";
 import {
   buildPlatformUrl,
   getSupportedPlatforms,
+  type InstallMethod,
+  type Platform,
+  type PlatformInfo,
   type PlatformUrlResult,
+  resolveInstallMethods,
 } from "$lib/url/platforms";
 import { getDispatcharrPublicUrl } from "$lib/url/resolve.server";
 import { buildPlayerApiUrl, buildXcUrl } from "$lib/url/xc";
@@ -40,9 +45,14 @@ const OAUTH_INITIATE_RETRY: RetryOptions = {
 };
 
 interface PlatformEntry {
-  id: string;
+  id: Platform;
   name: string;
   description: string;
+  tier: PlatformInfo["tier"];
+  supportedOS: PlatformInfo["supportedOS"];
+  homepageUrl: string;
+  setupInstructions: string;
+  installMethods: InstallMethod[];
   result: PlatformUrlResult;
 }
 
@@ -95,11 +105,17 @@ export const load = async ({ locals, cookies }: RequestEvent) => {
   const playerApiUrl = buildPlayerApiUrl(xcParams);
   const qrCodeDataUri = await generateQRCodeDataUri(xcUrl);
 
+  const fredTvAssets = await getFredTvAssets();
   const platforms = getSupportedPlatforms();
   const platformUrls: PlatformEntry[] = platforms.map((p) => ({
     id: p.id,
     name: p.name,
     description: p.description,
+    tier: p.tier,
+    supportedOS: p.supportedOS,
+    homepageUrl: p.homepageUrl,
+    setupInstructions: p.setupInstructions,
+    installMethods: resolveInstallMethods(p.id, fredTvAssets),
     result: buildPlatformUrl(p.id, xcParams),
   }));
 

@@ -17,14 +17,33 @@ import { Button } from "$lib/components/ui/button";
 import * as Card from "$lib/components/ui/card";
 import * as Tabs from "$lib/components/ui/tabs";
 import { userSession } from "$lib/state/user-session.svelte";
-import type { PlatformUrlResult } from "$lib/url/platforms";
+import type {
+  InstallMethod,
+  Platform,
+  PlatformInfo,
+  PlatformUrlResult,
+  SupportedOS,
+} from "$lib/url/platforms";
 
 interface PlatformEntry {
-  id: string;
+  id: Platform;
   name: string;
   description: string;
+  tier: PlatformInfo["tier"];
+  supportedOS: SupportedOS[];
+  homepageUrl: string;
+  setupInstructions: string;
+  installMethods: InstallMethod[];
   result: PlatformUrlResult;
 }
+
+const OS_LABELS: Record<SupportedOS, string> = {
+  windows: "Windows",
+  linux: "Linux",
+  macos: "macOS",
+};
+
+const REVEAL_CLASSES = ["reveal-1", "reveal-2", "reveal-3", "reveal-3"] as const;
 
 interface Props {
   data:
@@ -62,15 +81,6 @@ const ERROR_MESSAGES: Record<string, string> = {
   refresh_failed: "Failed to refresh credentials. Please try again.",
   channels_failed: "Failed to fetch channel list. Please try again.",
   m3u_failed: "Failed to generate playlist. Please try again.",
-};
-
-const PLATFORM_INSTRUCTIONS: Record<string, string> = {
-  vlc: "Open VLC, go to Media > Open Network Stream, and paste the URL below.",
-  tivimate:
-    "Open TiviMate, go to Add Playlist > Xtream Codes, then enter the host, username, and password shown below.",
-  smarters:
-    "Open IPTV Smarters, tap Login, then enter the host URL, username, and password shown below.",
-  generic: "Copy the M3U playlist URL and paste it into your IPTV player's playlist settings.",
 };
 
 let { data, form }: Props = $props();
@@ -335,28 +345,95 @@ function enhanceDownload() {
           </div>
         </Tabs.Content>
 
-        <Tabs.Content value="setup" class="mt-4 space-y-4">
-          {#each data.platformUrls as platform (platform.id)}
-            <Card.Root>
-              <Card.Header>
-                <Card.Title class="text-base">{platform.name}</Card.Title>
-                <Card.Description>{platform.description}</Card.Description>
-              </Card.Header>
-              <Card.Content class="space-y-3">
-                <p class="text-sm text-muted-foreground">
-                  {PLATFORM_INSTRUCTIONS[platform.id] ?? "Copy the URL below and paste it into your player."}
-                </p>
+        <Tabs.Content value="setup" class="mt-4 space-y-6">
+          {@const recommended = data.platformUrls.filter((p) => p.tier === "recommended")}
+          {@const fallback = data.platformUrls.filter((p) => p.tier === "legacy")}
 
-                {#if platform.result.type === "url"}
-                  <CopyableField label="URL" value={platform.result.url} />
-                {:else if platform.result.type === "fields"}
-                  <CopyableField label="Host" value={platform.result.fields.host} />
-                  <CopyableField label="Username" value={platform.result.fields.username} />
-                  <CopyableField label="Password" value={platform.result.fields.password} />
+          <section class="space-y-3">
+            <p class="eyebrow">RECOMMENDED</p>
+            {#each recommended as platform, i (platform.id)}
+              <div class="reveal {REVEAL_CLASSES[i] ?? 'reveal-3'} surface-elevated p-6 space-y-4">
+                <div class="space-y-2">
+                  <div class="flex flex-wrap items-center gap-2">
+                    <h3 class="font-display text-2xl font-normal tracking-tight">
+                      {platform.name}
+                    </h3>
+                    {#each platform.supportedOS as os (os)}
+                      <Badge variant="secondary">{OS_LABELS[os]}</Badge>
+                    {/each}
+                  </div>
+                  <p class="text-sm text-muted-foreground">{platform.setupInstructions}</p>
+                </div>
+
+                {#if platform.installMethods.length > 0}
+                  <div class="flex flex-wrap gap-2">
+                    {#each platform.installMethods as method, mi (method.label)}
+                      {@const isFirstLink =
+                        method.type === "link" &&
+                        platform.installMethods.slice(0, mi).every((m) => m.type !== "link")}
+                      {#if method.type === "link"}
+                        <Button
+                          href={method.value}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          variant="outline"
+                          class={isFirstLink ? "cta-glow" : ""}
+                        >
+                          <DownloadIcon class="mr-2 h-4 w-4" aria-hidden="true" />
+                          {method.label}
+                        </Button>
+                      {:else}
+                        <div class="w-full">
+                          <CopyableField label={method.label} value={method.value} />
+                        </div>
+                      {/if}
+                    {/each}
+                  </div>
                 {/if}
-              </Card.Content>
-            </Card.Root>
-          {/each}
+
+                {#if platform.id === "fredtv"}
+                  <p class="text-xs text-muted-foreground">
+                    A Microsoft Store build is also available, but it's paid.
+                  </p>
+                {/if}
+
+                <CopyableField label="M3U Playlist URL" value={platform.result.url} />
+              </div>
+            {/each}
+          </section>
+
+          <section class="space-y-3">
+            <p class="eyebrow mt-10">FALLBACK</p>
+            {#each fallback as platform, i (platform.id)}
+              <div class="reveal {REVEAL_CLASSES[i + recommended.length] ?? 'reveal-3'} surface p-5 space-y-3">
+                <div class="space-y-2">
+                  <div class="flex flex-wrap items-center gap-2">
+                    <h3 class="text-base font-medium">{platform.name}</h3>
+                    <Badge variant="outline">Legacy</Badge>
+                    {#each platform.supportedOS as os (os)}
+                      <Badge variant="secondary">{OS_LABELS[os]}</Badge>
+                    {/each}
+                  </div>
+                  <p class="text-sm text-muted-foreground">
+                    {platform.setupInstructions}
+                    {#if platform.id === "vlc"}
+                      {" "}Download from
+                      <a
+                        href={platform.homepageUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="inline-flex items-center gap-1 text-primary hover:underline"
+                      >
+                        videolan.org<ExternalLinkIcon class="h-3.5 w-3.5" aria-hidden="true" />
+                      </a>.
+                    {/if}
+                  </p>
+                </div>
+
+                <CopyableField label="M3U Playlist URL" value={platform.result.url} />
+              </div>
+            {/each}
+          </section>
         </Tabs.Content>
       </Tabs.Root>
     </div>

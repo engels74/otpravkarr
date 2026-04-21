@@ -76,7 +76,15 @@ Complete the wizard immediately; the bootstrap token is single-use.
 
 ## API
 
-**`GET /api/health`** — Returns application health status.
+**`GET /api/health`** — Returns coarse application health status (unauthenticated).
+
+```json
+{
+  "status": "ok | degraded | unhealthy"
+}
+```
+
+**`GET /api/internal/health`** — Returns the full health payload (admin session required).
 
 ```json
 {

@@ -231,7 +231,9 @@ export const load = async ({ url, cookies }: RequestEvent) => {
     hasActiveSetupClaim(cookies),
     deriveSetupResumePhase(),
   ]);
-  const { dispatcharrGroups, dispatcharrProfiles } = await loadDispatcharrSetupPayload(resumePhase);
+  const { dispatcharrGroups, dispatcharrProfiles } = claimActive
+    ? await loadDispatcharrSetupPayload(resumePhase)
+    : { dispatcharrGroups: [], dispatcharrProfiles: [] };
 
   return {
     tokenProvided: tokenFromUrl !== null,

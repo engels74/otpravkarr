@@ -102,6 +102,16 @@ function makeDispatcharrUser(overrides: Partial<DispatcharrUser> = {}): Dispatch
   };
 }
 
+function makeDispatcharrUserWithProps(
+  customProperties: Record<string, unknown>,
+  overrides: Partial<DispatcharrUser> = {},
+): DispatcharrUser {
+  return {
+    ...makeDispatcharrUser(overrides),
+    custom_properties: customProperties,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -119,6 +129,10 @@ beforeEach(() => {
 describe("rotateCredentials", () => {
   it("generates new password, sends to Dispatcharr, encrypts, updates DB", async () => {
     const mapping = makeMapping();
+    mockGetUser.mockResolvedValueOnce({
+      ok: true,
+      data: makeDispatcharrUserWithProps({ xc_password: "old", device_fingerprint: "abc" }),
+    });
     mockUpdateUser.mockResolvedValueOnce({ ok: true, data: makeDispatcharrUser() });
 
     await rotateCredentials(mockClient, mapping);
@@ -126,6 +140,7 @@ describe("rotateCredentials", () => {
     expect(mockGenerateXcPassword).toHaveBeenCalledOnce();
     expect(mockUpdateUser).toHaveBeenCalledWith(mockClient, 10, {
       password: "new-xc-password",
+      custom_properties: { device_fingerprint: "abc", xc_password: "new-xc-password" },
     });
     expect(mockEncrypt).toHaveBeenCalledWith("new-xc-password", "credential-encryption");
     expect(mockUpdateUserMapping).toHaveBeenCalledWith(1, {
@@ -135,6 +150,10 @@ describe("rotateCredentials", () => {
 
   it("writes audit log entry with correct action", async () => {
     const mapping = makeMapping();
+    mockGetUser.mockResolvedValueOnce({
+      ok: true,
+      data: makeDispatcharrUserWithProps({ xc_password: "old", device_fingerprint: "abc" }),
+    });
     mockUpdateUser.mockResolvedValueOnce({ ok: true, data: makeDispatcharrUser() });
 
     await rotateCredentials(mockClient, mapping);
@@ -150,6 +169,10 @@ describe("rotateCredentials", () => {
 
   it("throws when Dispatcharr update fails", async () => {
     const mapping = makeMapping();
+    mockGetUser.mockResolvedValueOnce({
+      ok: true,
+      data: makeDispatcharrUserWithProps({ xc_password: "old" }),
+    });
     mockUpdateUser.mockResolvedValueOnce({
       ok: false,
       error: "auth_failure",
@@ -189,8 +212,12 @@ describe("rotateCredentials", () => {
     expect(mockAppendAuditLog).not.toHaveBeenCalled();
   });
 
-  it("clears stale Dispatcharr fields on not_found and throws", async () => {
+  it("clears stale Dispatcharr fields when PATCH returns not_found and throws", async () => {
     const mapping = makeMapping();
+    mockGetUser.mockResolvedValueOnce({
+      ok: true,
+      data: makeDispatcharrUserWithProps({ xc_password: "old" }),
+    });
     mockUpdateUser.mockResolvedValueOnce({
       ok: false,
       error: "not_found",
@@ -209,6 +236,28 @@ describe("rotateCredentials", () => {
       dispatcharr_xc_password_enc: null,
     });
     // Should NOT write credential rotation audit (rotation didn't happen)
+    expect(mockAppendAuditLog).not.toHaveBeenCalled();
+  });
+
+  it("clears stale Dispatcharr fields when getUser returns not_found and throws", async () => {
+    const mapping = makeMapping();
+    mockGetUser.mockResolvedValueOnce({
+      ok: false,
+      error: "not_found",
+      message: "Not Found",
+    });
+
+    await expect(rotateCredentials(mockClient, mapping)).rejects.toThrow(
+      "Cannot rotate credentials: Dispatcharr user no longer exists (cleaned up stale mapping)",
+    );
+
+    expect(mockUpdateUser).not.toHaveBeenCalled();
+    expect(mockUpdateUserMapping).toHaveBeenCalledWith(1, {
+      is_active: 0,
+      dispatcharr_user_id: null,
+      dispatcharr_username: null,
+      dispatcharr_xc_password_enc: null,
+    });
     expect(mockAppendAuditLog).not.toHaveBeenCalled();
   });
 });

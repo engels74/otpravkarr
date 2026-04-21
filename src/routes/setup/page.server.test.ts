@@ -182,7 +182,7 @@ const setupPrerequisiteConfig = {
   plex_server_url: "http://plex.local",
   plex_admin_token: "plex-admin-token",
   plex_machine_id: "plex-machine-id",
-  dispatcharr_url: "http://dispatcharr.local",
+  dispatcharr_url: "https://dispatcharr.local",
   dispatcharr_api_key: "dispatcharr-api-key",
   allowed_origins: JSON.stringify(["http://localhost:3000"]),
 } as const;
@@ -353,6 +353,76 @@ describe("setup claim ownership", () => {
       dispatcharrProfiles: [{ id: 40, name: "Profile 40" }],
       tokenProvided: false,
     });
+  });
+
+  it("does not load Dispatcharr groups/profiles when claim is not active", async () => {
+    mocks.adminExists.mockReturnValue(true);
+    state.configValues.set(setupClaimedKey, "true");
+    state.configValues.set(setupClaimProofKey, "owner-proof");
+    state.configValues.set(setupClaimedAtKey, String(Date.now()));
+    for (const [key, value] of Object.entries(setupPrerequisiteConfig)) {
+      state.configValues.set(key, value);
+    }
+    // No matching claim cookie — request is unclaimed
+    const { cookies } = createCookies();
+
+    const groups = await import("$lib/dispatcharr/endpoints/groups");
+    const profiles = await import("$lib/dispatcharr/endpoints/profiles");
+    vi.mocked(groups.listGroups).mockClear();
+    vi.mocked(profiles.listProfiles).mockClear();
+
+    const { load } = await import("./+page.server");
+    const result = await load({
+      url: new URL("http://localhost/setup"),
+      cookies,
+    } as unknown as Parameters<typeof load>[0]);
+
+    expect(result).toMatchObject({
+      claimActive: false,
+      resumePhase: 5,
+      dispatcharrGroups: [],
+      dispatcharrProfiles: [],
+    });
+    // Dispatcharr client must not be consulted when the requester has not claimed setup
+    expect(groups.listGroups).not.toHaveBeenCalled();
+    expect(profiles.listProfiles).not.toHaveBeenCalled();
+  });
+
+  it("loads Dispatcharr groups/profiles when claim is active at phase 5", async () => {
+    mocks.adminExists.mockReturnValue(true);
+    state.configValues.set(setupClaimedKey, "true");
+    state.configValues.set(setupClaimProofKey, "proof-123");
+    state.configValues.set(setupClaimedAtKey, String(Date.now()));
+    for (const [key, value] of Object.entries(setupPrerequisiteConfig)) {
+      state.configValues.set(key, value);
+    }
+    const { cookies } = createCookies({ [setupClaimCookie]: "proof-123" });
+
+    const groups = await import("$lib/dispatcharr/endpoints/groups");
+    const profiles = await import("$lib/dispatcharr/endpoints/profiles");
+    vi.mocked(groups.listGroups).mockResolvedValueOnce({
+      ok: true,
+      data: [{ id: 50, name: "Group 50", permissions: [] }],
+    });
+    vi.mocked(profiles.listProfiles).mockResolvedValueOnce({
+      ok: true,
+      data: [{ id: 60, name: "Profile 60" }],
+    });
+
+    const { load } = await import("./+page.server");
+    const result = await load({
+      url: new URL("http://localhost/setup"),
+      cookies,
+    } as unknown as Parameters<typeof load>[0]);
+
+    expect(result).toMatchObject({
+      claimActive: true,
+      resumePhase: 5,
+      dispatcharrGroups: [{ id: 50, name: "Group 50" }],
+      dispatcharrProfiles: [{ id: 60, name: "Profile 60" }],
+    });
+    expect(groups.listGroups).toHaveBeenCalled();
+    expect(profiles.listProfiles).toHaveBeenCalled();
   });
 
   it("blocks setup actions when instance is claimed by a different requester", async () => {
@@ -1516,7 +1586,7 @@ describe("configureDispatcharr retry behavior", () => {
     } as unknown as ReturnType<typeof healthModule.createHealthEndpoints>);
 
     const body = new FormData();
-    body.set("dispatcharrUrl", "http://dispatcharr.local");
+    body.set("dispatcharrUrl", "https://dispatcharr.local");
     body.set("dispatcharrApiKey", "test-key");
     const request = new Request("http://localhost/setup", { method: "POST", body });
 
@@ -1546,7 +1616,7 @@ describe("configureDispatcharr retry behavior", () => {
     } as unknown as ReturnType<typeof healthModule.createHealthEndpoints>);
 
     const body = new FormData();
-    body.set("dispatcharrUrl", "http://dispatcharr.local");
+    body.set("dispatcharrUrl", "https://dispatcharr.local");
     body.set("dispatcharrApiKey", "test-key");
     const request = new Request("http://localhost/setup", { method: "POST", body });
 
@@ -1575,7 +1645,7 @@ describe("configureDispatcharr retry behavior", () => {
     } as unknown as ReturnType<typeof healthModule.createHealthEndpoints>);
 
     const body = new FormData();
-    body.set("dispatcharrUrl", "http://dispatcharr.local");
+    body.set("dispatcharrUrl", "https://dispatcharr.local");
     body.set("dispatcharrApiKey", "test-key");
     const request = new Request("http://localhost/setup", { method: "POST", body });
 
@@ -1607,7 +1677,7 @@ describe("configureDispatcharr retry behavior", () => {
     } as unknown as ReturnType<typeof healthModule.createHealthEndpoints>);
 
     const body = new FormData();
-    body.set("dispatcharrUrl", "http://dispatcharr.local");
+    body.set("dispatcharrUrl", "https://dispatcharr.local");
     body.set("dispatcharrApiKey", "test-key");
     body.set("dispatcharrExternalUrl", "https://external.example.com");
     const request = new Request("http://localhost/setup", { method: "POST", body });
@@ -1640,7 +1710,7 @@ describe("configureDispatcharr retry behavior", () => {
     } as unknown as ReturnType<typeof healthModule.createHealthEndpoints>);
 
     const body = new FormData();
-    body.set("dispatcharrUrl", "http://dispatcharr.local");
+    body.set("dispatcharrUrl", "https://dispatcharr.local");
     body.set("dispatcharrApiKey", "test-key");
     const request = new Request("http://localhost/setup", { method: "POST", body });
 
@@ -1669,7 +1739,7 @@ describe("configureDispatcharr retry behavior", () => {
     } as unknown as ReturnType<typeof healthModule.createHealthEndpoints>);
 
     const body = new FormData();
-    body.set("dispatcharrUrl", "http://dispatcharr.local");
+    body.set("dispatcharrUrl", "https://dispatcharr.local");
     body.set("dispatcharrApiKey", "test-key");
     const request = new Request("http://localhost/setup", { method: "POST", body });
 

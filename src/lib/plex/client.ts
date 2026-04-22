@@ -1,12 +1,19 @@
 import { BadRequest, MyPlexAccount, NotFound, PlexServer, Unauthorized } from "@ctrl/plex";
 
+import { isSafeHttpSecretUrl } from "$lib/server/validation";
 import type { DiscoveredServer, PlexConnectionStatus, PlexServerInfo } from "./types";
 import { PlexAuthError, PlexConnectionError } from "./types";
+
+const INSECURE_PLEX_URL_MESSAGE =
+  "Refusing to send Plex token over insecure transport — only https:// is accepted (http:// is allowed for loopback hosts only)";
 
 /**
  * Validate a Plex server token by connecting and returning server metadata.
  */
 export async function validateServerToken(url: string, token: string): Promise<PlexServerInfo> {
+  if (!isSafeHttpSecretUrl(url)) {
+    throw new PlexConnectionError(INSECURE_PLEX_URL_MESSAGE);
+  }
   try {
     const server = new PlexServer(url, token);
     await server.connect();
@@ -45,6 +52,9 @@ export async function checkServerHealth(
   token: string,
   expectedMachineId: string,
 ): Promise<PlexConnectionStatus> {
+  if (!isSafeHttpSecretUrl(url)) {
+    throw new PlexConnectionError(INSECURE_PLEX_URL_MESSAGE);
+  }
   try {
     const server = new PlexServer(url, token);
     await server.connect();

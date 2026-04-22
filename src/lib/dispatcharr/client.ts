@@ -1,7 +1,7 @@
 import { type FetchOptions, ofetch } from "ofetch";
 import type { z } from "zod";
 
-import { isSafeDispatcharrUrl } from "$lib/server/validation";
+import { isSafeHttpSecretUrl } from "$lib/server/validation";
 import type { DispatcharrResult } from "./types";
 
 function formatResponseDataForLog(responseData: unknown): string {
@@ -21,7 +21,7 @@ export class DispatcharrClient {
   private readonly apiKey: string;
 
   constructor(baseUrl: string, apiKey: string) {
-    if (!isSafeDispatcharrUrl(baseUrl)) {
+    if (!isSafeHttpSecretUrl(baseUrl)) {
       throw new Error(
         "Refusing to send Dispatcharr API key over insecure transport — only https:// is accepted (http:// is allowed for loopback hosts only)",
       );

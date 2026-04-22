@@ -3,7 +3,7 @@ import { fail, redirect } from "@sveltejs/kit";
 import { verifyAdminPassword } from "$lib/crypto/passwords";
 import { getAdminByUsername } from "$lib/db/repositories/admin";
 import { appendAuditLog } from "$lib/db/repositories/audit";
-import { createSession } from "$lib/db/repositories/sessions";
+import { createSession, deleteSession } from "$lib/db/repositories/sessions";
 import { AuditAction } from "$lib/db/types";
 import { ADMIN_COOKIE_OPTIONS, ADMIN_SESSION_TTL, SESSION_COOKIE_NAME } from "$lib/server/auth";
 import { loginLimiter } from "$lib/server/ratelimit";
@@ -49,6 +49,10 @@ export const actions: Actions = {
       return fail(401, { error: "invalid_credentials" });
     }
 
+    const priorSessionId = cookies.get(SESSION_COOKIE_NAME);
+    if (priorSessionId) {
+      deleteSession(priorSessionId);
+    }
     const sessionId = createSession(admin.username, "admin", ADMIN_SESSION_TTL);
     cookies.set(SESSION_COOKIE_NAME, sessionId, ADMIN_COOKIE_OPTIONS);
 

@@ -1,7 +1,7 @@
 import { error, redirect } from "@sveltejs/kit";
 import { provisionUser } from "$lib/bridge/provisioner";
 import { getConfig } from "$lib/db/repositories/config";
-import { createSession } from "$lib/db/repositories/sessions";
+import { createSession, deleteSession } from "$lib/db/repositories/sessions";
 import { getUserMappingByPlexId, updateLastAccessed } from "$lib/db/repositories/users";
 import { DispatcharrClient } from "$lib/dispatcharr/client";
 import { getAccount } from "$lib/plex/client";
@@ -115,6 +115,10 @@ export const load: PageServerLoad = async ({ cookies }) => {
 
   // 5. Create session
   const mapping = result.mapping;
+  const priorSessionId = cookies.get(SESSION_COOKIE_NAME);
+  if (priorSessionId) {
+    deleteSession(priorSessionId);
+  }
   const sessionId = createSession(String(mapping.id), "user", USER_SESSION_TTL);
   cookies.set(SESSION_COOKIE_NAME, sessionId, USER_COOKIE_OPTIONS);
 

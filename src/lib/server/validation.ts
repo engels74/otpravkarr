@@ -59,15 +59,6 @@ export const CreateAdminSchema = z
 // Setup — Plex Token
 // ---------------------------------------------------------------------------
 
-export const PlexTokenSchema = z.object({
-  plexToken: z.string().trim().min(1, "Plex token is required"),
-  plexServerUrl: z.string().trim().url("Plex server URL must be a valid URL"),
-});
-
-// ---------------------------------------------------------------------------
-// Setup — Dispatcharr Config
-// ---------------------------------------------------------------------------
-
 const HTTP_PROTOCOLS = new Set(["http:", "https:"]);
 
 export function isHttpUrl(value: string): boolean {
@@ -80,7 +71,8 @@ export function isHttpUrl(value: string): boolean {
 
 const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
 
-export function isSafeDispatcharrUrl(value: string): boolean {
+/** Shared guard for credentialled HTTP flows (Dispatcharr, Plex): HTTPS, or HTTP on loopback only. */
+export function isSafeHttpSecretUrl(value: string): boolean {
   try {
     const parsed = new URL(value);
     if (parsed.protocol === "https:") return true;
@@ -91,13 +83,29 @@ export function isSafeDispatcharrUrl(value: string): boolean {
   }
 }
 
+export const PlexTokenSchema = z.object({
+  plexToken: z.string().trim().min(1, "Plex token is required"),
+  plexServerUrl: z
+    .string()
+    .trim()
+    .url("Plex server URL must be a valid URL")
+    .refine(
+      isSafeHttpSecretUrl,
+      "Plex server URL must use HTTPS (HTTP only allowed for localhost, 127.0.0.1, or [::1])",
+    ),
+});
+
+// ---------------------------------------------------------------------------
+// Setup — Dispatcharr Config
+// ---------------------------------------------------------------------------
+
 export const DispatcharrConfigSchema = z.object({
   dispatcharrUrl: z
     .string()
     .trim()
     .url("Dispatcharr URL must be a valid URL")
     .refine(
-      isSafeDispatcharrUrl,
+      isSafeHttpSecretUrl,
       "Dispatcharr URL must use HTTPS (HTTP only allowed for localhost, 127.0.0.1, or [::1])",
     ),
   dispatcharrApiKey: z.string().trim().min(1, "Dispatcharr API key is required"),

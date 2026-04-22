@@ -152,9 +152,25 @@ describe("validateServerToken", () => {
       PlexConnectionError,
     );
   });
+
+  it("throws PlexConnectionError for non-loopback http URL without invoking @ctrl/plex", async () => {
+    resetMocks();
+    await expect(validateServerToken("http://external.example.com", "token")).rejects.toThrow(
+      PlexConnectionError,
+    );
+    expect(mockServerConnect).not.toHaveBeenCalled();
+  });
 });
 
 describe("checkServerHealth", () => {
+  it("throws PlexConnectionError for non-loopback http URL without invoking @ctrl/plex", async () => {
+    resetMocks();
+    await expect(checkServerHealth("http://external.example.com", "token", "id")).rejects.toThrow(
+      PlexConnectionError,
+    );
+    expect(mockServerConnect).not.toHaveBeenCalled();
+  });
+
   it("returns 'healthy' when machineIdentifier matches", async () => {
     resetMocks();
     mockServerConnect.mockImplementation(async function (this: InstanceType<typeof PlexServer>) {

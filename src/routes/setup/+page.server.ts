@@ -5,7 +5,7 @@ import { hashAdminPassword } from "$lib/crypto/passwords";
 import { adminExists, createAdmin as insertAdmin } from "$lib/db/repositories/admin";
 import { appendAuditLog } from "$lib/db/repositories/audit";
 import { getConfig, setConfig } from "$lib/db/repositories/config";
-import { createSession } from "$lib/db/repositories/sessions";
+import { createSession, deleteSession } from "$lib/db/repositories/sessions";
 import { AuditAction } from "$lib/db/types";
 import { DispatcharrClient } from "$lib/dispatcharr/client";
 import { listGroups } from "$lib/dispatcharr/endpoints/groups";
@@ -401,15 +401,21 @@ export const actions: Actions = {
 
       if (plexMode === "oauth_complete") {
         const oauthId = String(formData.get("oauthId") ?? "").trim();
-        const plexServerUrl = String(formData.get("plexServerUrl") ?? "").trim();
+        const rawPlexServerUrl = sanitizeString(String(formData.get("plexServerUrl") ?? ""));
 
         if (!oauthId) {
           return fail(400, { error: "OAuth session ID is required" });
         }
 
-        if (!plexServerUrl) {
-          return fail(400, { error: "Plex server URL is required" });
+        const urlResult = PlexTokenSchema.pick({ plexServerUrl: true }).safeParse({
+          plexServerUrl: rawPlexServerUrl,
+        });
+        if (!urlResult.success) {
+          return fail(400, {
+            error: urlResult.error.issues[0]?.message ?? "Invalid Plex server URL",
+          });
         }
+        const plexServerUrl = urlResult.data.plexServerUrl;
 
         const identity = await completeOAuth(oauthId);
         const serverInfo = await retryAsync(
@@ -622,6 +628,10 @@ export const actions: Actions = {
 
     seedInitialHealth();
 
+    const priorSessionId = cookies.get(SESSION_COOKIE_NAME);
+    if (priorSessionId) {
+      deleteSession(priorSessionId);
+    }
     const sessionId = createSession(adminUsername, "admin", ADMIN_SESSION_TTL);
     cookies.set(SESSION_COOKIE_NAME, sessionId, ADMIN_COOKIE_OPTIONS);
 

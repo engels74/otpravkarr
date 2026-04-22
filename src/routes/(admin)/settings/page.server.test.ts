@@ -341,7 +341,7 @@ describe("admin settings actions", () => {
     const updatePlexConnection = actions.updatePlexConnection;
     if (!updatePlexConnection) throw new Error("updatePlexConnection action is undefined");
 
-    state.configValues.set("plex_server_url", "http://plex.local");
+    state.configValues.set("plex_server_url", "http://localhost:32400");
     state.configValues.set("plex_admin_token", "existing-token");
     state.configValues.set("plex_machine_id", "old-mid");
     mocks.validateServerToken.mockResolvedValueOnce({
@@ -351,7 +351,7 @@ describe("admin settings actions", () => {
     });
 
     const body = new FormData();
-    body.set("plex_server_url", "http://plex.local");
+    body.set("plex_server_url", "http://localhost:32400");
     body.set("plex_admin_token", "");
 
     const result = await updatePlexConnection(
@@ -359,7 +359,10 @@ describe("admin settings actions", () => {
     );
 
     expect(result).toEqual({ success: true, message: "Plex settings saved." });
-    expect(mocks.validateServerToken).toHaveBeenCalledWith("http://plex.local", "existing-token");
+    expect(mocks.validateServerToken).toHaveBeenCalledWith(
+      "http://localhost:32400",
+      "existing-token",
+    );
     expect(mocks.setConfig).toHaveBeenCalledWith("plex_machine_id", "new-mid");
     expect(state.configValues.get("plex_machine_id")).toBe("new-mid");
   });
@@ -369,14 +372,14 @@ describe("admin settings actions", () => {
     const updatePlexConnection = actions.updatePlexConnection;
     if (!updatePlexConnection) throw new Error("updatePlexConnection action is undefined");
 
-    state.configValues.set("plex_server_url", "http://plex.local");
+    state.configValues.set("plex_server_url", "http://localhost:32400");
     state.configValues.set("plex_admin_token", "existing-token");
     mocks.validateServerToken.mockRejectedValueOnce(
       new mocks.PlexConnectionError("Plex validation failed"),
     );
 
     const body = new FormData();
-    body.set("plex_server_url", "http://plex.local");
+    body.set("plex_server_url", "http://localhost:32400");
     body.set("plex_admin_token", "");
 
     const result = await updatePlexConnection(
@@ -397,7 +400,7 @@ describe("admin settings actions", () => {
     if (!updatePlexConnection) throw new Error("updatePlexConnection action is undefined");
 
     const body = new FormData();
-    body.set("plex_server_url", "http://plex.local");
+    body.set("plex_server_url", "http://localhost:32400");
     body.set("plex_admin_token", "");
 
     const result = await updatePlexConnection(
@@ -407,6 +410,30 @@ describe("admin settings actions", () => {
     expect(result).toMatchObject({
       status: 400,
       data: { error: "Plex token and server URL are required" },
+    });
+    expect(mocks.validateServerToken).not.toHaveBeenCalled();
+    expect(mocks.setConfig).not.toHaveBeenCalled();
+    expect(mocks.invalidateConfigCache).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 without calling validateServerToken when plex URL uses non-loopback http", async () => {
+    const { actions } = await import("./+page.server");
+    const updatePlexConnection = actions.updatePlexConnection;
+    if (!updatePlexConnection) throw new Error("updatePlexConnection action is undefined");
+
+    const body = new FormData();
+    body.set("plex_server_url", "http://plex.example.com:32400");
+    body.set("plex_admin_token", "admin-token");
+
+    const result = await updatePlexConnection(
+      createActionEvent(body) as unknown as Parameters<typeof updatePlexConnection>[0],
+    );
+
+    expect(result).toMatchObject({
+      status: 400,
+      data: {
+        error: expect.stringContaining("HTTPS"),
+      },
     });
     expect(mocks.validateServerToken).not.toHaveBeenCalled();
     expect(mocks.setConfig).not.toHaveBeenCalled();

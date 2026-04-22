@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => ({
   adminExists: vi.fn(() => false),
   appendAuditLog: vi.fn(),
   createSession: vi.fn(() => "session-id"),
+  deleteSession: vi.fn((_id: string) => {}),
 }));
 
 vi.mock("$lib/crypto/bootstrap", () => ({
@@ -56,6 +57,7 @@ vi.mock("$lib/db/repositories/config", () => ({
 
 vi.mock("$lib/db/repositories/sessions", () => ({
   createSession: mocks.createSession,
+  deleteSession: mocks.deleteSession,
 }));
 
 vi.mock("$lib/db/types", () => ({
@@ -230,6 +232,7 @@ function resetStateAndMocks() {
   mocks.adminExists.mockClear().mockReturnValue(false);
   mocks.appendAuditLog.mockClear();
   mocks.createSession.mockClear();
+  mocks.deleteSession.mockClear();
 }
 
 describe("setup claim ownership", () => {
@@ -1040,6 +1043,47 @@ describe("setDefaults", () => {
         value: "session-id",
       }),
     );
+    expect(mocks.deleteSession).not.toHaveBeenCalled();
+  });
+
+  it("deletes prior session before creating a new one on setup completion", async () => {
+    for (const [key, value] of Object.entries(setupPrerequisiteConfig)) {
+      state.configValues.set(key, value);
+    }
+    state.configValues.set("admin_username", "admin");
+    mocks.adminExists.mockReturnValue(true);
+
+    const { cookies } = createCookies({
+      [setupClaimCookie]: "proof-123",
+      otpravkarr_session: "prior-session-id",
+    });
+    const body = new FormData();
+    body.set("defaultGroupId", "10");
+    body.set("defaultProfileId", "20");
+    body.set("syncInterval", "15");
+    body.set("defaultProvisioningMode", "automatic");
+
+    const request = new Request("http://localhost/setup", { method: "POST", body });
+
+    const { actions } = await import("./+page.server");
+    const setDefaults = actions.setDefaults;
+    if (!setDefaults) {
+      throw new Error("setDefaults action is undefined");
+    }
+
+    await expect(
+      setDefaults({
+        request,
+        cookies,
+        getClientAddress: () => "127.0.0.1",
+      } as unknown as Parameters<typeof setDefaults>[0]),
+    ).rejects.toMatchObject({ status: 303 });
+
+    expect(mocks.deleteSession).toHaveBeenCalledWith("prior-session-id");
+    expect(mocks.createSession).toHaveBeenCalledWith("admin", "admin", 3600);
+    const deleteOrder = mocks.deleteSession.mock.invocationCallOrder[0] ?? Infinity;
+    const createOrder = mocks.createSession.mock.invocationCallOrder[0] ?? -Infinity;
+    expect(deleteOrder).toBeLessThan(createOrder);
   });
 });
 
@@ -1179,7 +1223,7 @@ describe("configurePlex oauth completion retries", () => {
     const body = new FormData();
     body.set("plexMode", "oauth_complete");
     body.set("oauthId", "oauth-id");
-    body.set("plexServerUrl", "http://plex.local");
+    body.set("plexServerUrl", "http://localhost:32400");
 
     const request = new Request("http://localhost/setup", { method: "POST", body });
 
@@ -1203,6 +1247,42 @@ describe("configurePlex oauth completion retries", () => {
     });
     expect(oauth.completeOAuth).toHaveBeenCalledOnce();
     expect(plexClient.validateServerToken).toHaveBeenCalledTimes(2);
+  });
+
+  it("rejects non-loopback http plex server URL in oauth_complete", async () => {
+    const { cookies } = createCookies({ [setupClaimCookie]: "proof-123" });
+    const oauth = await import("$lib/plex/oauth");
+    const plexClient = await import("$lib/plex/client");
+    vi.mocked(oauth.completeOAuth).mockClear();
+    vi.mocked(plexClient.validateServerToken).mockClear();
+
+    const body = new FormData();
+    body.set("plexMode", "oauth_complete");
+    body.set("oauthId", "oauth-id");
+    body.set("plexServerUrl", "http://external.example.com");
+
+    const request = new Request("http://localhost/setup", { method: "POST", body });
+
+    const { actions } = await import("./+page.server");
+    const configurePlex = actions.configurePlex;
+    if (!configurePlex) {
+      throw new Error("configurePlex action is undefined");
+    }
+
+    const result = await configurePlex({
+      request,
+      url: new URL("http://localhost/setup"),
+      cookies,
+    } as unknown as Parameters<typeof configurePlex>[0]);
+
+    expect(result).toMatchObject({
+      status: 400,
+      data: expect.objectContaining({
+        error: expect.stringContaining("Plex server URL must use HTTPS"),
+      }),
+    });
+    expect(oauth.completeOAuth).not.toHaveBeenCalled();
+    expect(plexClient.validateServerToken).not.toHaveBeenCalled();
   });
 });
 
@@ -1388,7 +1468,7 @@ describe("configurePlex retry behavior", () => {
 
     const body = new FormData();
     body.set("plexMode", "token");
-    body.set("plexServerUrl", "http://plex.local");
+    body.set("plexServerUrl", "http://localhost:32400");
     body.set("plexToken", "test-token");
     const request = new Request("http://localhost/setup", { method: "POST", body });
 
@@ -1421,7 +1501,7 @@ describe("configurePlex retry behavior", () => {
 
     const body = new FormData();
     body.set("plexMode", "token");
-    body.set("plexServerUrl", "http://plex.local");
+    body.set("plexServerUrl", "http://localhost:32400");
     body.set("plexToken", "test-token");
     const request = new Request("http://localhost/setup", { method: "POST", body });
 
@@ -1449,7 +1529,7 @@ describe("configurePlex retry behavior", () => {
 
     const body = new FormData();
     body.set("plexMode", "token");
-    body.set("plexServerUrl", "http://plex.local");
+    body.set("plexServerUrl", "http://localhost:32400");
     body.set("plexToken", "test-token");
     const request = new Request("http://localhost/setup", { method: "POST", body });
 
@@ -1480,7 +1560,7 @@ describe("configurePlex retry behavior", () => {
 
     const body = new FormData();
     body.set("plexMode", "token");
-    body.set("plexServerUrl", "http://plex.local");
+    body.set("plexServerUrl", "http://localhost:32400");
     body.set("plexToken", "test-token");
     const request = new Request("http://localhost/setup", { method: "POST", body });
 
@@ -1511,7 +1591,7 @@ describe("configurePlex retry behavior", () => {
 
     const body = new FormData();
     body.set("plexMode", "token");
-    body.set("plexServerUrl", "http://plex.local");
+    body.set("plexServerUrl", "http://localhost:32400");
     body.set("plexToken", "test-token");
     const request = new Request("http://localhost/setup", { method: "POST", body });
 
@@ -1542,7 +1622,7 @@ describe("configurePlex retry behavior", () => {
 
     const body = new FormData();
     body.set("plexMode", "token");
-    body.set("plexServerUrl", "http://plex.local");
+    body.set("plexServerUrl", "http://localhost:32400");
     body.set("plexToken", "test-token");
     const request = new Request("http://localhost/setup", { method: "POST", body });
 

@@ -5,6 +5,7 @@ import type { UserMapping } from "$lib/db/types";
 
 const state = vi.hoisted(() => ({
   oauthCookie: "oauth-pin-id" as string | undefined,
+  priorSessionCookie: undefined as string | undefined,
   configValues: {} as Record<string, string | null>,
   existingMappingByPlexId: null as UserMapping | null,
   cachedFriends: null as null | Array<{ id: number; email: string; status: string }>,
@@ -60,6 +61,7 @@ const mocks = vi.hoisted(() => ({
   getConfig: vi.fn(async (key: string) => state.configValues[key] ?? null),
   getUserMappingByPlexId: vi.fn((_plexAccountId: number) => state.existingMappingByPlexId),
   createSession: vi.fn((_ref: string, _type: string, _ttl: number) => "session-id"),
+  deleteSession: vi.fn((_id: string) => {}),
   updateLastAccessed: vi.fn((_id: number) => {}),
   DispatcharrClient: vi.fn(),
 }));
@@ -94,6 +96,7 @@ vi.mock("$lib/db/repositories/config", () => ({
 
 vi.mock("$lib/db/repositories/sessions", () => ({
   createSession: mocks.createSession,
+  deleteSession: mocks.deleteSession,
 }));
 
 vi.mock("$lib/db/repositories/users", () => ({
@@ -123,6 +126,7 @@ function createCookies() {
   const deleteFn = vi.fn();
   const get = vi.fn((name: string) => {
     if (name === "otpravkarr_oauth_id") return state.oauthCookie;
+    if (name === "otpravkarr_session") return state.priorSessionCookie;
     return undefined;
   });
   return {
@@ -134,6 +138,7 @@ function createCookies() {
 
 function resetAll() {
   state.oauthCookie = "oauth-pin-id";
+  state.priorSessionCookie = undefined;
   state.configValues = {
     plex_admin_token: "admin-plex-token",
     dispatcharr_url: "http://dispatcharr.local",
@@ -367,6 +372,24 @@ describe("plex OAuth callback", () => {
       }),
     );
     expect(mocks.updateLastAccessed).toHaveBeenCalledWith(1);
+    expect(mocks.deleteSession).not.toHaveBeenCalled();
+  });
+
+  it("deletes prior session before creating a new one on re-auth", async () => {
+    state.priorSessionCookie = "prior-session-id";
+    const { load } = await import("./+page.server");
+    const { cookies } = createCookies();
+
+    await expect(load({ cookies } as unknown as Parameters<typeof load>[0])).rejects.toMatchObject({
+      status: 303,
+      location: "/",
+    });
+
+    expect(mocks.deleteSession).toHaveBeenCalledWith("prior-session-id");
+    expect(mocks.createSession).toHaveBeenCalledWith("1", "user", 14400);
+    const deleteOrder = mocks.deleteSession.mock.invocationCallOrder[0] ?? Infinity;
+    const createOrder = mocks.createSession.mock.invocationCallOrder[0] ?? -Infinity;
+    expect(deleteOrder).toBeLessThan(createOrder);
   });
 
   it("stores one-time password in short-lived cookie for newly provisioned self-managed users", async () => {

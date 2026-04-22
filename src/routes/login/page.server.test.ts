@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
   getAdminByUsername: vi.fn((_username: string) => state.admin),
   appendAuditLog: vi.fn(),
   createSession: vi.fn(() => "session-id"),
+  deleteSession: vi.fn(),
   loginLimiterCheck: vi.fn((_address: string) => ({ allowed: state.limiterAllowed })),
 }));
 
@@ -37,6 +38,7 @@ vi.mock("$lib/db/repositories/audit", () => ({
 
 vi.mock("$lib/db/repositories/sessions", () => ({
   createSession: mocks.createSession,
+  deleteSession: mocks.deleteSession,
 }));
 
 vi.mock("$lib/server/ratelimit", () => ({
@@ -57,13 +59,19 @@ vi.mock("$lib/server/auth", () => ({
   SESSION_COOKIE_NAME: "otpravkarr_session",
 }));
 
-function createCookies() {
-  const set = vi.fn();
+function createCookies(initial: Record<string, string> = {}) {
+  const store: Record<string, string> = { ...initial };
+  const set = vi.fn((name: string, value: string) => {
+    store[name] = value;
+  });
+  const get = vi.fn((name: string) => store[name]);
   return {
     cookies: {
       set,
+      get,
     },
     set,
+    get,
   };
 }
 
@@ -97,6 +105,7 @@ function resetStateAndMocks() {
   mocks.getAdminByUsername.mockClear();
   mocks.appendAuditLog.mockClear();
   mocks.createSession.mockClear();
+  mocks.deleteSession.mockClear();
   mocks.loginLimiterCheck.mockClear();
 }
 
@@ -252,5 +261,51 @@ describe("login page server", () => {
         ipAddress: "127.0.0.1",
       }),
     );
+  });
+
+  it("deletes prior session before creating a new one on re-auth", async () => {
+    const { actions } = await import("./+page.server");
+    const login = actions.default;
+    if (!login) {
+      throw new Error("default action is undefined");
+    }
+
+    const { cookies } = createCookies({ otpravkarr_session: "prior-session-id" });
+    await expect(
+      login({
+        request: createRequest({ username: "admin", password: "valid-password" }),
+        cookies,
+        getClientAddress: () => "127.0.0.1",
+      } as unknown as Parameters<typeof login>[0]),
+    ).rejects.toMatchObject({
+      status: 303,
+      location: "/dashboard",
+    });
+
+    expect(mocks.deleteSession).toHaveBeenCalledWith("prior-session-id");
+    expect(mocks.createSession).toHaveBeenCalledWith("admin", "admin", 3600);
+    const deleteOrder = mocks.deleteSession.mock.invocationCallOrder[0] ?? Infinity;
+    const createOrder = mocks.createSession.mock.invocationCallOrder[0] ?? -Infinity;
+    expect(deleteOrder).toBeLessThan(createOrder);
+  });
+
+  it("does not call deleteSession when no prior session cookie is present", async () => {
+    const { actions } = await import("./+page.server");
+    const login = actions.default;
+    if (!login) {
+      throw new Error("default action is undefined");
+    }
+
+    const { cookies } = createCookies();
+    await expect(
+      login({
+        request: createRequest({ username: "admin", password: "valid-password" }),
+        cookies,
+        getClientAddress: () => "127.0.0.1",
+      } as unknown as Parameters<typeof login>[0]),
+    ).rejects.toMatchObject({ status: 303 });
+
+    expect(mocks.deleteSession).not.toHaveBeenCalled();
+    expect(mocks.createSession).toHaveBeenCalled();
   });
 });

@@ -246,6 +246,75 @@ describe("PlexTokenSchema", () => {
       expect(result.data.plexServerUrl).toBe("https://plex.example.com");
     }
   });
+
+  it("accepts http scheme for loopback hostname localhost", () => {
+    const result = PlexTokenSchema.safeParse({
+      plexToken: "my-token",
+      plexServerUrl: "http://localhost:32400",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts http scheme for loopback IPv4 127.0.0.1", () => {
+    const result = PlexTokenSchema.safeParse({
+      plexToken: "my-token",
+      plexServerUrl: "http://127.0.0.1:32400",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts http scheme for loopback IPv6 [::1]", () => {
+    const result = PlexTokenSchema.safeParse({
+      plexToken: "my-token",
+      plexServerUrl: "http://[::1]:32400",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects http scheme for non-loopback hostname", () => {
+    const result = PlexTokenSchema.safeParse({
+      plexToken: "my-token",
+      plexServerUrl: "http://plex.example.com:32400",
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues[0]?.message).toBe(
+        "Plex server URL must use HTTPS (HTTP only allowed for localhost, 127.0.0.1, or [::1])",
+      );
+    }
+  });
+
+  it("rejects http scheme for non-loopback IPv4", () => {
+    const result = PlexTokenSchema.safeParse({
+      plexToken: "my-token",
+      plexServerUrl: "http://192.168.1.10:32400",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects javascript: protocol", () => {
+    const result = PlexTokenSchema.safeParse({
+      plexToken: "my-token",
+      plexServerUrl: "javascript:alert(1)",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects data: protocol", () => {
+    const result = PlexTokenSchema.safeParse({
+      plexToken: "my-token",
+      plexServerUrl: "data:text/html,<script>alert(1)</script>",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects file: protocol", () => {
+    const result = PlexTokenSchema.safeParse({
+      plexToken: "my-token",
+      plexServerUrl: "file:///etc/passwd",
+    });
+    expect(result.success).toBe(false);
+  });
 });
 
 // ---------------------------------------------------------------------------

@@ -13,6 +13,7 @@ import { parseAndNormalizeOrigins } from "$lib/server/origins";
 import {
   AuditRetentionSchema,
   isHttpUrl,
+  PlexTokenSchema,
   SyncIntervalSchema,
   sanitizeString,
 } from "$lib/server/validation";
@@ -97,6 +98,15 @@ export const actions: Actions = {
 
     if (!serverUrl || !effectiveToken) {
       return fail(400, { error: "Plex token and server URL are required" });
+    }
+
+    const urlResult = PlexTokenSchema.pick({ plexServerUrl: true }).safeParse({
+      plexServerUrl: serverUrl,
+    });
+    if (!urlResult.success) {
+      return fail(400, {
+        error: urlResult.error.issues[0]?.message ?? "Invalid Plex server URL",
+      });
     }
 
     try {

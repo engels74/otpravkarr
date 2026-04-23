@@ -15,8 +15,6 @@ import { cn } from "$lib/utils";
 type SetupPageData = {
   claimActive: boolean;
   resumePhase: 1 | 2 | 3 | 4 | 5;
-  tokenProvided: boolean;
-  tokenFromUrl: string | null;
   dispatcharrGroups: Array<{ id: number; name: string }>;
   dispatcharrProfiles: Array<{ id: number; name: string }>;
   oauthCallback: boolean;
@@ -429,7 +427,6 @@ function enhanceHandler(nextStep?: number) {
                   name="token"
                   type="text"
                   placeholder="xxxx-xxxx-xxxx"
-                  value={data.tokenFromUrl ?? ''}
                   autocomplete="off"
                   class="font-mono text-sm"
                   required

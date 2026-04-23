@@ -392,6 +392,29 @@ describe("DispatcharrConfigSchema", () => {
     expect(result.success).toBe(true);
   });
 
+  it("accepts optional dispatcharrExternalUrl with loopback http scheme", () => {
+    const result = DispatcharrConfigSchema.safeParse({
+      dispatcharrUrl: "https://dispatcharr.example.com",
+      dispatcharrApiKey: "api-key-123",
+      dispatcharrExternalUrl: "http://localhost:9191",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects optional dispatcharrExternalUrl with non-loopback http scheme", () => {
+    const result = DispatcharrConfigSchema.safeParse({
+      dispatcharrUrl: "https://dispatcharr.example.com",
+      dispatcharrApiKey: "api-key-123",
+      dispatcharrExternalUrl: "http://public.example.com",
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues[0]?.message).toBe(
+        "External URL must use HTTPS (HTTP only allowed for localhost, 127.0.0.1, or [::1])",
+      );
+    }
+  });
+
   it("accepts empty string for dispatcharrExternalUrl", () => {
     const result = DispatcharrConfigSchema.safeParse({
       dispatcharrUrl: "https://dispatcharr.example.com",
@@ -454,7 +477,9 @@ describe("DispatcharrConfigSchema", () => {
     });
     expect(result.success).toBe(false);
     if (!result.success) {
-      expect(result.error.issues[0]?.message).toBe("External URL must use http or https");
+      expect(result.error.issues[0]?.message).toBe(
+        "External URL must use HTTPS (HTTP only allowed for localhost, 127.0.0.1, or [::1])",
+      );
     }
   });
 

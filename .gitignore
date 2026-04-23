@@ -22,6 +22,9 @@ Thumbs.db
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 
+# Agent/runtime state
+.omx/
+
 # SQLite data
 /data
 

@@ -14,16 +14,20 @@ import {
   USER_COOKIE_OPTIONS,
   USER_SESSION_TTL,
 } from "$lib/server/auth";
+import {
+  INITIAL_PASSWORD_COOKIE_MAX_AGE,
+  INITIAL_PASSWORD_COOKIE_NAME,
+  sealInitialPasswordFlash,
+} from "$lib/server/initial-password-flash";
 import type { PageServerLoad } from "./$types";
 
 const OAUTH_COOKIE_NAME = "otpravkarr_oauth_id";
-const INITIAL_PASSWORD_COOKIE_NAME = "otpravkarr_initial_password";
 const INITIAL_PASSWORD_COOKIE_OPTIONS = {
   path: "/",
   httpOnly: true,
   secure: isSecure,
   sameSite: "lax" as const,
-  maxAge: 120,
+  maxAge: INITIAL_PASSWORD_COOKIE_MAX_AGE,
 };
 
 export const load: PageServerLoad = async ({ cookies }) => {
@@ -122,10 +126,11 @@ export const load: PageServerLoad = async ({ cookies }) => {
   const sessionId = createSession(String(mapping.id), "user", USER_SESSION_TTL);
   cookies.set(SESSION_COOKIE_NAME, sessionId, USER_COOKIE_OPTIONS);
 
-  if (result.status === "provisioned" && result.initialPassword) {
+  const initialPassword = result.status === "provisioned" ? result.initialPassword : undefined;
+  if (initialPassword) {
     cookies.set(
       INITIAL_PASSWORD_COOKIE_NAME,
-      result.initialPassword,
+      await sealInitialPasswordFlash(initialPassword),
       INITIAL_PASSWORD_COOKIE_OPTIONS,
     );
   }
@@ -133,6 +138,6 @@ export const load: PageServerLoad = async ({ cookies }) => {
   // Update last accessed timestamp
   updateLastAccessed(mapping.id);
 
-  // 6. Redirect — server owner goes to /welcome, regular users to /
-  throw redirect(303, isServerOwner ? "/welcome" : "/");
+  // 6. Redirect — server owner goes to /welcome unless the root page needs to display a one-time password
+  throw redirect(303, isServerOwner && !initialPassword ? "/welcome" : "/");
 };

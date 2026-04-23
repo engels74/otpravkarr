@@ -57,8 +57,8 @@ Generate a secret: `openssl rand -base64 32`
 
 ## First-Run Setup
 
-1. Start the container — a one-time **bootstrap token** appears in the logs
-2. Visit the app URL and enter the token
+1. Start the container — a one-time **bootstrap token** and setup URL appear in the logs
+2. Visit the setup URL and manually enter the token
 3. Complete the setup wizard (Plex + Dispatcharr credentials)
 
 Complete the wizard immediately; the bootstrap token is single-use.

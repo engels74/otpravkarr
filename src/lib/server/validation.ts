@@ -113,7 +113,10 @@ export const DispatcharrConfigSchema = z.object({
     .string()
     .trim()
     .url("External URL must be a valid URL")
-    .refine(isHttpUrl, "External URL must use http or https")
+    .refine(
+      isSafeHttpSecretUrl,
+      "External URL must use HTTPS (HTTP only allowed for localhost, 127.0.0.1, or [::1])",
+    )
     .optional()
     .or(z.literal("")),
 });

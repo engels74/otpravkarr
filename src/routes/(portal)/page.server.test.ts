@@ -61,6 +61,9 @@ const mocks = vi.hoisted(() => ({
   generateM3U: vi.fn(
     (_params: unknown) => "#EXTM3U\n#EXTINF:-1,Channel 1\nhttp://host/live/u/p/1.ts\n",
   ),
+  openInitialPasswordFlash: vi.fn(async (sealed: string) =>
+    sealed === "sealed-initial-password" ? "TempPassword!23" : null,
+  ),
 }));
 
 vi.mock("$lib/server/ratelimit", () => ({
@@ -131,6 +134,11 @@ vi.mock("$lib/dispatcharr/endpoints/channels", () => ({
 
 vi.mock("$lib/server/auth", () => ({
   isSecure: false,
+}));
+
+vi.mock("$lib/server/initial-password-flash", () => ({
+  INITIAL_PASSWORD_COOKIE_NAME: "otpravkarr_initial_password",
+  openInitialPasswordFlash: mocks.openInitialPasswordFlash,
 }));
 
 const envState = vi.hoisted(() => ({
@@ -250,11 +258,11 @@ describe("portal page server", () => {
       expect(mocks.updateLastAccessed).toHaveBeenCalledWith(1);
     });
 
-    it("returns and clears one-time initial password for self-managed user", async () => {
+    it("returns and clears decrypted one-time initial password for self-managed user", async () => {
       const { load } = await import("./+page.server");
       const user = createUser({ provisioning_mode: "self_managed" });
       state.configValues.dispatcharr_url = "http://dispatcharr.local";
-      state.initialPasswordCookie = "TempPassword!23";
+      state.initialPasswordCookie = "sealed-initial-password";
       const { cookies, deleteFn } = createCookies();
 
       const result = await load({
@@ -266,6 +274,26 @@ describe("portal page server", () => {
         authenticated: true,
         mode: "self_managed",
         initialPassword: "TempPassword!23",
+      });
+      expect(mocks.openInitialPasswordFlash).toHaveBeenCalledWith("sealed-initial-password");
+      expect(deleteFn).toHaveBeenCalledWith("otpravkarr_initial_password", { path: "/" });
+    });
+
+    it("clears invalid one-time password flash without returning it", async () => {
+      const { load } = await import("./+page.server");
+      const user = createUser({ provisioning_mode: "self_managed" });
+      state.initialPasswordCookie = "invalid-flash";
+      const { cookies, deleteFn } = createCookies();
+
+      const result = await load({
+        locals: { user },
+        cookies,
+      } as unknown as Parameters<typeof load>[0]);
+
+      expect(result).toMatchObject({
+        authenticated: true,
+        mode: "self_managed",
+        initialPassword: null,
       });
       expect(deleteFn).toHaveBeenCalledWith("otpravkarr_initial_password", { path: "/" });
     });
@@ -326,6 +354,25 @@ describe("portal page server", () => {
       expect(mocks.buildXcUrl).toHaveBeenCalledWith(
         expect.objectContaining({ host: "https://external.example.com" }),
       );
+    });
+
+    it("returns configuration error when no safe public URL is available", async () => {
+      const { load } = await import("./+page.server");
+      const user = createUser();
+      mocks.getDispatcharrPublicUrl.mockResolvedValueOnce(null);
+      const { cookies } = createCookies();
+
+      const result = await load({
+        locals: { user },
+        cookies,
+      } as unknown as Parameters<typeof load>[0]);
+
+      expect(result).toMatchObject({
+        authenticated: true,
+        mode: "automatic",
+        error: expect.stringContaining("HTTPS Dispatcharr public URL"),
+      });
+      expect(mocks.buildXcUrl).not.toHaveBeenCalled();
     });
 
     it("calls updateLastAccessed for active users", async () => {
@@ -606,6 +653,23 @@ describe("portal page server", () => {
         status: 500,
         data: { error: "config_missing" },
       });
+    });
+
+    it("returns 500 when no safe public URL is available", async () => {
+      mocks.getDispatcharrPublicUrl.mockResolvedValueOnce(null);
+      const { actions } = await import("./+page.server");
+      const action = actions.downloadM3U;
+      if (!action) throw new Error("downloadM3U action is undefined");
+
+      const result = await action({
+        locals: { user: createUser() },
+      } as unknown as Parameters<typeof action>[0]);
+
+      expect(result).toMatchObject({
+        status: 500,
+        data: { error: "public_url_unavailable" },
+      });
+      expect(mocks.generateM3U).not.toHaveBeenCalled();
     });
 
     it("redirects on successful rotation", async () => {

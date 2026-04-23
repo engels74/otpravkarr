@@ -82,14 +82,14 @@ async function printBootstrapBanner(): Promise<void> {
     host = "localhost";
   }
   const origin = env.ORIGIN || `http://${host}:${env.PORT || "3000"}`;
-  const setupUrl = `${origin}/setup?token=${token}`;
+  const setupUrl = `${origin}/setup`;
   console.log("========================================");
   console.log("OTPRAVKARR FIRST-RUN SETUP");
   console.log("========================================");
   console.log(`Bootstrap token: ${token}`);
   console.log(`Setup URL: ${setupUrl}`);
   console.log("This token expires in 15 minutes.");
-  console.log("Use this setup link against this same running instance only.");
+  console.log("Enter the token manually against this same running instance only.");
   console.log("Restarting the app or switching to another worker invalidates this token.");
   console.log("========================================");
 }

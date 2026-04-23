@@ -476,6 +476,35 @@ describe("admin settings actions", () => {
     expect(mocks.invalidateConfigCache).not.toHaveBeenCalled();
   });
 
+  it("returns 400 when dispatcharr external URL uses non-loopback http", async () => {
+    const { actions } = await import("./+page.server");
+    const updateDispatcharrConnection = actions.updateDispatcharrConnection;
+    if (!updateDispatcharrConnection) {
+      throw new Error("updateDispatcharrConnection action is undefined");
+    }
+
+    state.configValues.set("dispatcharr_api_key", "existing-api-key");
+
+    const body = new FormData();
+    body.set("dispatcharr_url", "http://dispatcharr.local");
+    body.set("dispatcharr_api_key", "");
+    body.set("dispatcharr_external_url", "http://public.example.com");
+
+    const result = await updateDispatcharrConnection(
+      createActionEvent(body) as unknown as Parameters<typeof updateDispatcharrConnection>[0],
+    );
+
+    expect(result).toMatchObject({
+      status: 400,
+      data: {
+        error: "External URL must use HTTPS (HTTP only allowed for localhost, 127.0.0.1, or [::1])",
+      },
+    });
+    expect(mocks.DispatcharrClient).not.toHaveBeenCalled();
+    expect(mocks.setConfig).not.toHaveBeenCalled();
+    expect(mocks.invalidateConfigCache).not.toHaveBeenCalled();
+  });
+
   it("returns 400 when updateDispatcharrConnection is missing required inputs", async () => {
     const { actions } = await import("./+page.server");
     const updateDispatcharrConnection = actions.updateDispatcharrConnection;

@@ -30,7 +30,7 @@ Master-key rotation: `OLD_SECRET=... NEW_SECRET=... bun scripts/rotate-key.ts` �
 
 ## Environment
 
-`OTPRAVKARR_SECRET` is required (≥ 32 chars); `validateEnv()` in `src/lib/server/env.ts` calls `process.exit(1)` if missing/short. Other optional vars: `DATABASE_PATH`, `HOST`, `PORT`, `ORIGIN`, `PROTOCOL_HEADER`, `HOST_HEADER`. On first run with no completed setup, the server prints a single-use **bootstrap token** and `/setup?token=…` URL to stdout — that token lives in memory for 15 min and is invalidated by restart.
+`OTPRAVKARR_SECRET` is required (≥ 32 chars); `validateEnv()` in `src/lib/server/env.ts` calls `process.exit(1)` if missing/short. Other optional vars: `DATABASE_PATH`, `HOST`, `PORT`, `ORIGIN`, `PROTOCOL_HEADER`, `HOST_HEADER`. On first run with no completed setup, the server prints a single-use **bootstrap token** and non-secret `/setup` URL to stdout — that token lives in memory for 15 min, must be entered manually, and is invalidated by restart.
 
 ## Architecture
 

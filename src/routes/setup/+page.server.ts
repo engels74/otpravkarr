@@ -225,7 +225,6 @@ async function loadDispatcharrSetupPayload(phase: SetupResumePhase): Promise<Set
 export const load = async ({ url, cookies }: RequestEvent) => {
   await requireSetupIncomplete();
 
-  const tokenFromUrl = url.searchParams.get("token");
   const oauthCallback = url.searchParams.get("oauthCallback") === "1";
   const [claimActive, resumePhase] = await Promise.all([
     hasActiveSetupClaim(cookies),
@@ -236,8 +235,6 @@ export const load = async ({ url, cookies }: RequestEvent) => {
     : { dispatcharrGroups: [], dispatcharrProfiles: [] };
 
   return {
-    tokenProvided: tokenFromUrl !== null,
-    tokenFromUrl,
     claimActive,
     resumePhase,
     dispatcharrGroups,

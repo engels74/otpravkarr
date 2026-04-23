@@ -257,8 +257,9 @@ describe("setup claim ownership", () => {
       resumePhase: 1,
       dispatcharrGroups: [],
       dispatcharrProfiles: [],
-      tokenProvided: false,
     });
+    expect(result).not.toHaveProperty("tokenFromUrl");
+    expect(result).not.toHaveProperty("tokenProvided");
     expect(mocks.requireSetupIncomplete).toHaveBeenCalledOnce();
   });
 
@@ -280,7 +281,6 @@ describe("setup claim ownership", () => {
       resumePhase: 2,
       dispatcharrGroups: [],
       dispatcharrProfiles: [],
-      tokenProvided: false,
     });
   });
 
@@ -318,7 +318,6 @@ describe("setup claim ownership", () => {
       resumePhase: 4,
       dispatcharrGroups: [{ id: 10, name: "Group 10" }],
       dispatcharrProfiles: [{ id: 20, name: "Profile 20" }],
-      tokenProvided: false,
     });
   });
 
@@ -354,8 +353,24 @@ describe("setup claim ownership", () => {
       resumePhase: 5,
       dispatcharrGroups: [{ id: 30, name: "Group 30" }],
       dispatcharrProfiles: [{ id: 40, name: "Profile 40" }],
-      tokenProvided: false,
     });
+  });
+
+  it("ignores bootstrap tokens supplied in the query string", async () => {
+    const { cookies } = createCookies();
+
+    const { load } = await import("./+page.server");
+    const result = await load({
+      url: new URL("http://localhost/setup?token=abcd-1234-efgh"),
+      cookies,
+    } as unknown as Parameters<typeof load>[0]);
+
+    expect(result).toMatchObject({
+      claimActive: false,
+      resumePhase: 1,
+    });
+    expect(result).not.toHaveProperty("tokenFromUrl");
+    expect(result).not.toHaveProperty("tokenProvided");
   });
 
   it("does not load Dispatcharr groups/profiles when claim is not active", async () => {

@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.4.10/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.4.11/schema.json",
   "formatter": {
     "enabled": true,
     "indentStyle": "space",
@@ -28,7 +28,15 @@
     }
   },
   "files": {
-    "includes": ["**", "!**/build", "!**/.svelte-kit", "!**/dist"]
+    "includes": [
+      "**",
+      "!**/build",
+      "!**/.svelte-kit",
+      "!**/dist",
+      "!**/.omx",
+      "!**/test-results",
+      "!**/e2e/.auth"
+    ]
   },
   "overrides": [
     {

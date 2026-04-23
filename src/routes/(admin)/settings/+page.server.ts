@@ -13,6 +13,7 @@ import { parseAndNormalizeOrigins } from "$lib/server/origins";
 import {
   AuditRetentionSchema,
   isHttpUrl,
+  isSafeHttpSecretUrl,
   PlexTokenSchema,
   SyncIntervalSchema,
   sanitizeString,
@@ -179,8 +180,10 @@ export const actions: Actions = {
       return fail(400, { error: "Dispatcharr URL must use http or https" });
     }
 
-    if (externalUrl && !isHttpUrl(externalUrl)) {
-      return fail(400, { error: "External URL must use http or https" });
+    if (externalUrl && !isSafeHttpSecretUrl(externalUrl)) {
+      return fail(400, {
+        error: "External URL must use HTTPS (HTTP only allowed for localhost, 127.0.0.1, or [::1])",
+      });
     }
 
     const client = new DispatcharrClient(url, effectiveKey);

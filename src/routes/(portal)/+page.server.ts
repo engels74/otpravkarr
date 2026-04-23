@@ -10,6 +10,10 @@ import { createChannelEndpoints } from "$lib/dispatcharr/endpoints/channels";
 import { initiateOAuth } from "$lib/plex/oauth";
 import { PlexAuthError } from "$lib/plex/types";
 import { isSecure } from "$lib/server/auth";
+import {
+  INITIAL_PASSWORD_COOKIE_NAME,
+  openInitialPasswordFlash,
+} from "$lib/server/initial-password-flash";
 import { selectActivePublicOrigin } from "$lib/server/origins";
 import { oauthLimiter } from "$lib/server/ratelimit";
 import { getFredTvAssets } from "$lib/url/github-releases.server";
@@ -29,7 +33,6 @@ import { generateQRCodeDataUri } from "$lib/utils/qrcode";
 import { isTransientPlexError, type RetryOptions, retryAsync } from "$lib/utils/retry";
 
 const OAUTH_COOKIE_NAME = "otpravkarr_oauth_id";
-const INITIAL_PASSWORD_COOKIE_NAME = "otpravkarr_initial_password";
 const OAUTH_COOKIE_OPTIONS = {
   path: "/",
   httpOnly: true,
@@ -72,9 +75,11 @@ export const load = async ({ locals, cookies }: RequestEvent) => {
 
   // Self-managed / staff users see Dispatcharr info only
   if (user.provisioning_mode !== "automatic") {
-    const initialPassword = cookies.get(INITIAL_PASSWORD_COOKIE_NAME) ?? null;
-    if (initialPassword) {
+    const initialPasswordCookie = cookies.get(INITIAL_PASSWORD_COOKIE_NAME);
+    let initialPassword: string | null = null;
+    if (initialPasswordCookie) {
       cookies.delete(INITIAL_PASSWORD_COOKIE_NAME, { path: "/" });
+      initialPassword = await openInitialPasswordFlash(initialPasswordCookie);
     }
 
     const dispatcharrUrl = await getDispatcharrPublicUrl();
@@ -97,7 +102,15 @@ export const load = async ({ locals, cookies }: RequestEvent) => {
   }
 
   const password = await decrypt(user.dispatcharr_xc_password_enc, "credential-encryption");
-  const host = (await getDispatcharrPublicUrl()) ?? "";
+  const host = await getDispatcharrPublicUrl();
+  if (!host) {
+    return {
+      authenticated: true as const,
+      mode: "automatic" as const,
+      error:
+        "A HTTPS Dispatcharr public URL is required before streaming credentials can be generated.",
+    };
+  }
   const username = user.dispatcharr_username ?? "";
 
   const xcParams = { host, username, password };
@@ -226,7 +239,13 @@ export const actions: Actions = {
         "credential-encryption",
       );
       const username = locals.user.dispatcharr_username ?? "";
-      const publicHost = (await getDispatcharrPublicUrl()) ?? dispatcharrUrl;
+      const publicHost = await getDispatcharrPublicUrl();
+      if (!publicHost) {
+        return fail(500, {
+          error: "public_url_unavailable",
+          message: "A HTTPS Dispatcharr public URL is required to generate M3U credentials.",
+        });
+      }
 
       const m3uContent = generateM3U({
         channels: channelsResult.data,

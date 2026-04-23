@@ -64,6 +64,7 @@ const mocks = vi.hoisted(() => ({
   deleteSession: vi.fn((_id: string) => {}),
   updateLastAccessed: vi.fn((_id: number) => {}),
   DispatcharrClient: vi.fn(),
+  sealInitialPasswordFlash: vi.fn(async (_password: string) => "sealed-initial-password"),
 }));
 
 vi.mock("$lib/plex/oauth", () => ({
@@ -119,6 +120,12 @@ vi.mock("$lib/server/auth", () => ({
   },
   USER_SESSION_TTL: 14400,
   isSecure: false,
+}));
+
+vi.mock("$lib/server/initial-password-flash", () => ({
+  INITIAL_PASSWORD_COOKIE_NAME: "otpravkarr_initial_password",
+  INITIAL_PASSWORD_COOKIE_MAX_AGE: 120,
+  sealInitialPasswordFlash: mocks.sealInitialPasswordFlash,
 }));
 
 function createCookies() {
@@ -392,7 +399,7 @@ describe("plex OAuth callback", () => {
     expect(deleteOrder).toBeLessThan(createOrder);
   });
 
-  it("stores one-time password in short-lived cookie for newly provisioned self-managed users", async () => {
+  it("stores encrypted one-time password flash in short-lived cookie for newly provisioned self-managed users", async () => {
     const mapping = state.provisionResult.mapping as UserMapping;
     state.provisionResult = {
       status: "provisioned",
@@ -411,7 +418,7 @@ describe("plex OAuth callback", () => {
 
     expect(set).toHaveBeenCalledWith(
       "otpravkarr_initial_password",
-      "TempPassword!23",
+      "sealed-initial-password",
       expect.objectContaining({
         path: "/",
         httpOnly: true,
@@ -419,6 +426,38 @@ describe("plex OAuth callback", () => {
         maxAge: 120,
       }),
     );
+    expect(mocks.sealInitialPasswordFlash).toHaveBeenCalledWith("TempPassword!23");
+  });
+
+  it("redirects server owner to root when a one-time password needs display", async () => {
+    mocks.completeOAuth.mockResolvedValueOnce({
+      id: 99999,
+      uuid: "admin-uuid",
+      username: "admin",
+      email: "admin@example.com",
+      thumb: "",
+      authenticationToken: "admin-token",
+    });
+    state.configValues.default_provisioning_mode = "self_managed";
+    state.provisionResult = {
+      status: "provisioned",
+      mapping: {
+        ...(state.provisionResult.mapping as UserMapping),
+        id: 5,
+        plex_account_id: 99999,
+        plex_username: "admin",
+        provisioning_mode: "self_managed",
+      },
+      initialPassword: "TempPassword!23",
+    };
+
+    const { load } = await import("./+page.server");
+    const { cookies } = createCookies();
+
+    await expect(load({ cookies } as unknown as Parameters<typeof load>[0])).rejects.toMatchObject({
+      status: 303,
+      location: "/",
+    });
   });
 
   it("handles already_exists provisioning result", async () => {

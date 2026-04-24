@@ -10,6 +10,7 @@ import { toast } from "svelte-sonner";
 import { applyAction, enhance } from "$app/forms";
 import { goto } from "$app/navigation";
 import { page } from "$app/state";
+import ConfirmDialog from "$lib/components/ConfirmDialog.svelte";
 import StatusBadge from "$lib/components/StatusBadge.svelte";
 import * as Avatar from "$lib/components/ui/avatar";
 import { Button } from "$lib/components/ui/button";
@@ -40,8 +41,10 @@ let submitting = $state(false);
 let groupDialogOpen = $state(false);
 let detailDialogOpen = $state(false);
 let passwordDialogOpen = $state(false);
+let disableDialogOpen = $state(false);
 let selectedMapping = $state<UserMapping | null>(null);
 let selectedGroupIds = $state<number[]>([]);
+let disablingMapping = $state<UserMapping | null>(null);
 let oneTimePassword = $state("");
 let passwordCopyStatus = $state<"idle" | "copied" | "failed">("idle");
 
@@ -166,6 +169,31 @@ function makeActionEnhance(successMsg: string) {
   };
 }
 
+function makeDisableEnhance() {
+  return () => {
+    submitting = true;
+    return async ({ result, update }: { result: ActionResult; update: () => Promise<void> }) => {
+      try {
+        if (result.type === "success") {
+          toast.success("User disabled.");
+          await update();
+        } else if (result.type === "failure") {
+          toast.error(
+            (result.data as { error?: string } | undefined)?.error ?? "Failed to disable user.",
+          );
+          await update();
+        } else {
+          await applyAction(result);
+        }
+      } finally {
+        submitting = false;
+        disableDialogOpen = false;
+        disablingMapping = null;
+      }
+    };
+  };
+}
+
 function makeEnableEnhance() {
   return () => {
     submitting = true;
@@ -257,7 +285,7 @@ async function copyOneTimePassword() {
   </div>
 
   <!-- Table -->
-  <div class="overflow-x-auto rounded-lg border">
+  <div class="scroll-hint-x overflow-x-auto rounded-lg border">
     <Table.Root>
       <Table.Header>
         <Table.Row>
@@ -265,7 +293,7 @@ async function copyOneTimePassword() {
           <Table.Head class="hidden sm:table-cell">Dispatcharr</Table.Head>
           <Table.Head>Mode</Table.Head>
           <Table.Head>Status</Table.Head>
-          <Table.Head class="hidden whitespace-nowrap sm:table-cell">Last Accessed</Table.Head>
+          <Table.Head class="hidden whitespace-nowrap lg:table-cell">Last Accessed</Table.Head>
           <Table.Head class="w-[50px]"><span class="sr-only">Actions</span></Table.Head>
         </Table.Row>
       </Table.Header>
@@ -300,7 +328,7 @@ async function copyOneTimePassword() {
               <Table.Cell>
                 <StatusBadge {status} />
               </Table.Cell>
-              <Table.Cell class="hidden text-xs text-muted-foreground whitespace-nowrap sm:table-cell">
+              <Table.Cell class="hidden text-xs text-muted-foreground whitespace-nowrap lg:table-cell">
                 {formatRelativeTime(m.last_accessed_at)}
               </Table.Cell>
               <Table.Cell>
@@ -327,16 +355,14 @@ async function copyOneTimePassword() {
                       </DropdownMenu.Item>
                     {/if}
                     {#if m.is_active === 1 && m.dispatcharr_user_id != null}
-                      <DropdownMenu.Item>
-                        {#snippet child({ props })}
-                          <form method="POST" action="?/disableUser" use:enhance={makeActionEnhance("User disabled.")}>
-                            <input type="hidden" name="id" value={m.id} />
-                            <button type="submit" class="flex w-full items-center gap-2 text-left" disabled={submitting} {...props}>
-                              <BanIcon class="h-3.5 w-3.5" />
-                              Disable
-                            </button>
-                          </form>
-                        {/snippet}
+                      <DropdownMenu.Item
+                        onclick={() => {
+                          disablingMapping = m;
+                          disableDialogOpen = true;
+                        }}
+                      >
+                        <BanIcon class="h-3.5 w-3.5" />
+                        Disable
                       </DropdownMenu.Item>
                     {/if}
                     {#if m.is_active === 0}
@@ -518,3 +544,21 @@ async function copyOneTimePassword() {
     {/if}
   </Dialog.Content>
 </Dialog.Root>
+
+<!-- Disable User Confirmation Dialog -->
+<ConfirmDialog
+  bind:open={disableDialogOpen}
+  title={disablingMapping ? `Disable ${disablingMapping.plex_username}?` : "Disable user?"}
+  description="The Dispatcharr account will be deleted and all stream URLs will stop working immediately. The local mapping is retained so the user can be re-enabled later."
+>
+  {#snippet confirm()}
+    {#if disablingMapping}
+      <form method="POST" action="?/disableUser" use:enhance={makeDisableEnhance()}>
+        <input type="hidden" name="id" value={disablingMapping.id} />
+        <Button variant="destructive" type="submit" disabled={submitting}>
+          {submitting ? "Disabling…" : "Disable User"}
+        </Button>
+      </form>
+    {/if}
+  {/snippet}
+</ConfirmDialog>

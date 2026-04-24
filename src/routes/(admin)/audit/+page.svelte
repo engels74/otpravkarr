@@ -1,4 +1,6 @@
 <script lang="ts">
+import { type DateValue, parseDate } from "@internationalized/date";
+import CalendarIcon from "lucide-svelte/icons/calendar";
 import ChevronDownIcon from "lucide-svelte/icons/chevron-down";
 import ChevronLeftIcon from "lucide-svelte/icons/chevron-left";
 import ChevronRightIcon from "lucide-svelte/icons/chevron-right";
@@ -7,8 +9,10 @@ import { goto } from "$app/navigation";
 import { page } from "$app/state";
 import { Badge } from "$lib/components/ui/badge";
 import { Button } from "$lib/components/ui/button";
+import { Calendar } from "$lib/components/ui/calendar";
 import { Input } from "$lib/components/ui/input";
 import { Label } from "$lib/components/ui/label";
+import * as Popover from "$lib/components/ui/popover";
 import * as Select from "$lib/components/ui/select";
 import * as Table from "$lib/components/ui/table";
 import type { AuditEntry } from "$lib/db/types";
@@ -138,6 +142,26 @@ function formatDetail(detail: string | null): string {
 
 let rangeStart = $derived((data.filters.page - 1) * data.filters.limit + 1);
 let rangeEnd = $derived(Math.min(data.filters.page * data.filters.limit, data.total));
+
+function parseDateOrUndefined(value: string | null): DateValue | undefined {
+  if (!value || !DATE_ONLY_RE.test(value)) return undefined;
+  try {
+    return parseDate(value);
+  } catch {
+    return undefined;
+  }
+}
+
+let afterPopoverOpen = $state(false);
+let beforePopoverOpen = $state(false);
+let afterDate = $derived(parseDateOrUndefined(data.filters.after));
+let beforeDate = $derived(parseDateOrUndefined(data.filters.before));
+
+function formatDateLabel(value: DateValue | undefined): string {
+  if (!value) return "";
+  // ISO YYYY-MM-DD; toString returns "YYYY-MM-DD" for CalendarDate.
+  return value.toString();
+}
 </script>
 
 <svelte:head>
@@ -190,30 +214,62 @@ let rangeEnd = $derived(Math.min(data.filters.page * data.filters.limit, data.to
 
     <div class="grid gap-1.5">
       <Label class="text-xs text-foreground">After</Label>
-      <Input
-        type="date"
-        class="h-8 w-36"
-        aria-label="Filter after date"
-        value={data.filters.after ?? ""}
-        onchange={(e) => {
-          const v = (e.currentTarget as HTMLInputElement).value;
-          updateFilter("after", v || null);
-        }}
-      />
+      <Popover.Root bind:open={afterPopoverOpen}>
+        <Popover.Trigger>
+          {#snippet child({ props })}
+            <Button
+              variant="outline"
+              size="sm"
+              class={cn("h-8 w-36 justify-start font-normal", !afterDate && "text-muted-foreground")}
+              aria-label="Filter after date"
+              {...props}
+            >
+              <CalendarIcon class="mr-2 h-3.5 w-3.5" />
+              {afterDate ? formatDateLabel(afterDate) : "Pick date"}
+            </Button>
+          {/snippet}
+        </Popover.Trigger>
+        <Popover.Content class="w-auto p-0" align="start">
+          <Calendar
+            type="single"
+            value={afterDate as never}
+            onValueChange={(v) => {
+              updateFilter("after", v ? formatDateLabel(v) : null);
+              afterPopoverOpen = false;
+            }}
+          />
+        </Popover.Content>
+      </Popover.Root>
     </div>
 
     <div class="grid gap-1.5">
       <Label class="text-xs text-foreground">Before</Label>
-      <Input
-        type="date"
-        class="h-8 w-36"
-        aria-label="Filter before date"
-        value={data.filters.before ?? ""}
-        onchange={(e) => {
-          const v = (e.currentTarget as HTMLInputElement).value;
-          updateFilter("before", v || null);
-        }}
-      />
+      <Popover.Root bind:open={beforePopoverOpen}>
+        <Popover.Trigger>
+          {#snippet child({ props })}
+            <Button
+              variant="outline"
+              size="sm"
+              class={cn("h-8 w-36 justify-start font-normal", !beforeDate && "text-muted-foreground")}
+              aria-label="Filter before date"
+              {...props}
+            >
+              <CalendarIcon class="mr-2 h-3.5 w-3.5" />
+              {beforeDate ? formatDateLabel(beforeDate) : "Pick date"}
+            </Button>
+          {/snippet}
+        </Popover.Trigger>
+        <Popover.Content class="w-auto p-0" align="start">
+          <Calendar
+            type="single"
+            value={beforeDate as never}
+            onValueChange={(v) => {
+              updateFilter("before", v ? formatDateLabel(v) : null);
+              beforePopoverOpen = false;
+            }}
+          />
+        </Popover.Content>
+      </Popover.Root>
     </div>
   </div>
 

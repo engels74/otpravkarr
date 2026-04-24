@@ -1,13 +1,14 @@
 import { fail } from "@sveltejs/kit";
 import { disableUser, enableUser, rotateCredentials } from "$lib/bridge/lifecycle";
 import { provisionUser } from "$lib/bridge/provisioner";
+import { appendAuditLog } from "$lib/db/repositories/audit";
 import { getConfig } from "$lib/db/repositories/config";
 import {
   getAllUserMappings,
   getUserMappingById,
   updateUserMapping,
 } from "$lib/db/repositories/users";
-import type { ProvisioningMode } from "$lib/db/types";
+import { AuditAction, type ProvisioningMode } from "$lib/db/types";
 import { DispatcharrClient } from "$lib/dispatcharr/client";
 import { listGroups } from "$lib/dispatcharr/endpoints/groups";
 import { requireAdmin } from "$lib/server/auth";
@@ -173,7 +174,7 @@ export const actions: Actions = {
   },
 
   changeGroup: async (event) => {
-    await requireAdmin(event);
+    const admin = await requireAdmin(event);
     const fd = await event.request.formData();
     const id = Number(fd.get("id"));
     if (!id) return fail(400, { error: "Missing user mapping ID" });
@@ -190,9 +191,24 @@ export const actions: Actions = {
     }
 
     try {
+      const before = parseStoredGroupIds(mapping.dispatcharr_group_ids);
+
       // Groups are tracked locally — the Dispatcharr User API does not have a groups field.
       // Group assignments on Dispatcharr are managed separately through the Groups API.
       updateUserMapping(id, { dispatcharr_group_ids: JSON.stringify(groupIds) });
+
+      appendAuditLog({
+        actor: admin.username,
+        action: AuditAction.USER_GROUP_CHANGED,
+        detail: {
+          mapping_id: id,
+          plex_username: mapping.plex_username,
+          before,
+          after: groupIds,
+        },
+        ipAddress: event.getClientAddress(),
+      });
+
       return { success: true };
     } catch (err) {
       return fail(500, { error: err instanceof Error ? err.message : "Failed to change group" });

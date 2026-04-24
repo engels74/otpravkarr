@@ -52,6 +52,10 @@ export default defineConfig({
       "cta-glow",
       "shadow-[0_8px_24px_-10px_oklch(var(--primary)/0.55)] hover:shadow-[0_12px_32px_-10px_oklch(var(--primary)/0.7)] transition-shadow",
     ],
+    [
+      "scroll-hint-x",
+      "relative before:pointer-events-none before:absolute before:inset-y-0 before:right-0 before:w-6 before:bg-gradient-to-l before:from-background before:to-transparent",
+    ],
   ],
 
   rules: [

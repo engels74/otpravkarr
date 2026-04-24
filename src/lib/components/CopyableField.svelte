@@ -1,6 +1,7 @@
 <script lang="ts">
 import CheckIcon from "lucide-svelte/icons/check";
 import CopyIcon from "lucide-svelte/icons/copy";
+import { toast } from "svelte-sonner";
 import { Button } from "$lib/components/ui/button";
 import { Input } from "$lib/components/ui/input";
 import { cn } from "$lib/utils";
@@ -27,8 +28,9 @@ async function copyToClipboard() {
   try {
     await navigator.clipboard.writeText(value);
     copied = true;
+    toast.success(`Copied ${label} to clipboard`);
   } catch {
-    // Fallback: select the text for manual copy
+    toast.error("Couldn't copy to clipboard");
   }
 }
 </script>

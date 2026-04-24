@@ -5,7 +5,7 @@ import type { ProvisioningRequest, ProvisioningResult } from "$lib/bridge/types"
 import type { DispatcharrClient } from "$lib/dispatcharr/client";
 
 const mocks = vi.hoisted(() => ({
-  requireAdmin: vi.fn(async () => undefined),
+  requireAdmin: vi.fn(async () => ({ id: 1, username: "admin" })),
   getConfig: vi.fn(async () => null as string | null),
   getAllUserMappings: vi.fn(() => []),
   getUserMappingById: vi.fn(
@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   provisionUser: vi.fn<() => Promise<ProvisioningResult>>(
     async () => ({ status: "provisioned", mapping: {} }) as ProvisioningResult,
   ),
+  appendAuditLog: vi.fn(),
 }));
 
 vi.mock("$lib/server/auth", () => ({
@@ -27,6 +28,10 @@ vi.mock("$lib/server/auth", () => ({
 
 vi.mock("$lib/db/repositories/config", () => ({
   getConfig: mocks.getConfig,
+}));
+
+vi.mock("$lib/db/repositories/audit", () => ({
+  appendAuditLog: mocks.appendAuditLog,
 }));
 
 vi.mock("$lib/db/repositories/users", () => ({
@@ -64,6 +69,7 @@ function resetMocks() {
   mocks.disableUser.mockClear();
   mocks.enableUser.mockClear();
   mocks.provisionUser.mockClear();
+  mocks.appendAuditLog.mockClear();
 }
 
 function createActionEvent(body: FormData) {
@@ -72,6 +78,7 @@ function createActionEvent(body: FormData) {
       method: "POST",
       body,
     }),
+    getClientAddress: () => "127.0.0.1",
   };
 }
 
@@ -88,7 +95,9 @@ describe("admin users actions", () => {
     mocks.getUserMappingById.mockReturnValueOnce({
       id: 1,
       dispatcharr_user_id: 42,
-    });
+      dispatcharr_group_ids: JSON.stringify([2]),
+      plex_username: "alice",
+    } as unknown as { id: number; dispatcharr_user_id: number | null });
 
     const body = new FormData();
     body.set("id", "1");
@@ -103,6 +112,17 @@ describe("admin users actions", () => {
       dispatcharr_group_ids: JSON.stringify([5, 7]),
     });
     expect(mocks.requireAdmin).toHaveBeenCalledOnce();
+    expect(mocks.appendAuditLog).toHaveBeenCalledWith({
+      actor: "admin",
+      action: "user.group_changed",
+      detail: {
+        mapping_id: 1,
+        plex_username: "alice",
+        before: [2],
+        after: [5, 7],
+      },
+      ipAddress: "127.0.0.1",
+    });
   });
 
   describe("enableUser re-provision (dispatcharr_user_id is null)", () => {

@@ -298,8 +298,9 @@ export async function provisionUser(
     };
   }
 
-  // For self_managed/staff modes the password isn't persisted locally, so surface it
-  // as a one-time value the caller can communicate to the user/admin for onboarding.
+  // Automatic mode persists the encrypted password and rotates on demand, so the
+  // initial value is never surfaced. Self_managed/staff modes don't store the
+  // password locally, so we return it once for the admin to communicate.
   if (request.mode !== "automatic") {
     return { status: "provisioned", mapping: finalMapping, initialPassword: password };
   }

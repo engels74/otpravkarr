@@ -71,7 +71,6 @@ interface Props {
   form?: {
     error?: string;
     message?: string;
-    m3uContent?: string;
   };
 }
 
@@ -81,14 +80,11 @@ const ERROR_MESSAGES: Record<string, string> = {
   plex_unreachable:
     "We're having trouble reaching Plex services. This is usually temporary—please wait a moment and try again.",
   refresh_failed: "Failed to refresh credentials. Please try again.",
-  channels_failed: "Failed to fetch channel list. Please try again.",
-  m3u_failed: "Failed to generate playlist. Please try again.",
 };
 
 let { data, form }: Props = $props();
 let submitting = $state(false);
 let refreshing = $state(false);
-let downloading = $state(false);
 let confirmRefreshOpen = $state(false);
 
 let errorMessage = $derived(
@@ -103,19 +99,6 @@ let activeStatus = $derived(
         class: "bg-destructive/15 text-destructive border border-destructive/20",
       },
 );
-
-// Handle M3U download when form returns content
-$effect(() => {
-  if (form?.m3uContent) {
-    const blob = new Blob([form.m3uContent], { type: "audio/x-mpegurl" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "playlist.m3u";
-    a.click();
-    URL.revokeObjectURL(url);
-  }
-});
 
 function enhanceSignIn() {
   submitting = true;
@@ -136,14 +119,6 @@ function enhanceRefresh() {
     } else if (result.type === "failure" || result.type === "error") {
       toast.error("Couldn't refresh credentials. Try again.");
     }
-  };
-}
-
-function enhanceDownload() {
-  downloading = true;
-  return async ({ update }: { update: () => Promise<void> }) => {
-    downloading = false;
-    await update();
   };
 }
 </script>
@@ -323,12 +298,10 @@ function enhanceDownload() {
 
           <!-- Actions -->
           <div class="flex flex-wrap gap-3">
-            <form method="POST" action="?/downloadM3U" use:enhance={enhanceDownload}>
-              <Button variant="outline" type="submit" disabled={downloading}>
-                <DownloadIcon class="mr-2 h-4 w-4" />
-                {downloading ? "Generating…" : "Download M3U"}
-              </Button>
-            </form>
+            <Button href="/m3u" variant="outline" data-sveltekit-reload>
+              <DownloadIcon class="mr-2 h-4 w-4" />
+              Download M3U
+            </Button>
 
             <ConfirmDialog
               bind:open={confirmRefreshOpen}

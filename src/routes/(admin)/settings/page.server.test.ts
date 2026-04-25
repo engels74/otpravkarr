@@ -171,7 +171,7 @@ describe("admin settings actions", () => {
       createActionEvent(body) as unknown as Parameters<typeof updateSecurity>[0],
     );
 
-    expect(result).toEqual({ success: true });
+    expect(result).toEqual({ success: true, message: "Security settings saved." });
     expect(state.configValues.get("allowed_origins")).toBe(
       JSON.stringify(["https://alpha.example", "http://localhost:3000", "http://localhost"]),
     );
@@ -200,7 +200,7 @@ describe("admin settings actions", () => {
       createActionEvent(body) as unknown as Parameters<typeof updateSecurity>[0],
     );
 
-    expect(result).toEqual({ success: true });
+    expect(result).toEqual({ success: true, message: "Security settings saved." });
     expect(state.configValues.get("allowed_origins")).toBe(JSON.stringify([]));
   });
 
@@ -267,7 +267,7 @@ describe("admin settings actions", () => {
       >[0],
     );
 
-    expect(result).toEqual({ success: true });
+    expect(result).toEqual({ success: true, message: "Security settings saved." });
     expect(mocks.setConfig).toHaveBeenCalledWith(
       "allowed_origins",
       JSON.stringify(["http://localhost", "https://app.example"]),
@@ -319,7 +319,7 @@ describe("admin settings actions", () => {
       createActionEvent(body) as unknown as Parameters<typeof updateSyncSettings>[0],
     );
 
-    expect(result).toEqual({ success: true });
+    expect(result).toEqual({ success: true, message: "Sync settings saved." });
     expect(state.configValues.get("sync_interval_minutes")).toBe("10");
     expect(mocks.createSyncJob).toHaveBeenCalledOnce();
     expect(mocks.schedulerRegister).toHaveBeenCalledWith(syncJob);

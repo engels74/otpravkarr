@@ -13,6 +13,8 @@ const mocks = vi.hoisted(() => ({
   ),
   updateUserMapping: vi.fn(),
   listGroups: vi.fn(async () => ({ ok: true, data: [] })),
+  listProfiles: vi.fn(async () => ({ ok: true, data: [] })),
+  updateUser: vi.fn(async () => ({ ok: true, data: {} })),
   rotateCredentials: vi.fn(async () => undefined),
   disableUser: vi.fn(async () => undefined),
   enableUser: vi.fn(async () => undefined),
@@ -48,6 +50,14 @@ vi.mock("$lib/dispatcharr/endpoints/groups", () => ({
   listGroups: mocks.listGroups,
 }));
 
+vi.mock("$lib/dispatcharr/endpoints/profiles", () => ({
+  listProfiles: mocks.listProfiles,
+}));
+
+vi.mock("$lib/dispatcharr/endpoints/users", () => ({
+  updateUser: mocks.updateUser,
+}));
+
 vi.mock("$lib/bridge/lifecycle", () => ({
   rotateCredentials: mocks.rotateCredentials,
   disableUser: mocks.disableUser,
@@ -65,6 +75,8 @@ function resetMocks() {
   mocks.getUserMappingById.mockClear();
   mocks.updateUserMapping.mockClear();
   mocks.listGroups.mockClear();
+  mocks.listProfiles.mockClear();
+  mocks.updateUser.mockClear();
   mocks.rotateCredentials.mockClear();
   mocks.disableUser.mockClear();
   mocks.enableUser.mockClear();
@@ -277,14 +289,97 @@ describe("admin users actions", () => {
     });
   });
 
-  it("disables changeProfile because it cannot propagate to Dispatcharr", async () => {
+  it("changeProfile updates Dispatcharr and persists the local profile id", async () => {
+    mocks.getConfig.mockResolvedValue("https://dispatcharr.example");
+
     const { actions } = await import("./+page.server");
     const changeProfile = actions.changeProfile;
     if (!changeProfile) throw new Error("changeProfile action is undefined");
 
+    mocks.getUserMappingById.mockReturnValueOnce({
+      id: 1,
+      dispatcharr_user_id: 42,
+      dispatcharr_profile_id: null,
+      plex_username: "alice",
+    } as unknown as { id: number; dispatcharr_user_id: number | null });
+
     const body = new FormData();
     body.set("id", "1");
-    body.set("profile_id", "2");
+    body.set("profile_id", "7");
+
+    const result = await changeProfile(
+      createActionEvent(body) as unknown as Parameters<typeof changeProfile>[0],
+    );
+
+    expect(result).toMatchObject({ success: true });
+    expect(mocks.updateUser).toHaveBeenCalledWith(expect.anything(), 42, {
+      channel_profiles: [7],
+    });
+    expect(mocks.updateUserMapping).toHaveBeenCalledWith(1, {
+      dispatcharr_profile_id: 7,
+    });
+    expect(mocks.appendAuditLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actor: "admin",
+        action: "user.profile_changed",
+        detail: expect.objectContaining({
+          mapping_id: 1,
+          plex_username: "alice",
+          before: null,
+          after: 7,
+        }),
+      }),
+    );
+  });
+
+  it("changeProfile clears the profile when given an empty profile_id", async () => {
+    mocks.getConfig.mockResolvedValue("https://dispatcharr.example");
+
+    const { actions } = await import("./+page.server");
+    const changeProfile = actions.changeProfile;
+    if (!changeProfile) throw new Error("changeProfile action is undefined");
+
+    mocks.getUserMappingById.mockReturnValueOnce({
+      id: 1,
+      dispatcharr_user_id: 42,
+      dispatcharr_profile_id: 7,
+      plex_username: "alice",
+    } as unknown as { id: number; dispatcharr_user_id: number | null });
+
+    const body = new FormData();
+    body.set("id", "1");
+    body.set("profile_id", "");
+
+    const result = await changeProfile(
+      createActionEvent(body) as unknown as Parameters<typeof changeProfile>[0],
+    );
+
+    expect(result).toMatchObject({ success: true });
+    expect(mocks.updateUser).toHaveBeenCalledWith(expect.anything(), 42, {
+      channel_profiles: [],
+    });
+    expect(mocks.updateUserMapping).toHaveBeenCalledWith(1, {
+      dispatcharr_profile_id: null,
+    });
+  });
+
+  it("changeProfile rejects users without a Dispatcharr account", async () => {
+    mocks.getConfig.mockResolvedValue("https://dispatcharr.example");
+
+    const { actions } = await import("./+page.server");
+    const changeProfile = actions.changeProfile;
+    if (!changeProfile) throw new Error("changeProfile action is undefined");
+
+    mocks.getUserMappingById.mockReturnValueOnce({
+      id: 1,
+      dispatcharr_user_id: null,
+      dispatcharr_profile_id: null,
+      plex_username: "alice",
+    } as unknown as { id: number; dispatcharr_user_id: number | null });
+
+    const body = new FormData();
+    body.set("id", "1");
+    body.set("profile_id", "7");
 
     const result = await changeProfile(
       createActionEvent(body) as unknown as Parameters<typeof changeProfile>[0],
@@ -292,13 +387,9 @@ describe("admin users actions", () => {
 
     expect(result).toMatchObject({
       status: 400,
-      data: {
-        error:
-          "Profile changes are currently unavailable because the Dispatcharr integration does not support propagating this update.",
-      },
+      data: { error: "User has no Dispatcharr account to update" },
     });
-    expect(mocks.requireAdmin).toHaveBeenCalledOnce();
-    expect(mocks.getUserMappingById).not.toHaveBeenCalled();
+    expect(mocks.updateUser).not.toHaveBeenCalled();
     expect(mocks.updateUserMapping).not.toHaveBeenCalled();
   });
 });

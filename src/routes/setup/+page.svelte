@@ -1216,7 +1216,7 @@ function enhanceHandler(nextStep?: number) {
               <Button
                 type="submit"
                 disabled={submitting || !!syncIntervalError}
-                class="relative z-10 w-full"
+                class="w-full"
               >
                 {#if submitting}
                   <svg class="mr-2 h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">

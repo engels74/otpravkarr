@@ -5,6 +5,7 @@ import CheckCircle2Icon from "lucide-svelte/icons/check-circle-2";
 import EllipsisIcon from "lucide-svelte/icons/ellipsis";
 import InfoIcon from "lucide-svelte/icons/info";
 import KeyRoundIcon from "lucide-svelte/icons/key-round";
+import LayersIcon from "lucide-svelte/icons/layers";
 import UsersIcon from "lucide-svelte/icons/users";
 import { toast } from "svelte-sonner";
 import { applyAction, enhance } from "$app/forms";
@@ -29,6 +30,7 @@ interface Props {
   data: {
     mappings: UserMapping[];
     groups: DispatcharrGroup[];
+    profiles: { id: number; name: string }[];
     filters: { status: string; mode: string; search: string };
   };
 }
@@ -39,11 +41,13 @@ let submitting = $state(false);
 
 // Dialog state
 let groupDialogOpen = $state(false);
+let profileDialogOpen = $state(false);
 let detailDialogOpen = $state(false);
 let passwordDialogOpen = $state(false);
 let disableDialogOpen = $state(false);
 let selectedMapping = $state<UserMapping | null>(null);
 let selectedGroupIds = $state<number[]>([]);
+let selectedProfileId = $state<number | null>(null);
 let disablingMapping = $state<UserMapping | null>(null);
 let oneTimePassword = $state("");
 let passwordCopyStatus = $state<"idle" | "copied" | "failed">("idle");
@@ -111,6 +115,12 @@ function openGroupDialog(m: UserMapping) {
   groupDialogOpen = true;
 }
 
+function openProfileDialog(m: UserMapping) {
+  selectedMapping = m;
+  selectedProfileId = m.dispatcharr_profile_id ?? null;
+  profileDialogOpen = true;
+}
+
 function openDetailDialog(m: UserMapping) {
   selectedMapping = m;
   detailDialogOpen = true;
@@ -143,6 +153,30 @@ function makeEnhanceHandler() {
       } finally {
         submitting = false;
         groupDialogOpen = false;
+      }
+    };
+  };
+}
+
+function makeProfileEnhanceHandler() {
+  return () => {
+    submitting = true;
+    return async ({ result, update }: { result: ActionResult; update: () => Promise<void> }) => {
+      try {
+        if (result.type === "success") {
+          toast.success("Profile updated.");
+          await update();
+        } else if (result.type === "failure") {
+          toast.error(
+            (result.data as { error?: string } | undefined)?.error ?? "Failed to update profile.",
+          );
+          await update();
+        } else {
+          await applyAction(result);
+        }
+      } finally {
+        submitting = false;
+        profileDialogOpen = false;
       }
     };
   };
@@ -389,6 +423,12 @@ async function copyOneTimePassword() {
                       <UsersIcon class="h-3.5 w-3.5" />
                       Change Group
                     </DropdownMenu.Item>
+                    {#if m.dispatcharr_user_id != null}
+                      <DropdownMenu.Item onclick={() => openProfileDialog(m)}>
+                        <LayersIcon class="h-3.5 w-3.5" />
+                        Change Profile
+                      </DropdownMenu.Item>
+                    {/if}
                     <DropdownMenu.Separator />
                     <DropdownMenu.Item onclick={() => openDetailDialog(m)}>
                       <InfoIcon class="h-3.5 w-3.5" />
@@ -409,21 +449,32 @@ async function copyOneTimePassword() {
 <Dialog.Root bind:open={groupDialogOpen}>
   <Dialog.Content class="sm:max-w-md">
     <Dialog.Header>
-      <Dialog.Title>Change Group</Dialog.Title>
+      <Dialog.Title>
+        {data.groups.length === 0 ? "Add groups in Dispatcharr first" : "Change Group"}
+      </Dialog.Title>
       <Dialog.Description>
-        Select groups for {selectedMapping?.plex_username ?? "user"}.
+        {#if data.groups.length === 0}
+          No groups exist yet. Create groups in Dispatcharr, then return here.
+        {:else}
+          Select groups for {selectedMapping?.plex_username ?? "user"}.
+        {/if}
       </Dialog.Description>
     </Dialog.Header>
     {#if selectedMapping}
-      <form method="POST" action="?/changeGroup" use:enhance={makeEnhanceHandler()}>
-        <input type="hidden" name="id" value={selectedMapping.id} />
-        <input type="hidden" name="group_ids" value={JSON.stringify(selectedGroupIds)} />
-        <div class="grid gap-2 py-2">
-          {#if data.groups.length === 0}
-            <p class="text-sm text-muted-foreground">
-              No groups configured. Add groups in Dispatcharr (Settings → Groups), then refresh this page.
-            </p>
-          {:else}
+      {#if data.groups.length === 0}
+        <p class="py-2 text-sm text-muted-foreground">
+          Open Dispatcharr → Settings → Groups, add at least one group, then refresh this page.
+        </p>
+        <Dialog.Footer>
+          <Button variant="outline" size="sm" onclick={() => (groupDialogOpen = false)}>
+            Close
+          </Button>
+        </Dialog.Footer>
+      {:else}
+        <form method="POST" action="?/changeGroup" use:enhance={makeEnhanceHandler()}>
+          <input type="hidden" name="id" value={selectedMapping.id} />
+          <input type="hidden" name="group_ids" value={JSON.stringify(selectedGroupIds)} />
+          <div class="grid gap-2 py-2">
             {#each data.groups as group (group.id)}
               <label class="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted cursor-pointer">
                 <input
@@ -435,14 +486,76 @@ async function copyOneTimePassword() {
                 {group.name}
               </label>
             {/each}
-          {/if}
-        </div>
+          </div>
+          <Dialog.Footer>
+            <Button type="submit" disabled={submitting} size="sm">
+              {submitting ? "Saving..." : "Save"}
+            </Button>
+          </Dialog.Footer>
+        </form>
+      {/if}
+    {/if}
+  </Dialog.Content>
+</Dialog.Root>
+
+<!-- Change Profile Dialog -->
+<Dialog.Root bind:open={profileDialogOpen}>
+  <Dialog.Content class="sm:max-w-md">
+    <Dialog.Header>
+      <Dialog.Title>
+        {data.profiles.length === 0 ? "Add channel profiles in Dispatcharr first" : "Change Profile"}
+      </Dialog.Title>
+      <Dialog.Description>
+        {#if data.profiles.length === 0}
+          No channel profiles exist yet. Create profiles in Dispatcharr, then return here.
+        {:else}
+          Select a channel profile for {selectedMapping?.plex_username ?? "user"}, or choose "All channels" for no restriction.
+        {/if}
+      </Dialog.Description>
+    </Dialog.Header>
+    {#if selectedMapping}
+      {#if data.profiles.length === 0}
+        <p class="py-2 text-sm text-muted-foreground">
+          Open Dispatcharr → Channel Profiles, add at least one profile, then refresh this page.
+        </p>
         <Dialog.Footer>
-          <Button type="submit" disabled={submitting || data.groups.length === 0} size="sm">
-            {submitting ? "Saving..." : "Save"}
+          <Button variant="outline" size="sm" onclick={() => (profileDialogOpen = false)}>
+            Close
           </Button>
         </Dialog.Footer>
-      </form>
+      {:else}
+        <form method="POST" action="?/changeProfile" use:enhance={makeProfileEnhanceHandler()}>
+          <input type="hidden" name="id" value={selectedMapping.id} />
+          <input type="hidden" name="profile_id" value={selectedProfileId == null ? "" : String(selectedProfileId)} />
+          <div class="grid gap-2 py-2">
+            <label class="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted cursor-pointer">
+              <input
+                type="radio"
+                name="profile_radio"
+                checked={selectedProfileId == null}
+                onchange={() => (selectedProfileId = null)}
+              />
+              <span class="text-muted-foreground">All channels (no profile)</span>
+            </label>
+            {#each data.profiles as profile (profile.id)}
+              <label class="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted cursor-pointer">
+                <input
+                  type="radio"
+                  name="profile_radio"
+                  checked={selectedProfileId === profile.id}
+                  onchange={() => (selectedProfileId = profile.id)}
+                />
+                {profile.name}
+              </label>
+            {/each}
+          </div>
+          <Dialog.Footer>
+            <Button type="submit" disabled={submitting} size="sm">
+              {submitting ? "Saving..." : "Save"}
+            </Button>
+          </Dialog.Footer>
+        </form>
+      {/if}
     {/if}
   </Dialog.Content>
 </Dialog.Root>

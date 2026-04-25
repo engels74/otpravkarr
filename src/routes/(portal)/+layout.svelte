@@ -19,8 +19,14 @@ $effect(() => {
 
 {#if data.user}
   <div class="page-shell">
+    <a
+      href="#main-content"
+      class="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:rounded-md focus:bg-background focus:px-3 focus:py-2 focus:ring-2 focus:ring-primary"
+    >
+      Skip to main content
+    </a>
     <PortalHeader plexUsername={data.user.plexUsername} plexThumb={data.user.plexThumb} />
-    <main class="flex-1 p-6">
+    <main id="main-content" class="flex-1 p-6">
       {@render children()}
     </main>
   </div>

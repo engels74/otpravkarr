@@ -23,6 +23,8 @@ const config: Config = {
         // properties via `style="--var: ..."` attributes. CSP nonces only apply
         // to <style> elements, not style attributes, so per-request nonces are
         // infeasible without a deep refactor of upstream components.
+        // TODO(unocss): drop unsafe-inline once UnoCSS / shadcn-svelte expose a
+        // hash- or nonce-based path for inline styles (tracked upstream).
         "style-src": ["self", "unsafe-inline"],
         "img-src": ["self", "data:", "https://plex.tv", "https://*.plex.direct"],
         "connect-src": ["self", "https://plex.tv", "https://*.plex.direct"],

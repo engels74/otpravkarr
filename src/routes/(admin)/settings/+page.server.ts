@@ -263,7 +263,7 @@ export const actions: Actions = {
       ipAddress: getClientAddress(),
     });
 
-    return { success: true };
+    return { success: true, message: "Sync settings saved." };
   },
 
   updateDefaultProvisioning: async (event) => {
@@ -311,7 +311,7 @@ export const actions: Actions = {
       ipAddress: getClientAddress(),
     });
 
-    return { success: true };
+    return { success: true, message: "Security settings saved." };
   },
 
   updateAuditRetention: async (event) => {
@@ -342,6 +342,6 @@ export const actions: Actions = {
       ipAddress: getClientAddress(),
     });
 
-    return { success: true };
+    return { success: true, message: "Audit log retention saved." };
   },
 };

@@ -190,13 +190,17 @@ export const actions: Actions = {
       return fail(400, { error: "Invalid group IDs" });
     }
 
-    try {
-      const before = parseStoredGroupIds(mapping.dispatcharr_group_ids);
+    const before = parseStoredGroupIds(mapping.dispatcharr_group_ids);
 
+    try {
       // Groups are tracked locally — the Dispatcharr User API does not have a groups field.
       // Group assignments on Dispatcharr are managed separately through the Groups API.
       updateUserMapping(id, { dispatcharr_group_ids: JSON.stringify(groupIds) });
+    } catch (err) {
+      return fail(500, { error: err instanceof Error ? err.message : "Failed to change group" });
+    }
 
+    try {
       appendAuditLog({
         actor: admin.username,
         action: AuditAction.USER_GROUP_CHANGED,
@@ -208,11 +212,12 @@ export const actions: Actions = {
         },
         ipAddress: event.getClientAddress(),
       });
-
-      return { success: true };
-    } catch (err) {
-      return fail(500, { error: err instanceof Error ? err.message : "Failed to change group" });
+    } catch {
+      // audit log failure should not mask the successful group change
+      console.warn("Failed to append audit log for USER_GROUP_CHANGED");
     }
+
+    return { success: true };
   },
 
   changeProfile: async (event) => {

@@ -1217,7 +1217,6 @@ function enhanceHandler(nextStep?: number) {
               <Button
                 type="submit"
                 disabled={submitting || !!syncIntervalError}
-                onclick={() => defaultsFormEl?.requestSubmit()}
                 class="relative z-10 w-full"
               >
                 {#if submitting}

@@ -24,6 +24,7 @@ vi.mock("$lib/db/repositories/audit", () => ({
 
 vi.mock("$lib/db/types", () => ({
   AuditAction: {
+    SYNC_STARTED: "sync.started",
     SYNC_COMPLETED: "sync.completed",
     SYNC_FAILED: "sync.failed",
   },
@@ -158,8 +159,13 @@ describe("POST /api/internal/sync", () => {
     const { POST } = await import("./+server");
     await POST(createEvent());
 
-    expect(mocks.appendAuditLog).toHaveBeenCalledTimes(1);
-    expect(mocks.appendAuditLog).toHaveBeenCalledWith({
+    // Route emits sync.started; reconcileSync emits sync.completed (mocked above).
+    expect(mocks.appendAuditLog).toHaveBeenCalledTimes(2);
+    expect(mocks.appendAuditLog).toHaveBeenNthCalledWith(1, {
+      action: "sync.started",
+      detail: { trigger: "manual" },
+    });
+    expect(mocks.appendAuditLog).toHaveBeenNthCalledWith(2, {
       action: "sync.completed",
       detail: report,
     });

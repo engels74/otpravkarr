@@ -28,6 +28,14 @@ export const POST: RequestHandler = async (event) => {
 
   try {
     const exclusive = await scheduler.runExclusive("plex-dispatcharr-sync", async () => {
+      try {
+        appendAuditLog({
+          action: AuditAction.SYNC_STARTED,
+          detail: { trigger: "manual" },
+        });
+      } catch {
+        // audit log failure should not block the sync
+      }
       const client = new DispatcharrClient(dispatcharrUrl, apiKey);
       return reconcileSync(client, plexAdminToken);
     });

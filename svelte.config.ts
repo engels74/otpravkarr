@@ -18,9 +18,14 @@ const config: Config = {
       directives: {
         "default-src": ["self"],
         "script-src": ["self"],
+        // 'unsafe-inline' for style-src is required because vendored shadcn-svelte
+        // sidebar components and the sonner toast wrapper set dynamic CSS custom
+        // properties via `style="--var: ..."` attributes. CSP nonces only apply
+        // to <style> elements, not style attributes, so per-request nonces are
+        // infeasible without a deep refactor of upstream components.
         "style-src": ["self", "unsafe-inline"],
         "img-src": ["self", "data:", "https://plex.tv", "https://*.plex.direct"],
-        "connect-src": ["self", "https://plex.tv"],
+        "connect-src": ["self", "https://plex.tv", "https://*.plex.direct"],
         "font-src": ["self"],
         "worker-src": isDev ? ["self", "blob:"] : ["self"],
         "object-src": ["none"],

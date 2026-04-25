@@ -12,10 +12,10 @@ function isDateOnlyFilter(value: string): boolean {
  * Serializes `detail` as JSON if provided.
  */
 export function appendAuditLog(entry: {
-  actor?: string;
+  actor?: string | undefined;
   action: string;
-  detail?: Record<string, unknown>;
-  ipAddress?: string;
+  detail?: Record<string, unknown> | undefined;
+  ipAddress?: string | undefined;
 }): void {
   const db = getDb();
   const detailJson = entry.detail != null ? JSON.stringify(entry.detail) : null;

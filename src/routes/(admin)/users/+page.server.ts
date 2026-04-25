@@ -89,7 +89,7 @@ export const load: PageServerLoad = async (event) => {
 
 export const actions: Actions = {
   rotateCredentials: async (event) => {
-    await requireAdmin(event);
+    const admin = await requireAdmin(event);
     const fd = await event.request.formData();
     const id = Number(fd.get("id"));
     if (!id) return fail(400, { error: "Missing user mapping ID" });
@@ -99,7 +99,10 @@ export const actions: Actions = {
 
     try {
       const client = await getClient();
-      await rotateCredentials(client, mapping);
+      await rotateCredentials(client, mapping, {
+        actor: admin.username,
+        ipAddress: event.getClientAddress(),
+      });
       return { success: true };
     } catch (err) {
       return fail(500, {
@@ -109,7 +112,7 @@ export const actions: Actions = {
   },
 
   disableUser: async (event) => {
-    await requireAdmin(event);
+    const admin = await requireAdmin(event);
     const fd = await event.request.formData();
     const id = Number(fd.get("id"));
     if (!id) return fail(400, { error: "Missing user mapping ID" });
@@ -119,7 +122,10 @@ export const actions: Actions = {
 
     try {
       const client = await getClient();
-      await disableUser(client, mapping);
+      await disableUser(client, mapping, {
+        actor: admin.username,
+        ipAddress: event.getClientAddress(),
+      });
       return { success: true };
     } catch (err) {
       return fail(500, { error: err instanceof Error ? err.message : "Failed to disable user" });
@@ -127,7 +133,7 @@ export const actions: Actions = {
   },
 
   enableUser: async (event) => {
-    await requireAdmin(event);
+    const admin = await requireAdmin(event);
     const fd = await event.request.formData();
     const id = Number(fd.get("id"));
     if (!id) return fail(400, { error: "Missing user mapping ID" });
@@ -141,11 +147,15 @@ export const actions: Actions = {
       if (mapping.dispatcharr_user_id != null) {
         // Dispatcharr user still exists — just re-enable locally
         await enableUser(client, mapping);
-      } else {
-        // Dispatcharr user was deleted during disable — re-provision
-        const groupIds = parseStoredGroupIds(mapping.dispatcharr_group_ids);
-        const plexToken = await getConfig("plex_admin_token");
-        const result = await provisionUser(client, {
+        return { success: true };
+      }
+
+      // Dispatcharr user was deleted during disable — re-provision
+      const groupIds = parseStoredGroupIds(mapping.dispatcharr_group_ids);
+      const plexToken = await getConfig("plex_admin_token");
+      const result = await provisionUser(
+        client,
+        {
           plexIdentity: {
             id: mapping.plex_account_id,
             uuid: mapping.plex_uuid,
@@ -157,17 +167,18 @@ export const actions: Actions = {
           mode: mapping.provisioning_mode,
           groupIds,
           profileId: mapping.dispatcharr_profile_id ?? undefined,
-        });
-        if (result.status === "failed") {
-          return fail(500, { error: result.error });
-        }
-        // Surface the one-time password so the admin can communicate it
-        if (result.status === "provisioned" && result.initialPassword) {
-          return { success: true, initialPassword: result.initialPassword };
-        }
+        },
+        { actor: admin.username, ipAddress: event.getClientAddress() },
+      );
+      if (result.status === "failed") {
+        return fail(500, { error: result.error });
       }
-
-      return { success: true };
+      // Surface the one-time password so the admin can communicate it.
+      // Automatic mode does not return an OTP (provisioner gates on mode).
+      if (result.status === "provisioned" && result.initialPassword) {
+        return { success: true, reprovisioned: true, initialPassword: result.initialPassword };
+      }
+      return { success: true, reprovisioned: true };
     } catch (err) {
       return fail(500, { error: err instanceof Error ? err.message : "Failed to enable user" });
     }

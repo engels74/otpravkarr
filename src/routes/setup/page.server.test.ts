@@ -679,6 +679,7 @@ describe("setup claim ownership", () => {
     const createAdminResult = await createAdmin({
       request: createAdminRequest,
       cookies: ownerCookies,
+      getClientAddress: () => "127.0.0.1",
     } as unknown as Parameters<typeof createAdmin>[0]);
     expect(createAdminResult).toEqual({ success: true });
     expect(state.configValues.get(setupCompletedKey)).toBe("false");
@@ -712,6 +713,7 @@ describe("setup claim ownership", () => {
       const configureOriginResult = await configureOrigin({
         request: configureOriginRequest,
         cookies: recoveredCookies,
+        getClientAddress: () => "127.0.0.1",
       } as unknown as Parameters<typeof configureOrigin>[0]);
       expect(configureOriginResult).toEqual({ success: true });
     } finally {
@@ -750,6 +752,7 @@ describe("setup claim ownership", () => {
       const createAdminResult = await createAdmin({
         request: createAdminRequest,
         cookies,
+        getClientAddress: () => "127.0.0.1",
       } as unknown as Parameters<typeof createAdmin>[0]);
       expect(createAdminResult).toEqual({ success: true });
 
@@ -765,6 +768,7 @@ describe("setup claim ownership", () => {
       const configureOriginResult = await configureOrigin({
         request: configureOriginRequest,
         cookies,
+        getClientAddress: () => "127.0.0.1",
       } as unknown as Parameters<typeof configureOrigin>[0]);
       expect(configureOriginResult).toEqual({ success: true });
 
@@ -845,6 +849,7 @@ describe("createAdmin", () => {
     const result = await createAdmin({
       request,
       cookies,
+      getClientAddress: () => "127.0.0.1",
     } as unknown as Parameters<typeof createAdmin>[0]);
 
     expect(result).toEqual({ success: true });
@@ -1252,6 +1257,7 @@ describe("configurePlex oauth completion retries", () => {
       request,
       url: new URL("http://localhost/setup"),
       cookies,
+      getClientAddress: () => "127.0.0.1",
     } as unknown as Parameters<typeof configurePlex>[0]);
 
     expect(result).toMatchObject({
@@ -1495,6 +1501,7 @@ describe("configurePlex retry behavior", () => {
       request,
       url: new URL("http://localhost/setup"),
       cookies,
+      getClientAddress: () => "127.0.0.1",
     } as unknown as Parameters<typeof configurePlex>[0]);
 
     expect(result).toMatchObject({ success: true, friendlyName: "Plex" });
@@ -1528,6 +1535,7 @@ describe("configurePlex retry behavior", () => {
       request,
       url: new URL("http://localhost/setup"),
       cookies,
+      getClientAddress: () => "127.0.0.1",
     } as unknown as Parameters<typeof configurePlex>[0]);
 
     expect(result).toMatchObject({ success: true });
@@ -1692,6 +1700,7 @@ describe("configureDispatcharr retry behavior", () => {
     const result = await configureDispatcharr({
       request,
       cookies,
+      getClientAddress: () => "127.0.0.1",
     } as unknown as Parameters<typeof configureDispatcharr>[0]);
 
     expect(result).toMatchObject({ success: true });
@@ -1722,6 +1731,7 @@ describe("configureDispatcharr retry behavior", () => {
     const result = await configureDispatcharr({
       request,
       cookies,
+      getClientAddress: () => "127.0.0.1",
     } as unknown as Parameters<typeof configureDispatcharr>[0]);
 
     expect(result).toMatchObject({ success: true });
@@ -1784,6 +1794,7 @@ describe("configureDispatcharr retry behavior", () => {
     const result = await configureDispatcharr({
       request,
       cookies,
+      getClientAddress: () => "127.0.0.1",
     } as unknown as Parameters<typeof configureDispatcharr>[0]);
 
     expect(result).toMatchObject({ success: true });
@@ -1816,6 +1827,7 @@ describe("configureDispatcharr retry behavior", () => {
     const result = await configureDispatcharr({
       request,
       cookies,
+      getClientAddress: () => "127.0.0.1",
     } as unknown as Parameters<typeof configureDispatcharr>[0]);
 
     expect(result).toMatchObject({ success: true });

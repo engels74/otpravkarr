@@ -384,7 +384,7 @@ function enhanceHandler(nextStep?: number) {
     <p class="text-sm text-muted-foreground">Plex sign-in complete. This window will close automatically.</p>
   </div>
 {:else}
-<main class="min-h-screen flex flex-col items-center justify-center px-4 py-12 bg-background text-foreground">
+<main class="min-h-screen flex flex-col items-center justify-start sm:justify-center px-4 py-8 sm:py-12 bg-background text-foreground">
   <!-- ─── Header ──────────────────────────────────────────── -->
   <div class="mb-8 text-center">
     <h1 class="text-2xl font-semibold tracking-tight">

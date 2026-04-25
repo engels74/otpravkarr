@@ -99,6 +99,26 @@ type SetupResumePayload = {
   dispatcharrProfiles: SetupSelectionOption[];
 };
 
+function safeAuditSetupStep(
+  actor: string,
+  step: string,
+  detail: Record<string, unknown>,
+  ipAddress: string,
+): void {
+  try {
+    appendAuditLog({
+      actor,
+      action: AuditAction.CONFIG_CHANGED,
+      detail: { step, ...detail },
+      ipAddress,
+    });
+  } catch (err) {
+    console.warn(
+      `Failed to append audit log for setup step ${step}: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+}
+
 async function isSetupClaimed(): Promise<boolean> {
   const claimed = await getConfig(SETUP_CLAIMED_CONFIG_KEY);
   return claimed === SETUP_CLAIMED_VALUE;
@@ -278,10 +298,12 @@ export const actions: Actions = {
     ]);
     cookies.set(SETUP_CLAIM_COOKIE_NAME, claimProof, SETUP_CLAIM_COOKIE_OPTIONS);
 
+    safeAuditSetupStep("setup-wizard", "bootstrap_token_claimed", {}, getClientAddress());
+
     return { success: true };
   },
 
-  createAdmin: async ({ request, cookies }) => {
+  createAdmin: async ({ request, cookies, getClientAddress }) => {
     const claimError = await requireSetupClaimedAction(cookies);
     if (claimError) {
       return claimError;
@@ -327,10 +349,12 @@ export const actions: Actions = {
       setConfig(SETUP_COMPLETED_CONFIG_KEY, SETUP_INCOMPLETE_VALUE),
     ]);
 
+    safeAuditSetupStep(username, "admin_created", { username }, getClientAddress());
+
     return { success: true };
   },
 
-  configurePlex: async ({ request, url, cookies }) => {
+  configurePlex: async ({ request, url, cookies, getClientAddress }) => {
     const claimError = await requireSetupClaimedAction(cookies);
     if (claimError) {
       return claimError;
@@ -338,6 +362,7 @@ export const actions: Actions = {
 
     const formData = await request.formData();
     const plexMode = String(formData.get("plexMode") ?? "");
+    const adminUsername = (await getConfig("admin_username")) ?? "setup-wizard";
 
     try {
       if (plexMode === "token") {
@@ -364,6 +389,12 @@ export const actions: Actions = {
           setConfig("plex_admin_token", plexToken, true),
           setConfig("plex_machine_id", serverInfo.machineIdentifier),
         ]);
+        safeAuditSetupStep(
+          adminUsername,
+          "plex_configured",
+          { mode: "token", machine_id: serverInfo.machineIdentifier },
+          getClientAddress(),
+        );
         return {
           success: true,
           friendlyName: serverInfo.friendlyName,
@@ -426,6 +457,12 @@ export const actions: Actions = {
           setConfig("plex_admin_token", identity.authenticationToken, true),
           setConfig("plex_machine_id", serverInfo.machineIdentifier),
         ]);
+        safeAuditSetupStep(
+          adminUsername,
+          "plex_configured",
+          { mode: "oauth", machine_id: serverInfo.machineIdentifier },
+          getClientAddress(),
+        );
         return {
           success: true,
           friendlyName: serverInfo.friendlyName,
@@ -447,7 +484,7 @@ export const actions: Actions = {
     }
   },
 
-  configureDispatcharr: async ({ request, cookies }) => {
+  configureDispatcharr: async ({ request, cookies, getClientAddress }) => {
     const claimError = await requireSetupClaimedAction(cookies);
     if (claimError) {
       return claimError;
@@ -521,10 +558,21 @@ export const actions: Actions = {
       // Probe is best-effort; ignore failures
     }
 
+    const adminUsername = (await getConfig("admin_username")) ?? "setup-wizard";
+    safeAuditSetupStep(
+      adminUsername,
+      "dispatcharr_configured",
+      {
+        url: dispatcharrUrl,
+        hasExternalUrl: Boolean(dispatcharrExternalUrl && dispatcharrExternalUrl.length > 0),
+      },
+      getClientAddress(),
+    );
+
     return { success: true, groups, profiles, xcProbe };
   },
 
-  configureOrigin: async ({ request, cookies }) => {
+  configureOrigin: async ({ request, cookies, getClientAddress }) => {
     const claimError = await requireSetupClaimedAction(cookies);
     if (claimError) {
       return claimError;
@@ -555,6 +603,14 @@ export const actions: Actions = {
     }
 
     await setConfig("allowed_origins", JSON.stringify(normalizedOrigins));
+
+    const adminUsername = (await getConfig("admin_username")) ?? "setup-wizard";
+    safeAuditSetupStep(
+      adminUsername,
+      "origins_configured",
+      { origins: normalizedOrigins },
+      getClientAddress(),
+    );
 
     return { success: true };
   },

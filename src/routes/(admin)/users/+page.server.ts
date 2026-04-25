@@ -183,12 +183,19 @@ export const actions: Actions = {
     if (!mapping) return fail(400, { error: "User mapping not found" });
 
     const groupIdsRaw = fd.get("group_ids");
-    let groupIds: number[];
+    let parsedGroupIds: unknown;
     try {
-      groupIds = JSON.parse(String(groupIdsRaw ?? "[]")) as number[];
+      parsedGroupIds = JSON.parse(String(groupIdsRaw ?? "[]"));
     } catch {
       return fail(400, { error: "Invalid group IDs" });
     }
+    if (
+      !Array.isArray(parsedGroupIds) ||
+      !parsedGroupIds.every((v): v is number => Number.isInteger(v) && v > 0)
+    ) {
+      return fail(400, { error: "Invalid group IDs" });
+    }
+    const groupIds: number[] = parsedGroupIds;
 
     const before = parseStoredGroupIds(mapping.dispatcharr_group_ids);
 

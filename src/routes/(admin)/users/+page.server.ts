@@ -1,13 +1,14 @@
 import { fail } from "@sveltejs/kit";
 import { disableUser, enableUser, rotateCredentials } from "$lib/bridge/lifecycle";
 import { provisionUser } from "$lib/bridge/provisioner";
+import { appendAuditLog } from "$lib/db/repositories/audit";
 import { getConfig } from "$lib/db/repositories/config";
 import {
   getAllUserMappings,
   getUserMappingById,
   updateUserMapping,
 } from "$lib/db/repositories/users";
-import type { ProvisioningMode } from "$lib/db/types";
+import { AuditAction, type ProvisioningMode } from "$lib/db/types";
 import { DispatcharrClient } from "$lib/dispatcharr/client";
 import { listGroups } from "$lib/dispatcharr/endpoints/groups";
 import { requireAdmin } from "$lib/server/auth";
@@ -173,7 +174,7 @@ export const actions: Actions = {
   },
 
   changeGroup: async (event) => {
-    await requireAdmin(event);
+    const admin = await requireAdmin(event);
     const fd = await event.request.formData();
     const id = Number(fd.get("id"));
     if (!id) return fail(400, { error: "Missing user mapping ID" });
@@ -182,21 +183,50 @@ export const actions: Actions = {
     if (!mapping) return fail(400, { error: "User mapping not found" });
 
     const groupIdsRaw = fd.get("group_ids");
-    let groupIds: number[];
+    let parsedGroupIds: unknown;
     try {
-      groupIds = JSON.parse(String(groupIdsRaw ?? "[]")) as number[];
+      parsedGroupIds = JSON.parse(String(groupIdsRaw ?? "[]"));
     } catch {
       return fail(400, { error: "Invalid group IDs" });
     }
+    if (
+      !Array.isArray(parsedGroupIds) ||
+      !parsedGroupIds.every((v): v is number => Number.isInteger(v) && v > 0)
+    ) {
+      return fail(400, { error: "Invalid group IDs" });
+    }
+    const groupIds: number[] = parsedGroupIds;
+
+    const before = parseStoredGroupIds(mapping.dispatcharr_group_ids);
 
     try {
       // Groups are tracked locally — the Dispatcharr User API does not have a groups field.
       // Group assignments on Dispatcharr are managed separately through the Groups API.
       updateUserMapping(id, { dispatcharr_group_ids: JSON.stringify(groupIds) });
-      return { success: true };
     } catch (err) {
       return fail(500, { error: err instanceof Error ? err.message : "Failed to change group" });
     }
+
+    try {
+      appendAuditLog({
+        actor: admin.username,
+        action: AuditAction.USER_GROUP_CHANGED,
+        detail: {
+          mapping_id: id,
+          plex_username: mapping.plex_username,
+          before,
+          after: groupIds,
+        },
+        ipAddress: event.getClientAddress(),
+      });
+    } catch (err) {
+      // audit log failure should not mask the successful group change
+      console.warn(
+        `Failed to append audit log for USER_GROUP_CHANGED: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+
+    return { success: true };
   },
 
   changeProfile: async (event) => {

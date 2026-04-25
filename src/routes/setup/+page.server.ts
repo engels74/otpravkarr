@@ -537,6 +537,7 @@ export const actions: Actions = {
 
     if (!originsResult.success) {
       return fail(400, {
+        field: "allowedOrigins",
         error: originsResult.error.issues[0]?.message ?? "At least one origin is required",
       });
     }
@@ -546,11 +547,11 @@ export const actions: Actions = {
       ",",
     );
     if (invalidOrigin) {
-      return fail(400, { error: `Invalid origin: ${invalidOrigin}` });
+      return fail(400, { field: "allowedOrigins", error: `Invalid origin: ${invalidOrigin}` });
     }
 
     if (normalizedOrigins.length === 0) {
-      return fail(400, { error: "At least one origin is required" });
+      return fail(400, { field: "allowedOrigins", error: "At least one origin is required" });
     }
 
     await setConfig("allowed_origins", JSON.stringify(normalizedOrigins));

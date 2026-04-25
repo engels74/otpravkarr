@@ -93,6 +93,16 @@ let defaultProfileId = $state<string>("");
 let syncInterval = $state("15");
 let provisioningMode = $state<string>("automatic");
 
+let syncIntervalError = $derived.by(() => {
+  const trimmed = String(syncInterval).trim();
+  if (trimmed === "") return "Sync interval is required.";
+  const n = Number(trimmed);
+  if (!Number.isInteger(n) || n < 1 || n > 1440) {
+    return "Sync interval must be between 1 and 1440 minutes.";
+  }
+  return null;
+});
+
 // ── Derived values ──────────────────────────────────────────────
 const steps = ["Claim", "Admin", "Plex", "Dispatcharr", "Origin", "Defaults"] as const;
 
@@ -1012,7 +1022,7 @@ function enhanceHandler(nextStep?: number) {
             <Alert.Root variant="destructive" class="mb-4">
               <Alert.Title>Configuration failed</Alert.Title>
               <Alert.Description>
-                {stepErrors.origins ?? stepErrors.message ?? 'Could not save origin configuration.'}
+                {stepErrors.allowedOrigins ?? stepErrors.origins ?? stepErrors.message ?? 'Could not save origin configuration.'}
               </Alert.Description>
             </Alert.Root>
           {/if}
@@ -1028,6 +1038,11 @@ function enhanceHandler(nextStep?: number) {
                   value={currentOrigin}
                   placeholder="http://localhost:3000"
                   required
+                  oninput={() => {
+                    if (stepErrors.allowedOrigins || stepErrors.origins || stepErrors.message) {
+                      stepErrors = {};
+                    }
+                  }}
                 />
                 <p class="text-xs text-muted-foreground">
                   Comma-separated list of allowed origins. Your current origin is pre-filled above.
@@ -1152,10 +1167,15 @@ function enhanceHandler(nextStep?: number) {
                   min="1"
                   max="1440"
                   bind:value={syncInterval}
+                  aria-invalid={syncIntervalError ? "true" : undefined}
                 />
-                <p class="text-xs text-muted-foreground">
-                  How often to sync channel data. Default: 15 minutes.
-                </p>
+                {#if syncIntervalError}
+                  <p class="text-xs text-destructive">{syncIntervalError}</p>
+                {:else}
+                  <p class="text-xs text-muted-foreground">
+                    How often to sync channel data. Default: 15 minutes.
+                  </p>
+                {/if}
               </div>
 
               <!-- Provisioning Mode -->
@@ -1193,7 +1213,11 @@ function enhanceHandler(nextStep?: number) {
 
               <Separator />
 
-              <Button type="submit" disabled={submitting} class="relative z-10 w-full">
+              <Button
+                type="submit"
+                disabled={submitting || !!syncIntervalError}
+                class="relative z-10 w-full"
+              >
                 {#if submitting}
                   <svg class="mr-2 h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                     <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" class="opacity-25" />

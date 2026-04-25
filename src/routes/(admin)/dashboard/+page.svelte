@@ -1,7 +1,10 @@
 <script lang="ts">
+import { toast } from "svelte-sonner";
+import { invalidateAll } from "$app/navigation";
 import HealthBadge from "$lib/components/HealthBadge.svelte";
 import * as Avatar from "$lib/components/ui/avatar";
 import { Badge } from "$lib/components/ui/badge";
+import { Button } from "$lib/components/ui/button";
 import * as Card from "$lib/components/ui/card";
 import { Separator } from "$lib/components/ui/separator";
 import * as Table from "$lib/components/ui/table";
@@ -74,6 +77,28 @@ function auditActionBadge(action: string): {
 function friendInitials(f: PlexFriend): string {
   const name = f.username ?? f.friendlyName ?? f.title ?? f.email;
   return name.slice(0, 2).toUpperCase();
+}
+
+let triggeringSync = $state(false);
+
+async function runSyncNow() {
+  if (triggeringSync) return;
+  triggeringSync = true;
+  try {
+    const response = await fetch("/api/internal/sync", { method: "POST" });
+    if (response.status === 409) {
+      toast.error("Sync already in progress.");
+    } else if (!response.ok) {
+      toast.error("Failed to start sync.");
+    } else {
+      toast.success("Sync completed.");
+    }
+  } catch {
+    toast.error("Failed to start sync.");
+  } finally {
+    triggeringSync = false;
+    await invalidateAll();
+  }
 }
 </script>
 
@@ -170,7 +195,7 @@ function friendInitials(f: PlexFriend): string {
 
         <Separator class="my-4" />
 
-        <div class="grid grid-cols-3 gap-3 text-sm">
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
           <div class="flex items-center justify-between">
             <span class="text-muted-foreground">Automatic</span>
             <span class="font-medium">{data.userStats.byMode.automatic}</span>
@@ -217,12 +242,21 @@ function friendInitials(f: PlexFriend): string {
 
           <Separator class="my-4" />
 
-          <div class="text-xs text-muted-foreground">
-            Health check: {#if data.healthJob}
-              {data.healthJob.running ? "running" : formatTimestamp(data.healthJob.lastRunAt)}
-            {:else}
-              not registered
-            {/if}
+          <div class="flex items-center justify-between gap-3">
+            <div class="text-xs text-muted-foreground">
+              Health check: {#if data.healthJob}
+                {data.healthJob.running ? "running" : formatTimestamp(data.healthJob.lastRunAt)}
+              {:else}
+                not registered
+              {/if}
+            </div>
+            <Button
+              size="sm"
+              onclick={runSyncNow}
+              disabled={triggeringSync || data.syncJob.running}
+            >
+              {triggeringSync || data.syncJob.running ? "Syncing…" : "Run sync now"}
+            </Button>
           </div>
         {:else}
           <p class="text-sm text-muted-foreground">Sync job not registered.</p>

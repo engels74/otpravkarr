@@ -16,7 +16,7 @@ let { plexUsername, plexThumb, class: className }: Props = $props();
 <header class="glass-header flex h-14 items-center justify-between px-4 {className ?? ''}">
   <AppLogo />
 
-  <div class="flex items-center gap-3">
+  <nav aria-label="Account" class="flex items-center gap-3">
     <PlexAvatar thumbUrl={plexThumb} username={plexUsername} size="sm" />
     <span class="text-sm text-muted-foreground">{plexUsername}</span>
 
@@ -25,5 +25,5 @@ let { plexUsername, plexThumb, class: className }: Props = $props();
         <LogOutIcon class="h-4 w-4" />
       </Button>
     </form>
-  </div>
+  </nav>
 </header>

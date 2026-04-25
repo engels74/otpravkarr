@@ -11,6 +11,8 @@ import {
 import { AuditAction, type ProvisioningMode } from "$lib/db/types";
 import { DispatcharrClient } from "$lib/dispatcharr/client";
 import { listGroups } from "$lib/dispatcharr/endpoints/groups";
+import { listProfiles } from "$lib/dispatcharr/endpoints/profiles";
+import { updateUser } from "$lib/dispatcharr/endpoints/users";
 import { requireAdmin } from "$lib/server/auth";
 import type { Actions, PageServerLoad } from "./$types";
 
@@ -69,20 +71,28 @@ export const load: PageServerLoad = async (event) => {
     );
   }
 
-  // Fetch Dispatcharr groups
+  // Fetch Dispatcharr groups + channel profiles
   let groups: { id: number; name: string }[] = [];
+  let profiles: { id: number; name: string }[] = [];
 
   try {
     const client = await getClient();
-    const groupsResult = await listGroups(client);
+    const [groupsResult, profilesResult] = await Promise.all([
+      listGroups(client),
+      listProfiles(client),
+    ]);
     if (groupsResult.ok) groups = groupsResult.data;
+    if (profilesResult.ok) {
+      profiles = profilesResult.data.map((p) => ({ id: p.id, name: p.name }));
+    }
   } catch {
-    // Dispatcharr may not be configured yet — groups stay empty
+    // Dispatcharr may not be configured yet — groups/profiles stay empty
   }
 
   return {
     mappings,
     groups,
+    profiles,
     filters: { status, mode, search },
   };
 };
@@ -147,6 +157,12 @@ export const actions: Actions = {
       if (mapping.dispatcharr_user_id != null) {
         // Dispatcharr user still exists — just re-enable locally
         await enableUser(client, mapping);
+        appendAuditLog({
+          actor: admin.username,
+          action: AuditAction.USER_RE_ENABLED,
+          detail: { mapping_id: id, plex_username: mapping.plex_username, reprovisioned: false },
+          ipAddress: event.getClientAddress(),
+        });
         return { success: true };
       }
 
@@ -173,6 +189,12 @@ export const actions: Actions = {
       if (result.status === "failed") {
         return fail(500, { error: result.error });
       }
+      appendAuditLog({
+        actor: admin.username,
+        action: AuditAction.USER_RE_ENABLED,
+        detail: { mapping_id: id, plex_username: mapping.plex_username, reprovisioned: true },
+        ipAddress: event.getClientAddress(),
+      });
       // Surface the one-time password so the admin can communicate it.
       // Automatic mode does not return an OTP (provisioner gates on mode).
       if (result.status === "provisioned" && result.initialPassword) {
@@ -241,10 +263,49 @@ export const actions: Actions = {
   },
 
   changeProfile: async (event) => {
-    await requireAdmin(event);
-    return fail(400, {
-      error:
-        "Profile changes are currently unavailable because the Dispatcharr integration does not support propagating this update.",
+    const admin = await requireAdmin(event);
+    const fd = await event.request.formData();
+    const id = Number(fd.get("id"));
+    const profileIdRaw = fd.get("profile_id");
+    const profileId = profileIdRaw === "" || profileIdRaw == null ? null : Number(profileIdRaw);
+    if (!id) return fail(400, { error: "Missing user mapping ID" });
+    if (profileId !== null && (!Number.isInteger(profileId) || profileId <= 0)) {
+      return fail(400, { error: "Invalid profile ID" });
+    }
+
+    const mapping = getUserMappingById(id);
+    if (!mapping) return fail(400, { error: "User mapping not found" });
+    if (mapping.dispatcharr_user_id == null) {
+      return fail(400, { error: "User has no Dispatcharr account to update" });
+    }
+
+    const before = mapping.dispatcharr_profile_id;
+
+    try {
+      const client = await getClient();
+      const updateRes = await updateUser(client, mapping.dispatcharr_user_id, {
+        channel_profiles: profileId == null ? [] : [profileId],
+      });
+      if (!updateRes.ok) return fail(500, { error: updateRes.message });
+      updateUserMapping(id, { dispatcharr_profile_id: profileId });
+    } catch (err) {
+      return fail(500, {
+        error: err instanceof Error ? err.message : "Failed to change profile",
+      });
+    }
+
+    appendAuditLog({
+      actor: admin.username,
+      action: AuditAction.USER_PROFILE_CHANGED,
+      detail: {
+        mapping_id: id,
+        plex_username: mapping.plex_username,
+        before,
+        after: profileId,
+      },
+      ipAddress: event.getClientAddress(),
     });
+
+    return { success: true };
   },
 };

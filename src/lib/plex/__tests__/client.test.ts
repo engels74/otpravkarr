@@ -99,6 +99,7 @@ describe("validateServerToken", () => {
       this.version = "1.32.0";
       return this;
     });
+    mockResources.mockResolvedValueOnce([{ clientIdentifier: "abc123" }]);
 
     const result = await validateServerToken("http://localhost:32400", "valid-token");
 
@@ -109,7 +110,34 @@ describe("validateServerToken", () => {
     });
   });
 
-  it("throws PlexAuthError on Unauthorized", async () => {
+  it("throws PlexAuthError when MyPlexAccount.connect rejects with Unauthorized", async () => {
+    resetMocks();
+    mockAccountConnect.mockImplementation(async () => {
+      throw new Unauthorized("Unauthorized");
+    });
+
+    await expect(validateServerToken("http://localhost:32400", "bad-token")).rejects.toThrow(
+      PlexAuthError,
+    );
+    expect(mockServerConnect).not.toHaveBeenCalled();
+  });
+
+  it("throws PlexAuthError when token does not own the server", async () => {
+    resetMocks();
+    mockServerConnect.mockImplementation(async function (this: InstanceType<typeof PlexServer>) {
+      this.friendlyName = "Foreign Server";
+      this.machineIdentifier = "foreign-id";
+      this.version = "1.32.0";
+      return this;
+    });
+    mockResources.mockResolvedValueOnce([{ clientIdentifier: "owned-id" }]);
+
+    await expect(
+      validateServerToken("http://localhost:32400", "valid-but-foreign-token"),
+    ).rejects.toThrow(PlexAuthError);
+  });
+
+  it("throws PlexAuthError on Unauthorized from server.connect", async () => {
     resetMocks();
     mockServerConnect.mockImplementation(async () => {
       throw new Unauthorized("Unauthorized");
@@ -159,6 +187,7 @@ describe("validateServerToken", () => {
       PlexConnectionError,
     );
     expect(mockServerConnect).not.toHaveBeenCalled();
+    expect(mockAccountConnect).not.toHaveBeenCalled();
   });
 });
 

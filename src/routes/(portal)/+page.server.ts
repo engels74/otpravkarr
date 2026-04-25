@@ -6,7 +6,6 @@ import { decrypt } from "$lib/crypto/encryption";
 import { getConfig } from "$lib/db/repositories/config";
 import { updateLastAccessed } from "$lib/db/repositories/users";
 import { DispatcharrClient } from "$lib/dispatcharr/client";
-import { createChannelEndpoints } from "$lib/dispatcharr/endpoints/channels";
 import { initiateOAuth } from "$lib/plex/oauth";
 import { PlexAuthError } from "$lib/plex/types";
 import { isSecure } from "$lib/server/auth";
@@ -17,7 +16,6 @@ import {
 import { selectActivePublicOrigin } from "$lib/server/origins";
 import { oauthLimiter } from "$lib/server/ratelimit";
 import { getFredTvAssets } from "$lib/url/github-releases.server";
-import { generateM3U } from "$lib/url/m3u";
 import {
   buildPlatformUrl,
   getSupportedPlatforms,
@@ -204,60 +202,5 @@ export const actions: Actions = {
     }
 
     throw redirect(303, "/");
-  },
-
-  downloadM3U: async ({ locals }) => {
-    if (!locals.user) {
-      return fail(401, { error: "not_authenticated" });
-    }
-
-    if (locals.user.provisioning_mode !== "automatic" || locals.user.is_active !== 1) {
-      return fail(400, { error: "not_allowed" });
-    }
-
-    if (!locals.user.dispatcharr_xc_password_enc) {
-      return fail(400, { error: "no_credentials" });
-    }
-
-    try {
-      const dispatcharrUrl = await getConfig("dispatcharr_url");
-      const dispatcharrApiKey = await getConfig("dispatcharr_api_key");
-
-      if (!dispatcharrUrl || !dispatcharrApiKey) {
-        return fail(500, { error: "config_missing" });
-      }
-
-      const client = new DispatcharrClient(dispatcharrUrl, dispatcharrApiKey);
-      const channelsResult = await createChannelEndpoints(client).getAllChannels();
-
-      if (!channelsResult.ok) {
-        return fail(500, { error: "channels_failed", message: channelsResult.message });
-      }
-
-      const password = await decrypt(
-        locals.user.dispatcharr_xc_password_enc,
-        "credential-encryption",
-      );
-      const username = locals.user.dispatcharr_username ?? "";
-      const publicHost = await getDispatcharrPublicUrl();
-      if (!publicHost) {
-        return fail(500, {
-          error: "public_url_unavailable",
-          message: "A HTTPS Dispatcharr public URL is required to generate M3U credentials.",
-        });
-      }
-
-      const m3uContent = generateM3U({
-        channels: channelsResult.data,
-        host: publicHost,
-        username,
-        password,
-      });
-
-      return { m3uContent };
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Failed to generate M3U";
-      return fail(500, { error: "m3u_failed", message });
-    }
   },
 };

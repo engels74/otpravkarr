@@ -9,17 +9,30 @@ const INSECURE_PLEX_URL_MESSAGE =
 
 /**
  * Validate a Plex server token by connecting and returning server metadata.
+ *
+ * `PlexServer.connect()` only fetches the server's identity endpoint, which many
+ * Plex servers serve unauthenticated. To actually verify the token, we first
+ * connect a `MyPlexAccount` (which hits plex.tv and returns 401 on bad tokens),
+ * then confirm the account has access to a server with the given machineIdentifier.
  */
 export async function validateServerToken(url: string, token: string): Promise<PlexServerInfo> {
   if (!isSafeHttpSecretUrl(url)) {
     throw new PlexConnectionError(INSECURE_PLEX_URL_MESSAGE);
   }
   try {
+    const account = await new MyPlexAccount({ token }).connect();
+
     const server = new PlexServer(url, token);
     await server.connect();
 
     if (!server.friendlyName || !server.machineIdentifier) {
       throw new PlexConnectionError("Server metadata missing after connect");
+    }
+
+    const resources = await account.resources();
+    const owned = resources.some((r) => r.clientIdentifier === server.machineIdentifier);
+    if (!owned) {
+      throw new PlexAuthError("Token does not have access to this Plex server");
     }
 
     return {
@@ -46,6 +59,10 @@ export async function validateServerToken(url: string, token: string): Promise<P
 
 /**
  * Check the health of a Plex server connection.
+ *
+ * Connects `MyPlexAccount` first so a stale or revoked token is reported as
+ * "unauthorized" — the server's identity endpoint is often unauthenticated and
+ * can't be relied on to detect bad tokens.
  */
 export async function checkServerHealth(
   url: string,
@@ -56,6 +73,8 @@ export async function checkServerHealth(
     throw new PlexConnectionError(INSECURE_PLEX_URL_MESSAGE);
   }
   try {
+    await new MyPlexAccount({ token }).connect();
+
     const server = new PlexServer(url, token);
     await server.connect();
 

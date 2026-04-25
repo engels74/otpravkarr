@@ -20,12 +20,16 @@ export const GET: RequestHandler = async ({ locals }) => {
     throw error(400, "No credentials provisioned");
   }
 
-  const [dispatcharrUrl, dispatcharrApiKey] = await Promise.all([
+  const [dispatcharrUrl, dispatcharrApiKey, publicHost] = await Promise.all([
     getConfig("dispatcharr_url"),
     getConfig("dispatcharr_api_key"),
+    getDispatcharrPublicUrl(),
   ]);
   if (!dispatcharrUrl || !dispatcharrApiKey) {
     throw error(500, "Dispatcharr is not configured");
+  }
+  if (!publicHost) {
+    throw error(500, "A HTTPS Dispatcharr public URL is required to generate M3U credentials");
   }
 
   const client = new DispatcharrClient(dispatcharrUrl, dispatcharrApiKey);
@@ -36,10 +40,6 @@ export const GET: RequestHandler = async ({ locals }) => {
 
   const password = await decrypt(locals.user.dispatcharr_xc_password_enc, "credential-encryption");
   const username = locals.user.dispatcharr_username ?? "";
-  const publicHost = await getDispatcharrPublicUrl();
-  if (!publicHost) {
-    throw error(500, "A HTTPS Dispatcharr public URL is required to generate M3U credentials");
-  }
 
   const m3uContent = generateM3U({
     channels: channelsResult.data,

@@ -157,12 +157,19 @@ export const actions: Actions = {
       if (mapping.dispatcharr_user_id != null) {
         // Dispatcharr user still exists — just re-enable locally
         await enableUser(client, mapping);
-        appendAuditLog({
-          actor: admin.username,
-          action: AuditAction.USER_RE_ENABLED,
-          detail: { mapping_id: id, plex_username: mapping.plex_username, reprovisioned: false },
-          ipAddress: event.getClientAddress(),
-        });
+        try {
+          appendAuditLog({
+            actor: admin.username,
+            action: AuditAction.USER_RE_ENABLED,
+            detail: { mapping_id: id, plex_username: mapping.plex_username, reprovisioned: false },
+            ipAddress: event.getClientAddress(),
+          });
+        } catch (err) {
+          // audit log failure should not mask the successful re-enable
+          console.warn(
+            `Failed to append audit log for USER_RE_ENABLED: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
         return { success: true };
       }
 
@@ -189,12 +196,20 @@ export const actions: Actions = {
       if (result.status === "failed") {
         return fail(500, { error: result.error });
       }
-      appendAuditLog({
-        actor: admin.username,
-        action: AuditAction.USER_RE_ENABLED,
-        detail: { mapping_id: id, plex_username: mapping.plex_username, reprovisioned: true },
-        ipAddress: event.getClientAddress(),
-      });
+      try {
+        appendAuditLog({
+          actor: admin.username,
+          action: AuditAction.USER_RE_ENABLED,
+          detail: { mapping_id: id, plex_username: mapping.plex_username, reprovisioned: true },
+          ipAddress: event.getClientAddress(),
+        });
+      } catch (err) {
+        // audit log failure must not mask the successful re-provision —
+        // otherwise the OTP returned by provisionUser is irrecoverable.
+        console.warn(
+          `Failed to append audit log for USER_RE_ENABLED (re-provisioned): ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
       // Surface the one-time password so the admin can communicate it.
       // Automatic mode does not return an OTP (provisioner gates on mode).
       if (result.status === "provisioned" && result.initialPassword) {
@@ -294,17 +309,24 @@ export const actions: Actions = {
       });
     }
 
-    appendAuditLog({
-      actor: admin.username,
-      action: AuditAction.USER_PROFILE_CHANGED,
-      detail: {
-        mapping_id: id,
-        plex_username: mapping.plex_username,
-        before,
-        after: profileId,
-      },
-      ipAddress: event.getClientAddress(),
-    });
+    try {
+      appendAuditLog({
+        actor: admin.username,
+        action: AuditAction.USER_PROFILE_CHANGED,
+        detail: {
+          mapping_id: id,
+          plex_username: mapping.plex_username,
+          before,
+          after: profileId,
+        },
+        ipAddress: event.getClientAddress(),
+      });
+    } catch (err) {
+      // audit log failure should not mask the successful profile change
+      console.warn(
+        `Failed to append audit log for USER_PROFILE_CHANGED: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
 
     return { success: true };
   },

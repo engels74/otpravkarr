@@ -138,7 +138,7 @@ describe("portal /m3u GET endpoint", () => {
     ).rejects.toMatchObject({ status: 500 });
   });
 
-  it("500s when no safe public URL is available", async () => {
+  it("500s when no safe public URL is available without fetching channels or decrypting", async () => {
     mocks.getDispatcharrPublicUrl.mockResolvedValueOnce(null);
     const { GET } = await import("./+server");
 
@@ -148,6 +148,8 @@ describe("portal /m3u GET endpoint", () => {
       } as unknown as Parameters<typeof GET>[0]),
     ).rejects.toMatchObject({ status: 500 });
     expect(mocks.generateM3U).not.toHaveBeenCalled();
+    expect(mocks.createChannelEndpoints).not.toHaveBeenCalled();
+    expect(mocks.decrypt).not.toHaveBeenCalled();
   });
 
   it("502s when channel fetch fails", async () => {

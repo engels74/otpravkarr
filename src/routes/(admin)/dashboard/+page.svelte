@@ -86,18 +86,30 @@ async function runSyncNow() {
   triggeringSync = true;
   try {
     const response = await fetch("/api/internal/sync", { method: "POST" });
+    const body = (await response.json().catch(() => null)) as {
+      error?: string;
+      message?: string;
+      report?: { errors?: unknown[] };
+    } | null;
     if (response.status === 409) {
       toast.error("Sync already in progress.");
+    } else if (response.status === 503 && body?.error === "missing_config") {
+      toast.error("Sync cannot run: missing configuration.");
     } else if (!response.ok) {
-      toast.error("Failed to start sync.");
+      toast.error(body?.message ?? "Sync failed.");
+    } else if (Array.isArray(body?.report?.errors) && body.report.errors.length > 0) {
+      toast.warning(`Sync completed with ${body.report.errors.length} error(s). See audit log.`);
     } else {
       toast.success("Sync completed.");
     }
   } catch {
-    toast.error("Failed to start sync.");
+    toast.error("Sync request failed.");
   } finally {
-    triggeringSync = false;
+    // invalidate first so data.syncJob.running reflects the post-sync state
+    // before we re-enable the button — otherwise a fast double-click could
+    // fire a second POST in the brief window between flag flip and reload.
     await invalidateAll();
+    triggeringSync = false;
   }
 }
 </script>

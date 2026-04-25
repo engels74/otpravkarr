@@ -252,6 +252,48 @@ describe("checkServerHealth", () => {
     const result = await checkServerHealth("http://localhost:32400", "token", "id");
     expect(result).toBe("unreachable");
   });
+
+  it("returns 'healthy' when plex.tv is unreachable but local server is reachable", async () => {
+    // plex.tv outages must not flip the dashboard red — the plex.tv probe is
+    // best-effort and only escalates to "unreachable" when the local server
+    // probe also fails.
+    resetMocks();
+    mockAccountConnect.mockImplementation(async () => {
+      throw new Error("getaddrinfo ENOTFOUND plex.tv");
+    });
+    mockServerConnect.mockImplementation(async function (this: InstanceType<typeof PlexServer>) {
+      this.machineIdentifier = "expected-id";
+      return this;
+    });
+
+    const result = await checkServerHealth("http://localhost:32400", "token", "expected-id");
+    expect(result).toBe("healthy");
+    expect(mockServerConnect).toHaveBeenCalledOnce();
+  });
+
+  it("returns 'unauthorized' when plex.tv reports Unauthorized without probing local server", async () => {
+    resetMocks();
+    mockAccountConnect.mockImplementation(async () => {
+      throw new Unauthorized("Unauthorized");
+    });
+
+    const result = await checkServerHealth("http://localhost:32400", "stale-token", "id");
+    expect(result).toBe("unauthorized");
+    expect(mockServerConnect).not.toHaveBeenCalled();
+  });
+
+  it("returns 'unreachable' when both plex.tv and local server fail", async () => {
+    resetMocks();
+    mockAccountConnect.mockImplementation(async () => {
+      throw new Error("getaddrinfo ENOTFOUND plex.tv");
+    });
+    mockServerConnect.mockImplementation(async () => {
+      throw new Error("ECONNREFUSED");
+    });
+
+    const result = await checkServerHealth("http://localhost:32400", "token", "id");
+    expect(result).toBe("unreachable");
+  });
 });
 
 describe("getAccount", () => {

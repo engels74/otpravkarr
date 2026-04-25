@@ -60,9 +60,13 @@ export async function validateServerToken(url: string, token: string): Promise<P
 /**
  * Check the health of a Plex server connection.
  *
- * Connects `MyPlexAccount` first so a stale or revoked token is reported as
+ * Probes plex.tv first so a stale or revoked token is reported as
  * "unauthorized" — the server's identity endpoint is often unauthenticated and
- * can't be relied on to detect bad tokens.
+ * can't be relied on to detect bad tokens. The plex.tv probe is best-effort:
+ * a transient plex.tv outage (DNS, 5xx, network) must not be reported as the
+ * local Plex server being unreachable, so non-Unauthorized errors fall through
+ * to the local server probe and only escalate to "unreachable" if the local
+ * server probe also fails.
  */
 export async function checkServerHealth(
   url: string,
@@ -72,9 +76,17 @@ export async function checkServerHealth(
   if (!isSafeHttpSecretUrl(url)) {
     throw new PlexConnectionError(INSECURE_PLEX_URL_MESSAGE);
   }
+
   try {
     await new MyPlexAccount({ token }).connect();
+  } catch (error: unknown) {
+    if (error instanceof Unauthorized) {
+      return "unauthorized";
+    }
+    // plex.tv unreachable — fall through to probe the local server directly
+  }
 
+  try {
     const server = new PlexServer(url, token);
     await server.connect();
 
@@ -90,9 +102,6 @@ export async function checkServerHealth(
   } catch (error: unknown) {
     if (error instanceof Unauthorized) {
       return "unauthorized";
-    }
-    if (error instanceof BadRequest || error instanceof NotFound) {
-      return "unreachable";
     }
     return "unreachable";
   }

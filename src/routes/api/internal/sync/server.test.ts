@@ -24,6 +24,7 @@ vi.mock("$lib/db/repositories/audit", () => ({
 
 vi.mock("$lib/db/types", () => ({
   AuditAction: {
+    SYNC_STARTED: "sync.started",
     SYNC_COMPLETED: "sync.completed",
     SYNC_FAILED: "sync.failed",
   },
@@ -51,7 +52,9 @@ vi.mock("$lib/scheduler/runner", () => ({
 }));
 
 function createEvent() {
-  return {} as Parameters<typeof import("./+server").POST>[0];
+  return {
+    getClientAddress: () => "127.0.0.1",
+  } as unknown as Parameters<typeof import("./+server").POST>[0];
 }
 
 function resetAll() {
@@ -158,8 +161,15 @@ describe("POST /api/internal/sync", () => {
     const { POST } = await import("./+server");
     await POST(createEvent());
 
-    expect(mocks.appendAuditLog).toHaveBeenCalledTimes(1);
-    expect(mocks.appendAuditLog).toHaveBeenCalledWith({
+    // Route emits sync.started; reconcileSync emits sync.completed (mocked above).
+    expect(mocks.appendAuditLog).toHaveBeenCalledTimes(2);
+    expect(mocks.appendAuditLog).toHaveBeenNthCalledWith(1, {
+      actor: "admin",
+      action: "sync.started",
+      detail: { trigger: "manual" },
+      ipAddress: "127.0.0.1",
+    });
+    expect(mocks.appendAuditLog).toHaveBeenNthCalledWith(2, {
       action: "sync.completed",
       detail: report,
     });
@@ -207,8 +217,10 @@ describe("POST /api/internal/sync", () => {
     await POST(createEvent());
 
     expect(mocks.appendAuditLog).toHaveBeenCalledWith({
+      actor: "admin",
       action: "sync.failed",
       detail: { error: "Connection refused" },
+      ipAddress: "127.0.0.1",
     });
   });
 

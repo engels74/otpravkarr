@@ -200,13 +200,18 @@ function makeEnableEnhance() {
     return async ({ result, update }: { result: ActionResult; update: () => Promise<void> }) => {
       try {
         if (result.type === "success") {
-          const d = result.data as { initialPassword?: string } | undefined;
+          const d = result.data as
+            | { initialPassword?: string; reprovisioned?: boolean }
+            | undefined;
           if (d?.initialPassword) {
             oneTimePassword = d.initialPassword;
             passwordCopyStatus = "idle";
             passwordDialogOpen = true;
+          } else if (d?.reprovisioned) {
+            toast.success("User re-enabled. New credentials will rotate on next sync.");
+          } else {
+            toast.success("User enabled successfully.");
           }
-          toast.success("User enabled successfully.");
           await update();
         } else if (result.type === "failure") {
           toast.error(
@@ -278,6 +283,7 @@ async function copyOneTimePassword() {
 
     <Input
       placeholder="Search username..."
+      aria-label="Search users by username"
       class="w-[200px] text-foreground"
       value={searchValue}
       oninput={onSearchInput}
@@ -335,7 +341,7 @@ async function copyOneTimePassword() {
                 <DropdownMenu.Root>
                   <DropdownMenu.Trigger>
                     {#snippet child({ props })}
-                      <Button variant="ghost" size="icon-sm" {...props}>
+                      <Button variant="ghost" size="icon-sm" aria-label={`Open actions for ${m.plex_username}`} {...props}>
                         <EllipsisIcon class="h-4 w-4" />
                       </Button>
                     {/snippet}
@@ -414,7 +420,9 @@ async function copyOneTimePassword() {
         <input type="hidden" name="group_ids" value={JSON.stringify(selectedGroupIds)} />
         <div class="grid gap-2 py-2">
           {#if data.groups.length === 0}
-            <p class="text-sm text-muted-foreground">No groups available.</p>
+            <p class="text-sm text-muted-foreground">
+              No groups configured. Add groups in Dispatcharr (Settings → Groups), then refresh this page.
+            </p>
           {:else}
             {#each data.groups as group (group.id)}
               <label class="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted cursor-pointer">
@@ -430,7 +438,7 @@ async function copyOneTimePassword() {
           {/if}
         </div>
         <Dialog.Footer>
-          <Button type="submit" disabled={submitting} size="sm">
+          <Button type="submit" disabled={submitting || data.groups.length === 0} size="sm">
             {submitting ? "Saving..." : "Save"}
           </Button>
         </Dialog.Footer>

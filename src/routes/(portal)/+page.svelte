@@ -1,10 +1,12 @@
 <script lang="ts">
+import type { ActionResult } from "@sveltejs/kit";
 import AlertCircleIcon from "lucide-svelte/icons/alert-circle";
 import DownloadIcon from "lucide-svelte/icons/download";
 import ExternalLinkIcon from "lucide-svelte/icons/external-link";
 import Loader2Icon from "lucide-svelte/icons/loader-2";
 import RefreshCwIcon from "lucide-svelte/icons/refresh-cw";
 import ShieldAlertIcon from "lucide-svelte/icons/shield-alert";
+import { toast } from "svelte-sonner";
 import { enhance } from "$app/forms";
 import { invalidateAll } from "$app/navigation";
 import { page } from "$app/state";
@@ -125,10 +127,15 @@ function enhanceSignIn() {
 
 function enhanceRefresh() {
   refreshing = true;
-  return async ({ update }: { update: () => Promise<void> }) => {
+  return async ({ result, update }: { result: ActionResult; update: () => Promise<void> }) => {
     refreshing = false;
     confirmRefreshOpen = false;
     await update();
+    if (result.type === "success") {
+      toast.success("Credentials refreshed.");
+    } else if (result.type === "failure" || result.type === "error") {
+      toast.error("Couldn't refresh credentials. Try again.");
+    }
   };
 }
 

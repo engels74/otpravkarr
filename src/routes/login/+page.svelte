@@ -23,25 +23,31 @@ const ERROR_MESSAGES: Record<string, string> = {
 let { form }: Props = $props();
 let submitting = $state(false);
 let countdownSeconds = $state(0);
+let rateLimitCleared = $state(false);
 
 $effect(() => {
   if (form?.error !== "rate_limited" || !form.resetAt) {
     countdownSeconds = 0;
+    rateLimitCleared = false;
     return;
   }
 
   const resetAt = form.resetAt;
+  rateLimitCleared = false;
+
+  let interval: ReturnType<typeof setInterval>;
 
   function tick() {
     const remaining = Math.max(0, Math.ceil((resetAt - Date.now()) / 1000));
     countdownSeconds = remaining;
     if (remaining <= 0) {
-      form = undefined;
+      rateLimitCleared = true;
+      clearInterval(interval);
     }
   }
 
+  interval = setInterval(tick, 1000);
   tick();
-  const interval = setInterval(tick, 1000);
   return () => clearInterval(interval);
 });
 
@@ -53,11 +59,20 @@ function formatCountdown(totalSeconds: number): string {
 }
 
 let errorMessage = $derived(
-  form?.error === "rate_limited" && countdownSeconds > 0
-    ? `Too many login attempts. Try again in ${formatCountdown(countdownSeconds)}.`
-    : form?.error
-      ? (ERROR_MESSAGES[form.error] ?? "Unable to sign in.")
-      : null,
+  form?.error === "rate_limited" && rateLimitCleared
+    ? "You can now try again."
+    : form?.error === "rate_limited" && countdownSeconds > 0
+      ? `Too many login attempts. Try again in ${formatCountdown(countdownSeconds)}.`
+      : form?.error
+        ? (ERROR_MESSAGES[form.error] ?? "Unable to sign in.")
+        : null,
+);
+
+let errorVariant = $derived<"default" | "destructive">(
+  form?.error === "rate_limited" && rateLimitCleared ? "default" : "destructive",
+);
+let errorTitle = $derived(
+  form?.error === "rate_limited" && rateLimitCleared ? "Ready to retry" : "Authentication failed",
 );
 
 function enhanceHandler() {
@@ -90,8 +105,8 @@ function enhanceHandler() {
       </Card.Header>
       <Card.Content>
         {#if errorMessage}
-          <Alert.Root variant="destructive" class="mb-4">
-            <Alert.Title>Authentication failed</Alert.Title>
+          <Alert.Root variant={errorVariant} class="mb-4">
+            <Alert.Title>{errorTitle}</Alert.Title>
             <Alert.Description>{errorMessage}</Alert.Description>
           </Alert.Root>
         {/if}

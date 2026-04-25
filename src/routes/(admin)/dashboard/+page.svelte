@@ -163,7 +163,7 @@ function friendInitials(f: PlexFriend): string {
             <div class="text-xs text-muted-foreground">Inactive</div>
           </div>
           <div>
-            <div class="text-2xl font-semibold text-amber-600 dark:text-amber-400">{data.userStats.orphaned}</div>
+            <div class={`text-2xl font-semibold ${data.userStats.orphaned > 0 ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}`}>{data.userStats.orphaned}</div>
             <div class="text-xs text-muted-foreground">Orphaned</div>
           </div>
         </div>

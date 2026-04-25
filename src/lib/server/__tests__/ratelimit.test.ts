@@ -150,8 +150,8 @@ describe("pre-configured limiters", () => {
     expect(setupLimiter.check("ip-1").allowed).toBe(false);
   });
 
-  it("loginLimiter allows 10, denies 11th", () => {
-    for (let i = 0; i < 10; i++) {
+  it("loginLimiter allows 5, denies 6th", () => {
+    for (let i = 0; i < 5; i++) {
       expect(loginLimiter.check("ip-1").allowed).toBe(true);
     }
     expect(loginLimiter.check("ip-1").allowed).toBe(false);

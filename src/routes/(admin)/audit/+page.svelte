@@ -111,25 +111,37 @@ function updateFilter(key: string, value: string | null) {
   goto(url.toString(), { replaceState: true, keepFocus: true });
 }
 
-function actionBadgeVariant(action: string): "default" | "secondary" | "destructive" {
-  if (action.includes("failed") || action.includes("disabled")) return "destructive";
-  if (action.includes("completed") || action.includes("login") || action.includes("provisioned"))
-    return "default";
-  return "secondary";
+function actionBadgeClasses(action: string): string {
+  if (action.includes("failed") || action.includes("disabled"))
+    return "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300 border-transparent";
+  if (
+    action.includes("completed") ||
+    action.includes("login") ||
+    action.includes("provisioned") ||
+    action.includes("rotated")
+  )
+    return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 border-transparent";
+  if (action.includes("started"))
+    return "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 border-transparent";
+  return "bg-zinc-100 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-300 border-transparent";
 }
+
+const TIMESTAMP_FORMATTER = new Intl.DateTimeFormat("en-GB", {
+  year: "numeric",
+  month: "short",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hour12: false,
+});
 
 function formatTimestamp(ts: string): string {
   const d = new Date(normalizeSqliteDatetime(ts));
   if (Number.isNaN(d.getTime())) return ts;
-  return new Intl.DateTimeFormat("en-GB", {
-    year: "numeric",
-    month: "short",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  }).format(d);
+  const parts = TIMESTAMP_FORMATTER.formatToParts(d);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+  return `${get("day")} ${get("month")} ${get("year")} ${get("hour")}:${get("minute")}:${get("second")}`;
 }
 
 function formatDetail(detail: string | null): string {
@@ -178,13 +190,13 @@ function formatDateLabel(value: DateValue | undefined): string {
   <!-- ─── Filters ──────────────────────────────────────── -->
   <div class="flex flex-wrap items-end gap-3">
     <div class="grid gap-1.5">
-      <Label class="text-xs text-foreground">Action</Label>
+      <Label for="audit-action-filter" class="text-xs text-foreground">Action</Label>
       <Select.Root
         type="single"
         value={data.filters.action ?? "all"}
         onValueChange={(v) => updateFilter("action", v === "all" ? null : v)}
       >
-        <Select.Trigger class="w-48 text-foreground">
+        <Select.Trigger id="audit-action-filter" aria-label="Filter by action type" class="w-48 text-foreground">
           <span data-slot="select-value">
             {data.filters.action ?? "All Actions"}
           </span>
@@ -199,8 +211,10 @@ function formatDateLabel(value: DateValue | undefined): string {
     </div>
 
     <div class="grid gap-1.5">
-      <Label class="text-xs text-foreground">Actor</Label>
+      <Label for="audit-actor-filter" class="text-xs text-foreground">Actor</Label>
       <Input
+        id="audit-actor-filter"
+        aria-label="Filter by actor"
         placeholder="Filter by actor…"
         class="h-8 w-40"
         value={actorSearchValue}
@@ -211,6 +225,26 @@ function formatDateLabel(value: DateValue | undefined): string {
           actorSearchTimeout = setTimeout(() => updateFilter("actor", val.trim() || null), 300);
         }}
       />
+    </div>
+
+    <div class="grid gap-1.5">
+      <Label for="audit-limit-filter" class="text-xs text-foreground">Per page</Label>
+      <Select.Root
+        type="single"
+        value={String(data.filters.limit)}
+        onValueChange={(v) => updateFilter("limit", v)}
+      >
+        <Select.Trigger id="audit-limit-filter" aria-label="Entries per page" class="w-24 text-foreground">
+          <span data-slot="select-value">
+            {data.filters.limit}
+          </span>
+        </Select.Trigger>
+        <Select.Content>
+          {#each [10, 25, 50, 100] as n (n)}
+            <Select.Item value={String(n)} label={String(n)} />
+          {/each}
+        </Select.Content>
+      </Select.Root>
     </div>
 
     <div class="grid gap-1.5">
@@ -333,25 +367,23 @@ function formatDateLabel(value: DateValue | undefined): string {
               onclick={() => entry.detail && toggleRow(entry.id)}
             >
               <Table.Cell class="w-8 px-2">
-                {#if entry.detail}
-                  <button
-                    type="button"
-                    class="inline-flex items-center justify-center bg-transparent border-none p-0 cursor-pointer"
-                    aria-expanded={isExpanded}
-                    aria-label={isExpanded ? "Collapse detail" : "Expand detail"}
-                    onclick={(e: MouseEvent) => { e.stopPropagation(); toggleRow(entry.id); }}
-                  >
-                    <ChevronDownIcon
-                      class={cn(
-                        "h-3.5 w-3.5 text-muted-foreground transition-transform",
-                        isExpanded && "rotate-0",
-                        !isExpanded && "-rotate-90"
-                      )}
-                    />
-                  </button>
-                {:else}
-                  <span class="text-xs text-muted-foreground/40">—</span>
-                {/if}
+                <button
+                  type="button"
+                  class="inline-flex items-center justify-center bg-transparent border-none p-0 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
+                  disabled={!entry.detail}
+                  aria-expanded={entry.detail ? isExpanded : undefined}
+                  aria-label={entry.detail ? (isExpanded ? "Collapse detail" : "Expand detail") : "No additional details"}
+                  title={entry.detail ? undefined : "No additional details"}
+                  onclick={(e: MouseEvent) => { e.stopPropagation(); if (entry.detail) toggleRow(entry.id); }}
+                >
+                  <ChevronDownIcon
+                    class={cn(
+                      "h-3.5 w-3.5 text-muted-foreground transition-transform",
+                      isExpanded && "rotate-0",
+                      !isExpanded && "-rotate-90"
+                    )}
+                  />
+                </button>
               </Table.Cell>
               <Table.Cell class="whitespace-nowrap font-mono text-xs text-muted-foreground">
                 {formatTimestamp(entry.timestamp)}
@@ -360,7 +392,7 @@ function formatDateLabel(value: DateValue | undefined): string {
                 {entry.actor ?? "system"}
               </Table.Cell>
               <Table.Cell>
-                <Badge variant={actionBadgeVariant(entry.action)} class="text-[10px]">
+                <Badge variant="outline" class={cn("text-[10px]", actionBadgeClasses(entry.action))}>
                   {entry.action}
                 </Badge>
               </Table.Cell>

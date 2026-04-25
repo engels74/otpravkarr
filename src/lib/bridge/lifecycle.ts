@@ -24,6 +24,11 @@ import type { SyncReport } from "./types";
 
 const CREDENTIAL_PURPOSE = "credential-encryption";
 
+export interface ActorContext {
+  actor: string;
+  ipAddress: string;
+}
+
 /**
  * Rotate the XC credentials for a mapped user.
  * Generates a new password, pushes it to Dispatcharr, and stores the encrypted value locally.
@@ -31,6 +36,7 @@ const CREDENTIAL_PURPOSE = "credential-encryption";
 export async function rotateCredentials(
   client: DispatcharrClient,
   mapping: UserMapping,
+  actorContext?: ActorContext,
 ): Promise<void> {
   if (mapping.dispatcharr_user_id == null) {
     throw new Error("Cannot rotate credentials: no Dispatcharr user ID");
@@ -113,6 +119,8 @@ export async function rotateCredentials(
     updateUserMapping(mapping.id, { dispatcharr_xc_password_enc: encryptedPassword });
 
     appendAuditLog({
+      actor: actorContext?.actor,
+      ipAddress: actorContext?.ipAddress,
       action: AuditAction.USER_CREDENTIALS_ROTATED,
       detail: {
         mapping_id: mapping.id,
@@ -133,7 +141,11 @@ export async function rotateCredentials(
  * means deleting the remote account. The local mapping retains the Plex identity so
  * the user can be re-provisioned later if needed.
  */
-export async function disableUser(client: DispatcharrClient, mapping: UserMapping): Promise<void> {
+export async function disableUser(
+  client: DispatcharrClient,
+  mapping: UserMapping,
+  actorContext?: ActorContext,
+): Promise<void> {
   if (mapping.dispatcharr_user_id == null) {
     throw new Error("Cannot disable user: no Dispatcharr user ID");
   }
@@ -173,6 +185,8 @@ export async function disableUser(client: DispatcharrClient, mapping: UserMappin
 
     if (mapping.is_active === 1) {
       appendAuditLog({
+        actor: actorContext?.actor,
+        ipAddress: actorContext?.ipAddress,
         action: AuditAction.USER_DISABLED,
         detail: {
           mapping_id: mapping.id,

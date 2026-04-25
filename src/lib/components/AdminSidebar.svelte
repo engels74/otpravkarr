@@ -57,29 +57,31 @@ const navItems = [
       <SidebarGroup>
         <SidebarGroupLabel>Navigation</SidebarGroupLabel>
         <SidebarGroupContent>
-          <SidebarMenu>
-            {#each navItems as item (item.href)}
-              {@const isActive = page.url.pathname === item.href}
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  {isActive}
-                  tooltipContent={item.label}
-                  class={cn(
-                    "relative",
-                    isActive &&
-                      "bg-sidebar-accent/60 before:absolute before:left-0 before:top-1/2 before:h-5 before:w-0.5 before:-translate-y-1/2 before:rounded-r before:bg-primary [&_svg]:text-primary",
-                  )}
-                >
-                  {#snippet child({ props })}
-                    <a href={item.href} {...props}>
-                      <item.icon />
-                      <span>{item.label}</span>
-                    </a>
-                  {/snippet}
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            {/each}
-          </SidebarMenu>
+          <nav aria-label="Admin navigation">
+            <SidebarMenu>
+              {#each navItems as item (item.href)}
+                {@const isActive = page.url.pathname === item.href}
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    {isActive}
+                    tooltipContent={item.label}
+                    class={cn(
+                      "relative",
+                      isActive &&
+                        "bg-sidebar-accent/60 before:absolute before:left-0 before:top-1/2 before:h-5 before:w-0.5 before:-translate-y-1/2 before:rounded-r before:bg-primary [&_svg]:text-primary",
+                    )}
+                  >
+                    {#snippet child({ props })}
+                      <a href={item.href} {...props}>
+                        <item.icon />
+                        <span>{item.label}</span>
+                      </a>
+                    {/snippet}
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              {/each}
+            </SidebarMenu>
+          </nav>
         </SidebarGroupContent>
       </SidebarGroup>
     </SidebarContent>
@@ -102,13 +104,19 @@ const navItems = [
   </Sidebar>
 
   <SidebarInset>
+    <a
+      href="#main-content"
+      class="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:rounded-md focus:bg-background focus:px-3 focus:py-2 focus:ring-2 focus:ring-primary"
+    >
+      Skip to main content
+    </a>
     <header class="flex h-12 shrink-0 items-center gap-2 border-b px-4">
       <SidebarTrigger />
       <Separator orientation="vertical" class="mr-2 !h-4" />
       <span class="text-sm font-medium text-muted-foreground">Admin</span>
     </header>
-    <div class={cn("flex-1 p-6", className)}>
+    <main id="main-content" class={cn("flex-1 p-6", className)}>
       {@render children()}
-    </div>
+    </main>
   </SidebarInset>
 </SidebarProvider>

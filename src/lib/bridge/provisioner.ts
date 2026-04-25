@@ -14,6 +14,7 @@ import { createUser, getUser, updateUser } from "$lib/dispatcharr/endpoints/user
 import { fetchAllPages } from "$lib/dispatcharr/pagination";
 import { DispatcharrUserSchema } from "$lib/dispatcharr/schemas";
 import { isTransientResultError, retryResult } from "$lib/utils/retry";
+import type { ActorContext } from "./lifecycle";
 import type { ProvisioningRequest, ProvisioningResult } from "./types";
 
 const CREDENTIAL_PURPOSE = "credential-encryption";
@@ -52,6 +53,7 @@ export function sanitizeUsername(plexUsername: string, existingUsernames: string
 export async function provisionUser(
   client: DispatcharrClient,
   request: ProvisioningRequest,
+  actorContext?: ActorContext,
 ): Promise<ProvisioningResult> {
   let existingMapping: UserMapping | null;
   try {
@@ -152,6 +154,8 @@ export async function provisionUser(
         updateUserMapping(existingMapping.id, { is_active: 1 });
 
         appendAuditLog({
+          actor: actorContext?.actor,
+          ipAddress: actorContext?.ipAddress,
           action: AuditAction.USER_PROVISIONED,
           detail: {
             plex_username: request.plexIdentity.username,
@@ -284,6 +288,8 @@ export async function provisionUser(
     }
 
     appendAuditLog({
+      actor: actorContext?.actor,
+      ipAddress: actorContext?.ipAddress,
       action: AuditAction.USER_PROVISIONED,
       detail: {
         plex_username: request.plexIdentity.username,

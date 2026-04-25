@@ -71,6 +71,17 @@ export async function createSyncJob(defaultIntervalMs = DEFAULT_INTERVAL_MS): Pr
       }
 
       try {
+        appendAuditLog({
+          action: AuditAction.SYNC_STARTED,
+          detail: { trigger: "scheduler" },
+        });
+      } catch (auditError) {
+        log("audit.error", {
+          error: auditError instanceof Error ? auditError.message : String(auditError),
+        });
+      }
+
+      try {
         const client = new DispatcharrClient(dispatcharrUrl, apiKey);
         const report = await reconcileSync(client, plexAdminToken);
         log("sync.completed", { report });

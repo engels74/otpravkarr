@@ -262,6 +262,15 @@ describe("hooks sessionResolver", () => {
 });
 
 describe("hooks security headers", () => {
+  beforeEach(() => {
+    mockSession = null;
+    mockAdmin = null;
+    mockUser = null;
+    mockValidateOrigin.mockReset();
+    mockGetConfig.mockReset();
+    mockGetConfig.mockResolvedValue(null);
+  });
+
   it("adds security headers to normal responses", async () => {
     const event = createMockEvent();
 
@@ -274,6 +283,9 @@ describe("hooks security headers", () => {
   });
 
   it("returns hostile-origin CSRF rejections with security headers", async () => {
+    // Authenticated session so the request reaches CSRF (not the 401 unauth gate).
+    mockSession = { ...validAdminSession };
+    mockAdmin = { ...validAdmin };
     mockValidateOrigin.mockImplementation(() => {
       throw {
         status: 403,
@@ -281,6 +293,7 @@ describe("hooks security headers", () => {
       };
     });
     const event = createMockEvent({
+      sessionId: "sess-admin-1",
       method: "POST",
       origin: "http://evil.example",
       url: "http://localhost/api/internal/sync",
@@ -299,6 +312,8 @@ describe("hooks security headers", () => {
   });
 
   it("returns missing-Origin CSRF rejections with security headers", async () => {
+    mockSession = { ...validAdminSession };
+    mockAdmin = { ...validAdmin };
     mockValidateOrigin.mockImplementation(() => {
       throw {
         status: 403,
@@ -306,6 +321,7 @@ describe("hooks security headers", () => {
       };
     });
     const event = createMockEvent({
+      sessionId: "sess-admin-1",
       method: "POST",
       url: "http://localhost/api/internal/sync",
     });
@@ -323,6 +339,22 @@ describe("hooks security headers", () => {
     });
     expectStandardSecurityHeaders(response);
     expect(event.setHeaders).not.toHaveBeenCalled();
+    expect(resolveSpy).not.toHaveBeenCalled();
+  });
+
+  it("returns 401 for unauthenticated requests to internal API endpoints", async () => {
+    const event = createMockEvent({
+      method: "POST",
+      origin: "http://localhost",
+      url: "http://localhost/api/internal/sync",
+    });
+    const resolveSpy = vi.fn(async () => new Response(null, { status: 204 }));
+
+    const response = await handle({ event, resolve: resolveSpy });
+
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({ error: "unauthorized" });
+    expectStandardSecurityHeaders(response);
     expect(resolveSpy).not.toHaveBeenCalled();
   });
 });

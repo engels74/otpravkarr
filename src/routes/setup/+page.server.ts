@@ -559,11 +559,21 @@ export const actions: Actions = {
     }
 
     const adminUsername = (await getConfig("admin_username")) ?? "setup-wizard";
+    // Strip userinfo, query string, and fragment before persisting to the audit log
+    // to prevent credentials or tokens embedded in the URL from leaking into audit_log.
+    const auditUrl = (() => {
+      const u = new URL(dispatcharrUrl);
+      u.username = "";
+      u.password = "";
+      u.search = "";
+      u.hash = "";
+      return u.toString();
+    })();
     safeAuditSetupStep(
       adminUsername,
       "dispatcharr_configured",
       {
-        url: dispatcharrUrl,
+        url: auditUrl,
         hasExternalUrl: Boolean(dispatcharrExternalUrl && dispatcharrExternalUrl.length > 0),
       },
       getClientAddress(),

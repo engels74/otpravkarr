@@ -222,7 +222,10 @@ function formatDateLabel(value: DateValue | undefined): string {
             size="sm"
             class="h-5 w-5 p-0 text-muted-foreground hover:text-foreground"
             aria-label="Clear after date filter"
-            onclick={() => updateFilter("after", null)}
+            onclick={() => {
+              afterPopoverOpen = false;
+              updateFilter("after", null);
+            }}
           >
             <XIcon class="h-3 w-3" />
           </Button>
@@ -265,7 +268,10 @@ function formatDateLabel(value: DateValue | undefined): string {
             size="sm"
             class="h-5 w-5 p-0 text-muted-foreground hover:text-foreground"
             aria-label="Clear before date filter"
-            onclick={() => updateFilter("before", null)}
+            onclick={() => {
+              beforePopoverOpen = false;
+              updateFilter("before", null);
+            }}
           >
             <XIcon class="h-3 w-3" />
           </Button>

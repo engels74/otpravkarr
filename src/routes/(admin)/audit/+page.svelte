@@ -4,6 +4,7 @@ import CalendarIcon from "lucide-svelte/icons/calendar";
 import ChevronDownIcon from "lucide-svelte/icons/chevron-down";
 import ChevronLeftIcon from "lucide-svelte/icons/chevron-left";
 import ChevronRightIcon from "lucide-svelte/icons/chevron-right";
+import XIcon from "lucide-svelte/icons/x";
 import { onDestroy } from "svelte";
 import { goto } from "$app/navigation";
 import { page } from "$app/state";
@@ -213,7 +214,20 @@ function formatDateLabel(value: DateValue | undefined): string {
     </div>
 
     <div class="grid gap-1.5">
-      <Label class="text-xs text-foreground">After</Label>
+      <div class="flex items-center justify-between">
+        <Label class="text-xs text-foreground">After</Label>
+        {#if afterDate}
+          <Button
+            variant="ghost"
+            size="sm"
+            class="h-5 w-5 p-0 text-muted-foreground hover:text-foreground"
+            aria-label="Clear after date filter"
+            onclick={() => updateFilter("after", null)}
+          >
+            <XIcon class="h-3 w-3" />
+          </Button>
+        {/if}
+      </div>
       <Popover.Root bind:open={afterPopoverOpen}>
         <Popover.Trigger>
           {#snippet child({ props })}
@@ -243,7 +257,20 @@ function formatDateLabel(value: DateValue | undefined): string {
     </div>
 
     <div class="grid gap-1.5">
-      <Label class="text-xs text-foreground">Before</Label>
+      <div class="flex items-center justify-between">
+        <Label class="text-xs text-foreground">Before</Label>
+        {#if beforeDate}
+          <Button
+            variant="ghost"
+            size="sm"
+            class="h-5 w-5 p-0 text-muted-foreground hover:text-foreground"
+            aria-label="Clear before date filter"
+            onclick={() => updateFilter("before", null)}
+          >
+            <XIcon class="h-3 w-3" />
+          </Button>
+        {/if}
+      </div>
       <Popover.Root bind:open={beforePopoverOpen}>
         <Popover.Trigger>
           {#snippet child({ props })}

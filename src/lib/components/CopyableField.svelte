@@ -30,6 +30,7 @@ async function copyToClipboard() {
     copied = true;
     toast.success(`Copied ${label} to clipboard`);
   } catch {
+    copied = false;
     toast.error("Couldn't copy to clipboard");
   }
 }

@@ -8,7 +8,8 @@ import { requireAdminApi } from "$lib/server/auth";
 import type { RequestHandler } from "./$types";
 
 export const POST: RequestHandler = async (event) => {
-  await requireAdminApi(event);
+  const admin = await requireAdminApi(event);
+  const ipAddress = event.getClientAddress();
 
   const [dispatcharrUrl, apiKey, plexAdminToken] = await Promise.all([
     getConfig("dispatcharr_url"),
@@ -30,8 +31,10 @@ export const POST: RequestHandler = async (event) => {
     const exclusive = await scheduler.runExclusive("plex-dispatcharr-sync", async () => {
       try {
         appendAuditLog({
+          actor: admin.username,
           action: AuditAction.SYNC_STARTED,
           detail: { trigger: "manual" },
+          ipAddress,
         });
       } catch {
         // audit log failure should not block the sync
@@ -55,7 +58,12 @@ export const POST: RequestHandler = async (event) => {
     const message = err instanceof Error ? err.message : String(err);
 
     try {
-      appendAuditLog({ action: AuditAction.SYNC_FAILED, detail: { error: message } });
+      appendAuditLog({
+        actor: admin.username,
+        action: AuditAction.SYNC_FAILED,
+        detail: { error: message },
+        ipAddress,
+      });
     } catch {
       // audit log failure should not break the error response
     }

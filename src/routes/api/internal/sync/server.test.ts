@@ -52,7 +52,9 @@ vi.mock("$lib/scheduler/runner", () => ({
 }));
 
 function createEvent() {
-  return {} as Parameters<typeof import("./+server").POST>[0];
+  return {
+    getClientAddress: () => "127.0.0.1",
+  } as unknown as Parameters<typeof import("./+server").POST>[0];
 }
 
 function resetAll() {
@@ -162,8 +164,10 @@ describe("POST /api/internal/sync", () => {
     // Route emits sync.started; reconcileSync emits sync.completed (mocked above).
     expect(mocks.appendAuditLog).toHaveBeenCalledTimes(2);
     expect(mocks.appendAuditLog).toHaveBeenNthCalledWith(1, {
+      actor: "admin",
       action: "sync.started",
       detail: { trigger: "manual" },
+      ipAddress: "127.0.0.1",
     });
     expect(mocks.appendAuditLog).toHaveBeenNthCalledWith(2, {
       action: "sync.completed",
@@ -213,8 +217,10 @@ describe("POST /api/internal/sync", () => {
     await POST(createEvent());
 
     expect(mocks.appendAuditLog).toHaveBeenCalledWith({
+      actor: "admin",
       action: "sync.failed",
       detail: { error: "Connection refused" },
+      ipAddress: "127.0.0.1",
     });
   });
 

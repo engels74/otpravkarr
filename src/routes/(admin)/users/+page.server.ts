@@ -212,9 +212,11 @@ export const actions: Actions = {
         },
         ipAddress: event.getClientAddress(),
       });
-    } catch {
+    } catch (err) {
       // audit log failure should not mask the successful group change
-      console.warn("Failed to append audit log for USER_GROUP_CHANGED");
+      console.warn(
+        `Failed to append audit log for USER_GROUP_CHANGED: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
 
     return { success: true };

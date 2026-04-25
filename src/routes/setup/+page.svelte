@@ -92,7 +92,6 @@ let defaultGroupId = $state<string>("");
 let defaultProfileId = $state<string>("");
 let syncInterval = $state("15");
 let provisioningMode = $state<string>("automatic");
-let defaultsFormEl = $state<HTMLFormElement | null>(null);
 
 let syncIntervalError = $derived.by(() => {
   const trimmed = String(syncInterval).trim();
@@ -1098,7 +1097,7 @@ function enhanceHandler(nextStep?: number) {
             </Alert.Root>
           {/if}
 
-          <form method="POST" action="?/setDefaults" use:enhance={enhanceHandler()} bind:this={defaultsFormEl}>
+          <form method="POST" action="?/setDefaults" use:enhance={enhanceHandler()}>
             <div class="grid gap-4">
               <!-- Default Group -->
               <div class="grid gap-2">

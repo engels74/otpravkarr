@@ -35,6 +35,8 @@ $effect(() => {
   const resetAt = form.resetAt;
   rateLimitCleared = false;
 
+  let interval: ReturnType<typeof setInterval>;
+
   function tick() {
     const remaining = Math.max(0, Math.ceil((resetAt - Date.now()) / 1000));
     countdownSeconds = remaining;
@@ -44,8 +46,8 @@ $effect(() => {
     }
   }
 
+  interval = setInterval(tick, 1000);
   tick();
-  const interval = setInterval(tick, 1000);
   return () => clearInterval(interval);
 });
 

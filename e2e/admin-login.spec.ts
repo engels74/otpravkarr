@@ -41,6 +41,15 @@ test.describe("Admin login", () => {
     await expect(page.getByText("Invalid username or password")).toBeVisible();
   });
 
+  test("empty credentials show missing credentials error message", async ({ page }) => {
+    await page.goto("/login");
+
+    await page.getByRole("button", { name: "Sign In" }).click();
+
+    await expect(page.getByText("Authentication failed")).toBeVisible();
+    await expect(page.getByText("Username and password are required.")).toBeVisible();
+  });
+
   test("valid credentials redirect to /dashboard", async ({ page }) => {
     await loginAsAdmin(page);
 

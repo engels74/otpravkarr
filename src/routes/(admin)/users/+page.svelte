@@ -9,7 +9,7 @@ import LayersIcon from "lucide-svelte/icons/layers";
 import UsersIcon from "lucide-svelte/icons/users";
 import { toast } from "svelte-sonner";
 import { applyAction, enhance } from "$app/forms";
-import { goto } from "$app/navigation";
+import { goto, invalidateAll } from "$app/navigation";
 import { page } from "$app/state";
 import ConfirmDialog from "$lib/components/ConfirmDialog.svelte";
 import StatusBadge from "$lib/components/StatusBadge.svelte";
@@ -183,27 +183,6 @@ function makeProfileEnhanceHandler() {
   };
 }
 
-function makeActionEnhance(successMsg: string) {
-  return () => {
-    submitting = true;
-    return async ({ result, update }: { result: ActionResult; update: () => Promise<void> }) => {
-      try {
-        if (result.type === "success") {
-          toast.success(successMsg);
-          await update();
-        } else if (result.type === "failure") {
-          toast.error((result.data as { error?: string } | undefined)?.error ?? "Action failed.");
-          await update();
-        } else {
-          await applyAction(result);
-        }
-      } finally {
-        submitting = false;
-      }
-    };
-  };
-}
-
 function makeDisableEnhance() {
   return () => {
     submitting = true;
@@ -261,6 +240,36 @@ function makeEnableEnhance() {
       }
     };
   };
+}
+
+async function rotateMappingCredentials(id: number) {
+  if (submitting) return;
+
+  submitting = true;
+  try {
+    const response = await fetch(`/api/internal/rotate-credentials/${id}`, {
+      method: "POST",
+    });
+
+    if (response.ok) {
+      toast.success("Credentials rotated successfully.");
+      await invalidateAll();
+      return;
+    }
+
+    let message = "Failed to rotate credentials.";
+    try {
+      const body = (await response.json()) as { message?: string };
+      message = body.message ?? message;
+    } catch {
+      // Keep the fallback message when the server does not return JSON.
+    }
+    toast.error(message);
+  } catch {
+    toast.error("Failed to rotate credentials.");
+  } finally {
+    submitting = false;
+  }
 }
 
 async function copyOneTimePassword() {
@@ -383,16 +392,12 @@ async function copyOneTimePassword() {
                   </DropdownMenu.Trigger>
                   <DropdownMenu.Content align="end" class="w-[180px]">
                     {#if m.provisioning_mode === "automatic" && m.dispatcharr_user_id != null}
-                      <DropdownMenu.Item>
-                        {#snippet child({ props })}
-                          <form method="POST" action="?/rotateCredentials" use:enhance={makeActionEnhance("Credentials rotated successfully.")}>
-                            <input type="hidden" name="id" value={m.id} />
-                            <button type="submit" class="flex w-full items-center gap-2 text-left" disabled={submitting} {...props}>
-                              <KeyRoundIcon class="h-3.5 w-3.5" />
-                              Rotate Credentials
-                            </button>
-                          </form>
-                        {/snippet}
+                      <DropdownMenu.Item
+                        disabled={submitting}
+                        onclick={() => rotateMappingCredentials(m.id)}
+                      >
+                        <KeyRoundIcon class="h-3.5 w-3.5" />
+                        Rotate Credentials
                       </DropdownMenu.Item>
                     {/if}
                     {#if m.is_active === 1 && m.dispatcharr_user_id != null}

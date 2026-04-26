@@ -54,7 +54,8 @@ let passwordCopyStatus = $state<"idle" | "copied" | "failed">("idle");
 
 // Search debounce
 let searchTimeout: ReturnType<typeof setTimeout> | undefined;
-let searchValue = $state("");
+// svelte-ignore state_referenced_locally
+let searchValue = $state(data.filters.search);
 $effect(() => {
   searchValue = data.filters.search;
 });

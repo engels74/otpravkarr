@@ -42,7 +42,8 @@ let { data }: Props = $props();
 let expandedRows: Record<number, boolean> = $state({});
 let actorSearchTimeout: ReturnType<typeof setTimeout> | undefined;
 onDestroy(() => clearTimeout(actorSearchTimeout));
-let actorSearchValue = $state("");
+// svelte-ignore state_referenced_locally
+let actorSearchValue = $state(data.filters.actor ?? "");
 $effect(() => {
   actorSearchValue = data.filters.actor ?? "";
 });

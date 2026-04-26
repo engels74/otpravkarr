@@ -9,6 +9,8 @@ export default defineConfig({
     alias: {
       $lib: path.resolve("src/lib"),
       "$app/forms": path.resolve("src/lib/test-stubs/app-forms.ts"),
+      "$app/navigation": path.resolve("src/lib/test-stubs/app-navigation.ts"),
+      "$app/state": path.resolve("src/lib/test-stubs/app-state.ts"),
     },
   },
   test: {

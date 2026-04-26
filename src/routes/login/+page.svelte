@@ -111,7 +111,7 @@ function enhanceHandler() {
           </Alert.Root>
         {/if}
 
-        <form method="POST" use:enhance={enhanceHandler}>
+        <form method="POST" novalidate use:enhance={enhanceHandler}>
           <div class="reveal reveal-3 grid gap-4">
             <div class="grid gap-2">
               <Label for="login-username">Username</Label>

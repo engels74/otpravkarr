@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { loginAsAdmin, logoutAdmin } from "./helpers";
+import { ADMIN_STORAGE_STATE, loginAsAdmin, logoutAdmin } from "./helpers";
 
 /**
  * Admin authentication E2E tests.
@@ -13,8 +13,8 @@ test.describe("Admin login", () => {
   test("login page renders with username and password fields", async ({ page }) => {
     await page.goto("/login");
 
-    await expect(page.getByRole("heading", { name: "otpravkarr" })).toBeVisible();
-    await expect(page.getByText("Admin login")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Welcome back." })).toBeVisible();
+    await expect(page.getByText("Sign in to the admin console.")).toBeVisible();
     await expect(page.getByText("Sign in", { exact: true })).toBeVisible();
     await expect(page.getByLabel("Username")).toBeVisible();
     await expect(page.getByLabel("Password")).toBeVisible();
@@ -39,6 +39,15 @@ test.describe("Admin login", () => {
 
     await expect(page.getByText("Authentication failed")).toBeVisible();
     await expect(page.getByText("Invalid username or password")).toBeVisible();
+  });
+
+  test("empty credentials show missing credentials error message", async ({ page }) => {
+    await page.goto("/login");
+
+    await page.getByRole("button", { name: "Sign In" }).click();
+
+    await expect(page.getByText("Authentication failed")).toBeVisible();
+    await expect(page.getByText("Username and password are required.")).toBeVisible();
   });
 
   test("valid credentials redirect to /dashboard", async ({ page }) => {
@@ -75,9 +84,12 @@ test.describe("Admin login", () => {
     await expect(page).toHaveURL(/\/login/);
   });
 
-  test("already-authenticated admin visiting /login redirects to /dashboard", async ({ page }) => {
-    await loginAsAdmin(page);
-    await page.goto("/login");
-    await expect(page).toHaveURL(/\/dashboard/);
+  test.describe("authenticated admin", () => {
+    test.use({ storageState: ADMIN_STORAGE_STATE });
+
+    test("visiting /login redirects to /dashboard", async ({ page }) => {
+      await page.goto("/login");
+      await expect(page).toHaveURL(/\/dashboard/);
+    });
   });
 });

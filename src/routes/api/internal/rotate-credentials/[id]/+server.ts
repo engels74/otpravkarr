@@ -12,7 +12,7 @@ export const POST: RequestHandler = async (event) => {
     return Response.json({ ok: false, error: "invalid_id" }, { status: 400 });
   }
 
-  await requireAdminApi(event);
+  const admin = await requireAdminApi(event);
 
   const mapping = getUserMappingById(id);
   if (!mapping) {
@@ -27,7 +27,10 @@ export const POST: RequestHandler = async (event) => {
 
   try {
     const client = new DispatcharrClient(dispatcharrUrl, dispatcharrApiKey);
-    await rotateCredentials(client, mapping);
+    await rotateCredentials(client, mapping, {
+      actor: admin.username,
+      ipAddress: event.getClientAddress(),
+    });
     return Response.json({ ok: true }, { status: 200 });
   } catch (err) {
     return Response.json(

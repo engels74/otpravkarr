@@ -95,6 +95,10 @@ describe("POST /api/internal/rotate-credentials/[id]", () => {
     expect(mocks.rotateCredentials).toHaveBeenCalledWith(
       expect.objectContaining({ baseUrl: "http://dispatcharr.local" }),
       MAPPING,
+      {
+        actor: "admin",
+        ipAddress: "127.0.0.1",
+      },
     );
   });
 

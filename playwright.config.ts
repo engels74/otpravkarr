@@ -36,7 +36,7 @@ export default defineConfig({
     {
       name: "login",
       testMatch: "admin-login.spec.ts",
-      dependencies: ["setup"],
+      dependencies: ["auth"],
     },
     {
       name: "app",

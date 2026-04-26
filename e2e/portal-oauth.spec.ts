@@ -12,10 +12,14 @@ test.describe("Portal OAuth", () => {
   test("portal root shows sign-in view when not authenticated", async ({ page }) => {
     await page.goto("/");
 
-    await expect(page.getByRole("heading", { name: "otpravkarr" })).toBeVisible();
-    await expect(page.getByText("Stream access portal")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Stream access." })).toBeVisible();
+    await expect(
+      page.getByText("Sign in with your Plex account to view your credentials."),
+    ).toBeVisible();
     await expect(page.getByText("Welcome")).toBeVisible();
-    await expect(page.getByText("Sign in with your Plex account")).toBeVisible();
+    await expect(
+      page.getByText("Sign in with your Plex account to access your streaming credentials."),
+    ).toBeVisible();
   });
 
   test("shows 'Sign in with Plex' button", async ({ page }) => {

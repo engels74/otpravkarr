@@ -54,7 +54,7 @@ let passwordCopyStatus = $state<"idle" | "copied" | "failed">("idle");
 
 // Search debounce
 let searchTimeout: ReturnType<typeof setTimeout> | undefined;
-let searchValue = $state(data.filters.search);
+let searchValue = $state("");
 $effect(() => {
   searchValue = data.filters.search;
 });

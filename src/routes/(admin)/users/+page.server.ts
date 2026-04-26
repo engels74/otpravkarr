@@ -190,6 +190,7 @@ export const actions: Actions = {
           mode: mapping.provisioning_mode,
           groupIds,
           profileId: mapping.dispatcharr_profile_id ?? undefined,
+          exposeInitialPassword: true,
         },
         { actor: admin.username, ipAddress: event.getClientAddress() },
       );
@@ -211,7 +212,6 @@ export const actions: Actions = {
         );
       }
       // Surface the one-time password so the admin can communicate it.
-      // Automatic mode does not return an OTP (provisioner gates on mode).
       if (result.status === "provisioned" && result.initialPassword) {
         return { success: true, reprovisioned: true, initialPassword: result.initialPassword };
       }

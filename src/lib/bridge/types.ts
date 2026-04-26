@@ -8,6 +8,7 @@ export interface ProvisioningRequest {
   mode: ProvisioningMode;
   groupIds: number[];
   profileId?: number | undefined;
+  exposeInitialPassword?: boolean | undefined;
 }
 
 export type ProvisioningResult =

@@ -12,7 +12,7 @@ const { validateOrigin } = await import("$lib/server/csrf");
 function makeRequest(method: string, origin?: string): Request {
   const headers: Record<string, string> = {};
   if (origin !== undefined) {
-    headers["Origin"] = origin;
+    headers.Origin = origin;
   }
   return new Request("http://localhost", { method, headers });
 }

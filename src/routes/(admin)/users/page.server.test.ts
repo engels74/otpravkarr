@@ -157,7 +157,7 @@ describe("admin users actions", () => {
       };
     }
 
-    it("re-provisions in automatic mode (no initialPassword returned)", async () => {
+    it("re-provisions in automatic mode and returns the one-time password", async () => {
       const { actions } = await import("./+page.server");
       const enableUserAction = actions.enableUser;
       if (!enableUserAction) throw new Error("enableUser action is undefined");
@@ -169,6 +169,7 @@ describe("admin users actions", () => {
       mocks.provisionUser.mockResolvedValueOnce({
         status: "provisioned",
         mapping: {},
+        initialPassword: "temp-pass-auto",
       } as ProvisioningResult);
 
       const body = new FormData();
@@ -178,8 +179,7 @@ describe("admin users actions", () => {
         createActionEvent(body) as unknown as Parameters<typeof enableUserAction>[0],
       );
 
-      expect(result).toMatchObject({ success: true });
-      expect(result).not.toHaveProperty("initialPassword");
+      expect(result).toMatchObject({ success: true, initialPassword: "temp-pass-auto" });
       expect(mocks.enableUser).not.toHaveBeenCalled();
       expect(mocks.provisionUser).toHaveBeenCalledOnce();
       const provisionCall = mocks.provisionUser.mock.calls[0] as unknown as [
@@ -197,6 +197,7 @@ describe("admin users actions", () => {
         },
         mode: "automatic",
         groupIds: [3, 5],
+        exposeInitialPassword: true,
       });
     });
 
@@ -227,6 +228,11 @@ describe("admin users actions", () => {
       expect(result).toMatchObject({ success: true, initialPassword: "temp-pass-abc" });
       expect(mocks.enableUser).not.toHaveBeenCalled();
       expect(mocks.provisionUser).toHaveBeenCalledOnce();
+      const provisionCall = mocks.provisionUser.mock.calls[0] as unknown as [
+        DispatcharrClient,
+        ProvisioningRequest,
+      ];
+      expect(provisionCall[1]).toMatchObject({ exposeInitialPassword: true });
     });
 
     it("returns fail(500) when provisionUser returns status 'failed'", async () => {

@@ -42,6 +42,7 @@ let { data }: Props = $props();
 let expandedRows: Record<number, boolean> = $state({});
 let actorSearchTimeout: ReturnType<typeof setTimeout> | undefined;
 onDestroy(() => clearTimeout(actorSearchTimeout));
+// svelte-ignore state_referenced_locally
 let actorSearchValue = $state(data.filters.actor ?? "");
 $effect(() => {
   actorSearchValue = data.filters.actor ?? "";
@@ -151,6 +152,11 @@ function formatDetail(detail: string | null): string {
   } catch {
     return detail;
   }
+}
+
+function detailToggleLabel(entry: AuditEntry, isExpanded: boolean): string {
+  const action = isExpanded ? "Collapse" : "Expand";
+  return `${action} detail for ${entry.action} at ${formatTimestamp(entry.timestamp)}`;
 }
 
 let rangeStart = $derived((data.filters.page - 1) * data.filters.limit + 1);
@@ -372,7 +378,7 @@ function formatDateLabel(value: DateValue | undefined): string {
                     type="button"
                     class="inline-flex items-center justify-center bg-transparent border-none p-0 cursor-pointer"
                     aria-expanded={isExpanded}
-                    aria-label={isExpanded ? "Collapse detail" : "Expand detail"}
+                    aria-label={detailToggleLabel(entry, isExpanded)}
                     onclick={(e: MouseEvent) => { e.stopPropagation(); toggleRow(entry.id); }}
                   >
                     <ChevronDownIcon

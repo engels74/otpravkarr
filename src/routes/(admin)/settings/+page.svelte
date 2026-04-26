@@ -36,6 +36,10 @@ let { data }: Props = $props();
 
 let sectionSubmitting = $state<Record<string, boolean>>({});
 let sectionMessage = $state<Record<string, { type: "success" | "error"; text: string }>>({});
+const syncIntervalFeedbackId = "sync_interval_minutes_feedback";
+let syncIntervalError = $derived(
+  sectionMessage.sync?.type === "error" ? sectionMessage.sync.text : "",
+);
 
 function makeEnhance(section: string) {
   return () => {
@@ -128,7 +132,7 @@ function makeEnhance(section: string) {
         {/if}
       </Card.Content>
       <Card.Footer class="flex items-center gap-3">
-        <Button type="submit" disabled={sectionSubmitting["plex"]}>
+        <Button type="submit" disabled={sectionSubmitting["plex"]} aria-label="Save Plex settings">
           {sectionSubmitting["plex"] ? "Saving..." : "Save"}
         </Button>
         {#if sectionMessage["plex"]}
@@ -176,7 +180,11 @@ function makeEnhance(section: string) {
         </div>
       </Card.Content>
       <Card.Footer class="flex items-center gap-3">
-        <Button type="submit" disabled={sectionSubmitting["dispatcharr"]}>
+        <Button
+          type="submit"
+          disabled={sectionSubmitting["dispatcharr"]}
+          aria-label="Save Dispatcharr settings"
+        >
           {sectionSubmitting["dispatcharr"] ? "Saving..." : "Save"}
         </Button>
         {#if sectionMessage["dispatcharr"]}
@@ -205,17 +213,32 @@ function makeEnhance(section: string) {
         <div class="grid gap-1.5">
           <Label for="sync_interval_minutes">Sync interval</Label>
           <div class="flex items-center gap-2">
-            <Input id="sync_interval_minutes" name="sync_interval_minutes" type="number" value={data.sync.intervalMinutes} class="w-[120px]" />
+            <Input
+              id="sync_interval_minutes"
+              name="sync_interval_minutes"
+              type="number"
+              value={data.sync.intervalMinutes}
+              class="w-[120px]"
+              aria-invalid={syncIntervalError ? "true" : undefined}
+              aria-describedby={syncIntervalFeedbackId}
+              oninput={() => { delete sectionMessage["sync"]; }}
+            />
             <span class="text-sm text-muted-foreground">minutes</span>
           </div>
+          <p
+            id={syncIntervalFeedbackId}
+            class="text-xs {syncIntervalError ? 'text-destructive' : 'text-muted-foreground'}"
+          >
+            {syncIntervalError || "Between 1 and 1440 minutes."}
+          </p>
         </div>
       </Card.Content>
       <Card.Footer class="flex items-center gap-3">
-        <Button type="submit" disabled={sectionSubmitting["sync"]}>
+        <Button type="submit" disabled={sectionSubmitting["sync"]} aria-label="Save sync settings">
           {sectionSubmitting["sync"] ? "Saving..." : "Save"}
         </Button>
-        {#if sectionMessage["sync"]}
-          <span class="text-sm {sectionMessage['sync'].type === 'success' ? 'text-green-600 dark:text-green-400' : 'text-destructive'}">
+        {#if sectionMessage["sync"]?.type === "success"}
+          <span class="text-sm text-green-600 dark:text-green-400">
             {sectionMessage["sync"].text}
           </span>
         {/if}
@@ -264,7 +287,11 @@ function makeEnhance(section: string) {
         </div>
       </Card.Content>
       <Card.Footer class="flex items-center gap-3">
-        <Button type="submit" disabled={sectionSubmitting["security"]}>
+        <Button
+          type="submit"
+          disabled={sectionSubmitting["security"]}
+          aria-label="Save security settings"
+        >
           {sectionSubmitting["security"] ? "Saving..." : "Save"}
         </Button>
         {#if sectionMessage["security"]}
@@ -300,7 +327,11 @@ function makeEnhance(section: string) {
         </div>
       </Card.Content>
       <Card.Footer class="flex items-center gap-3">
-        <Button type="submit" disabled={sectionSubmitting["audit"]}>
+        <Button
+          type="submit"
+          disabled={sectionSubmitting["audit"]}
+          aria-label="Save audit retention settings"
+        >
           {sectionSubmitting["audit"] ? "Saving..." : "Save"}
         </Button>
         {#if sectionMessage["audit"]}

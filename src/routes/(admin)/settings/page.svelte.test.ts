@@ -118,4 +118,39 @@ describe("admin settings page", () => {
     expect(screen.getByText("Plex settings saved.")).toBeTruthy();
     expect(screen.queryByText("Plex token and server URL are required")).toBeNull();
   });
+
+  it("renders section-specific accessible names for save buttons", async () => {
+    const { default: SettingsPage } = await import("./+page.svelte");
+
+    render(SettingsPage, { props: { data: defaultData } });
+
+    expect(screen.getByRole("button", { name: "Save Plex settings" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Save Dispatcharr settings" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Save sync settings" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Save security settings" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Save audit retention settings" })).toBeTruthy();
+  });
+
+  it("shows sync interval validation inline and ties it to the input", async () => {
+    const { default: SettingsPage } = await import("./+page.svelte");
+
+    state.queuedResults.push({
+      type: "failure",
+      data: { error: "Sync interval must be a number between 1 and 1440" },
+    });
+
+    const { container } = render(SettingsPage, { props: { data: defaultData } });
+    const syncForm = container.querySelector<HTMLFormElement>(
+      'form[action="?/updateSyncSettings"]',
+    );
+    if (!syncForm) throw new Error("Sync form not found");
+
+    await fireEvent.submit(syncForm);
+
+    const syncInput = screen.getByLabelText("Sync interval");
+    const error = screen.getByText("Sync interval must be a number between 1 and 1440");
+    expect(error).toBeTruthy();
+    expect(syncInput.getAttribute("aria-invalid")).toBe("true");
+    expect(syncInput.getAttribute("aria-describedby")).toBe(error.id);
+  });
 });

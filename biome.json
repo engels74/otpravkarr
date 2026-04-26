@@ -33,7 +33,9 @@
       "!**/build",
       "!**/.svelte-kit",
       "!**/dist",
+      "!**/.omc",
       "!**/.omx",
+      "!**/dogfood-output",
       "!**/test-results",
       "!**/e2e/.auth"
     ]

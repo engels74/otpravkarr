@@ -25,12 +25,12 @@ describe("CopyableField", () => {
 
   it("has a copy button", () => {
     render(CopyableField, { props: { label: "Token", value: "tok_123" } });
-    expect(screen.getByRole("button", { name: /copy to clipboard/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Copy Token to clipboard" })).toBeInTheDocument();
   });
 
   it("copies value to clipboard when copy button is clicked", async () => {
     render(CopyableField, { props: { label: "Token", value: "secret-value" } });
-    const btn = screen.getByRole("button", { name: /copy to clipboard/i });
+    const btn = screen.getByRole("button", { name: "Copy Token to clipboard" });
 
     await fireEvent.click(btn);
 
@@ -42,7 +42,7 @@ describe("CopyableField", () => {
       props: { label: "Token", value: "val" },
     });
 
-    const btn = screen.getByRole("button", { name: /copy to clipboard/i });
+    const btn = screen.getByRole("button", { name: "Copy Token to clipboard" });
     await fireEvent.click(btn);
 
     // After copy, the check icon SVG should be present (lucide-svelte renders SVGs)

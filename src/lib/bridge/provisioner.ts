@@ -304,10 +304,11 @@ export async function provisionUser(
     };
   }
 
-  // Automatic mode persists the encrypted password and rotates on demand, so the
-  // initial value is never surfaced. Self_managed/staff modes don't store the
-  // password locally, so we return it once for the admin to communicate.
-  if (request.mode !== "automatic") {
+  // Automatic mode normally persists the encrypted password and rotates on
+  // demand, so the initial value is not surfaced. Admin re-provisioning can
+  // explicitly opt in because the admin needs the one-time value after creating
+  // a replacement Dispatcharr account.
+  if (request.exposeInitialPassword === true || request.mode !== "automatic") {
     return { status: "provisioned", mapping: finalMapping, initialPassword: password };
   }
 

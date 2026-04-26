@@ -45,7 +45,7 @@ async function copyToClipboard() {
       size="icon"
       class="shrink-0"
       onclick={copyToClipboard}
-      aria-label="Copy to clipboard"
+      aria-label={"Copy " + label + " to clipboard"}
     >
       {#if copied}
         <CheckIcon class="h-4 w-4 text-green-500" />

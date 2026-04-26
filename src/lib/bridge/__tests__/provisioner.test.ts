@@ -606,6 +606,33 @@ describe("provisionUser — create (automatic mode)", () => {
       },
     });
   });
+
+  it("returns the initial password for automatic mode when explicitly requested", async () => {
+    const dispatcharrUser = makeDispatcharrUser({ id: 100, username: "testuser" });
+    const newMapping = makeMapping({
+      id: 8,
+      dispatcharr_user_id: 100,
+      dispatcharr_username: "testuser",
+      dispatcharr_xc_password_enc: "encrypted:generated-password-24",
+      provisioning_mode: "automatic",
+    });
+
+    vi.mocked(createUser).mockResolvedValue({ ok: true, data: dispatcharrUser });
+    vi.mocked(createUserMapping).mockReturnValue(newMapping);
+
+    const result = await provisionUser(mockClient, {
+      plexIdentity: makePlexIdentity(),
+      mode: "automatic",
+      groupIds: [1, 2],
+      exposeInitialPassword: true,
+    });
+
+    expect(result.status).toBe("provisioned");
+    if (result.status === "provisioned") {
+      expect(result.initialPassword).toBe("generated-password-24");
+    }
+    expect(encrypt).toHaveBeenCalledWith("generated-password-24", "credential-encryption");
+  });
 });
 
 // ---------------------------------------------------------------------------

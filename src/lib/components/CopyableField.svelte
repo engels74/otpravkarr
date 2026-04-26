@@ -14,23 +14,29 @@ interface Props {
 
 let { label, value, class: className }: Props = $props();
 const inputId = $props.id();
+const COPY_FEEDBACK_TIMEOUT_MS = 2000;
 let copied = $state(false);
+let copyStatus = $state<{ type: "success" | "error"; message: string } | null>(null);
 
 $effect(() => {
-  if (!copied) return;
+  if (!copied && !copyStatus) return;
   const timer = setTimeout(() => {
     copied = false;
-  }, 2000);
+    copyStatus = null;
+  }, COPY_FEEDBACK_TIMEOUT_MS);
   return () => clearTimeout(timer);
 });
 
 async function copyToClipboard() {
   try {
     await navigator.clipboard.writeText(value);
+    const message = `Copied ${label} to clipboard`;
     copied = true;
-    toast.success(`Copied ${label} to clipboard`);
+    copyStatus = { type: "success", message };
+    toast.success(message);
   } catch {
     copied = false;
+    copyStatus = { type: "error", message: "Couldn't copy to clipboard" };
     toast.error("Couldn't copy to clipboard");
   }
 }
@@ -54,4 +60,16 @@ async function copyToClipboard() {
       {/if}
     </Button>
   </div>
+  {#if copyStatus}
+    <p
+      class={cn(
+        "text-xs",
+        copyStatus.type === "error" ? "text-destructive" : "text-muted-foreground",
+      )}
+      role="status"
+      aria-live="polite"
+    >
+      {copyStatus.message}
+    </p>
+  {/if}
 </div>

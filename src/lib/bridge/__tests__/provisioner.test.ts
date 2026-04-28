@@ -260,8 +260,14 @@ describe("provisionUser — reactivation", () => {
     });
     expect(updateUserMapping).toHaveBeenCalledWith(inactive.id, { is_active: 1 });
     expect(appendAuditLog).toHaveBeenCalledWith({
+      actor: "TestUser",
       action: "user.provisioned",
-      detail: { plex_username: "TestUser", reactivated: true },
+      detail: {
+        mapping_id: inactive.id,
+        plex_username: "TestUser",
+        dispatcharr_username: inactive.dispatcharr_username,
+        reactivated: true,
+      },
     });
   });
 
@@ -598,12 +604,15 @@ describe("provisionUser — create (automatic mode)", () => {
 
     // Verify audit log
     expect(appendAuditLog).toHaveBeenCalledWith({
+      actor: "TestUser",
       action: "user.provisioned",
       detail: {
+        mapping_id: 5,
         plex_username: "TestUser",
         dispatcharr_username: "testuser",
         mode: "automatic",
       },
+      ipAddress: undefined,
     });
   });
 
@@ -879,8 +888,10 @@ describe("provisionUser — audit logging", () => {
 
     expect(appendAuditLog).toHaveBeenCalledTimes(1);
     expect(appendAuditLog).toHaveBeenCalledWith({
+      actor: "AuditTestUser",
       action: "user.provisioned",
       detail: expect.objectContaining({
+        mapping_id: 8,
         plex_username: "AuditTestUser",
         mode: "automatic",
       }),
@@ -888,7 +899,15 @@ describe("provisionUser — audit logging", () => {
   });
 
   it("creates audit entry for reactivation", async () => {
-    const inactive = makeMapping({ is_active: 0, dispatcharr_user_id: 42 });
+    // Pin the audit detail to the *remote* username (`result.data.username`),
+    // not the local mapping's stale `dispatcharr_username`. Use distinct values
+    // so a regression that reverts to `existingMapping.dispatcharr_username`
+    // would fail this assertion.
+    const inactive = makeMapping({
+      is_active: 0,
+      dispatcharr_user_id: 42,
+      dispatcharr_username: "stale-local-name",
+    });
     const reactivated = makeMapping({ is_active: 1 });
 
     vi.mocked(getUserMappingByPlexId)
@@ -897,7 +916,7 @@ describe("provisionUser — audit logging", () => {
 
     vi.mocked(getUser).mockResolvedValue({
       ok: true,
-      data: makeDispatcharrUser(),
+      data: makeDispatcharrUser({ username: "testuser" }),
     } as DispatcharrResult<DispatcharrUser>);
 
     await provisionUser(mockClient, {
@@ -907,8 +926,15 @@ describe("provisionUser — audit logging", () => {
     });
 
     expect(appendAuditLog).toHaveBeenCalledWith({
+      actor: "TestUser",
       action: "user.provisioned",
-      detail: { plex_username: "TestUser", reactivated: true },
+      detail: {
+        mapping_id: 1,
+        plex_username: "TestUser",
+        dispatcharr_username: "testuser",
+        reactivated: true,
+      },
+      ipAddress: undefined,
     });
   });
 

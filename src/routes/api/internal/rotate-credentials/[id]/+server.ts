@@ -1,6 +1,6 @@
-import { rotateCredentials } from "$lib/bridge/lifecycle";
+import { rotateCredentialsForMappingId } from "$lib/bridge/lifecycle";
+import { UserMappingNotFoundError } from "$lib/bridge/types";
 import { getConfig } from "$lib/db/repositories/config";
-import { getUserMappingById } from "$lib/db/repositories/users";
 import { DispatcharrClient } from "$lib/dispatcharr/client";
 import { requireAdminApi } from "$lib/server/auth";
 import type { RequestHandler } from "./$types";
@@ -14,11 +14,6 @@ export const POST: RequestHandler = async (event) => {
 
   const admin = await requireAdminApi(event);
 
-  const mapping = getUserMappingById(id);
-  if (!mapping) {
-    return Response.json({ ok: false, error: "not_found" }, { status: 404 });
-  }
-
   const dispatcharrUrl = await getConfig("dispatcharr_url");
   const dispatcharrApiKey = await getConfig("dispatcharr_api_key");
   if (!dispatcharrUrl || !dispatcharrApiKey) {
@@ -27,17 +22,21 @@ export const POST: RequestHandler = async (event) => {
 
   try {
     const client = new DispatcharrClient(dispatcharrUrl, dispatcharrApiKey);
-    await rotateCredentials(client, mapping, {
+    await rotateCredentialsForMappingId(client, id, {
       actor: admin.username,
       ipAddress: event.getClientAddress(),
     });
     return Response.json({ ok: true }, { status: 200 });
   } catch (err) {
+    if (err instanceof UserMappingNotFoundError) {
+      return Response.json({ ok: false, error: "not_found" }, { status: 404 });
+    }
+    const message = err instanceof Error ? err.message : String(err);
     return Response.json(
       {
         ok: false,
         error: "rotation_failed",
-        message: err instanceof Error ? err.message : String(err),
+        message,
       },
       { status: 500 },
     );

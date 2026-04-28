@@ -80,6 +80,7 @@ function friendInitials(f: PlexFriend): string {
 }
 
 let triggeringSync = $state(false);
+let syncRunning = $derived(triggeringSync || (data.syncJob?.running ?? false));
 
 async function runSyncNow() {
   if (triggeringSync) return;
@@ -234,7 +235,7 @@ async function runSyncNow() {
           <div class="space-y-3">
             <div class="flex items-center justify-between text-sm">
               <span class="text-muted-foreground">Status</span>
-              {#if data.syncJob.running}
+              {#if syncRunning}
                 <Badge variant="default">Running</Badge>
               {:else}
                 <Badge variant="secondary">Idle</Badge>
@@ -265,9 +266,9 @@ async function runSyncNow() {
             <Button
               size="sm"
               onclick={runSyncNow}
-              disabled={triggeringSync || data.syncJob.running}
+              disabled={syncRunning}
             >
-              {triggeringSync || data.syncJob.running ? "Syncing…" : "Run sync now"}
+              {syncRunning ? "Syncing…" : "Run sync now"}
             </Button>
           </div>
         {:else}

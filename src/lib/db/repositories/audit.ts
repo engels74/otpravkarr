@@ -7,6 +7,19 @@ function isDateOnlyFilter(value: string): boolean {
   return DATE_ONLY_RE.test(value);
 }
 
+function actorSearchCondition(): string {
+  // Guard json_extract with json_valid: SQLite throws "malformed JSON" if
+  // detail is non-null but not valid JSON, which would break the entire query
+  // for rows written by external tools or legacy migrations.
+  // Use instr(...) > 0 instead of LIKE so that '%' and '_' in user input are
+  // treated as literal characters (Dispatcharr usernames routinely contain '_').
+  return `(
+    instr(lower(coalesce(actor, 'system')), ?) > 0
+    OR instr(lower(coalesce(json_extract(CASE WHEN json_valid(detail) THEN detail ELSE NULL END, '$.plex_username'), '')), ?) > 0
+    OR instr(lower(coalesce(json_extract(CASE WHEN json_valid(detail) THEN detail ELSE NULL END, '$.dispatcharr_username'), '')), ?) > 0
+  )`;
+}
+
 /**
  * Append an entry to the audit log.
  * Serializes `detail` as JSON if provided.
@@ -50,13 +63,9 @@ export function queryAuditLog(filters: {
   }
 
   if (filters.actor != null) {
-    if (filters.actor.toLowerCase() === "system") {
-      conditions.push("(actor IS NULL OR actor = ?)");
-      params.push("system");
-    } else {
-      conditions.push("actor = ?");
-      params.push(filters.actor);
-    }
+    const search = filters.actor.toLowerCase();
+    conditions.push(actorSearchCondition());
+    params.push(search, search, search);
   }
 
   if (filters.after != null) {

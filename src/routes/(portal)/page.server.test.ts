@@ -20,7 +20,7 @@ const mocks = vi.hoisted(() => ({
   decrypt: vi.fn(async (_enc: string, _purpose: string) => "decrypted-password"),
   getConfig: vi.fn(async (key: string) => state.configValues[key] ?? null),
   updateLastAccessed: vi.fn((_id: number) => {}),
-  rotateCredentials: vi.fn(async () => {}),
+  rotateCredentialsForMappingId: vi.fn(async () => {}),
   buildXcUrl: vi.fn(
     (_params: unknown) => "http://host/get.php?username=u&password=p&type=m3u_plus",
   ),
@@ -94,7 +94,7 @@ vi.mock("$lib/db/repositories/users", () => ({
 }));
 
 vi.mock("$lib/bridge/lifecycle", () => ({
-  rotateCredentials: mocks.rotateCredentials,
+  rotateCredentialsForMappingId: mocks.rotateCredentialsForMappingId,
 }));
 
 vi.mock("$lib/url/xc", () => ({
@@ -636,7 +636,7 @@ describe("portal page server", () => {
         status: 400,
         data: { error: "not_allowed" },
       });
-      expect(mocks.rotateCredentials).not.toHaveBeenCalled();
+      expect(mocks.rotateCredentialsForMappingId).not.toHaveBeenCalled();
     });
 
     it("returns 500 when config is missing", async () => {
@@ -663,17 +663,21 @@ describe("portal page server", () => {
       await expect(
         action({
           locals: { user: createUser() },
+          getClientAddress: () => "127.0.0.1",
         } as unknown as Parameters<typeof action>[0]),
       ).rejects.toMatchObject({
         status: 303,
         location: "/",
       });
 
-      expect(mocks.rotateCredentials).toHaveBeenCalled();
+      expect(mocks.rotateCredentialsForMappingId).toHaveBeenCalledWith(expect.anything(), 1, {
+        actor: "testuser",
+        ipAddress: "127.0.0.1",
+      });
     });
 
     it("returns 500 on rotation failure", async () => {
-      mocks.rotateCredentials.mockRejectedValueOnce(new Error("Rotation failed"));
+      mocks.rotateCredentialsForMappingId.mockRejectedValueOnce(new Error("Rotation failed"));
 
       const { actions } = await import("./+page.server");
       const action = actions.refreshCredentials;
@@ -681,6 +685,7 @@ describe("portal page server", () => {
 
       const result = await action({
         locals: { user: createUser() },
+        getClientAddress: () => "127.0.0.1",
       } as unknown as Parameters<typeof action>[0]);
 
       expect(result).toMatchObject({

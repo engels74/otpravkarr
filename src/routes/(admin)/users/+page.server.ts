@@ -1,5 +1,5 @@
 import { fail } from "@sveltejs/kit";
-import { disableUser, enableUser, rotateCredentials } from "$lib/bridge/lifecycle";
+import { disableUser, enableUser, rotateCredentialsForMappingId } from "$lib/bridge/lifecycle";
 import { provisionUser } from "$lib/bridge/provisioner";
 import { appendAuditLog } from "$lib/db/repositories/audit";
 import { getConfig } from "$lib/db/repositories/config";
@@ -109,7 +109,7 @@ export const actions: Actions = {
 
     try {
       const client = await getClient();
-      await rotateCredentials(client, mapping, {
+      await rotateCredentialsForMappingId(client, mapping.id, {
         actor: admin.username,
         ipAddress: event.getClientAddress(),
       });

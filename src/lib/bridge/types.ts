@@ -24,3 +24,7 @@ export interface SyncReport {
   refreshed: number;
   errors: string[];
 }
+
+export class UserMappingNotFoundError extends Error {
+  override readonly name = "UserMappingNotFoundError" as const;
+}

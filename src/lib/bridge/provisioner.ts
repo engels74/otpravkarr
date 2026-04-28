@@ -154,11 +154,13 @@ export async function provisionUser(
         updateUserMapping(existingMapping.id, { is_active: 1 });
 
         appendAuditLog({
-          actor: actorContext?.actor,
+          actor: actorContext?.actor ?? request.plexIdentity.username,
           ipAddress: actorContext?.ipAddress,
           action: AuditAction.USER_PROVISIONED,
           detail: {
+            mapping_id: existingMapping.id,
             plex_username: request.plexIdentity.username,
+            dispatcharr_username: result.data.username,
             reactivated: true,
           },
         });
@@ -288,10 +290,11 @@ export async function provisionUser(
     }
 
     appendAuditLog({
-      actor: actorContext?.actor,
+      actor: actorContext?.actor ?? request.plexIdentity.username,
       ipAddress: actorContext?.ipAddress,
       action: AuditAction.USER_PROVISIONED,
       detail: {
+        mapping_id: finalMapping.id,
         plex_username: request.plexIdentity.username,
         dispatcharr_username: dispatcharrUser.username ?? sanitizedUsername,
         mode: request.mode,

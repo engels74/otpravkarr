@@ -1,13 +1,14 @@
 // @vitest-environment node
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { UserMappingNotFoundError } from "$lib/bridge/types";
 
 const mocks = vi.hoisted(() => ({
   requireAdminApi: vi.fn(),
   getUserMappingById: vi.fn(),
   getConfig: vi.fn(),
   DispatcharrClient: vi.fn(),
-  rotateCredentials: vi.fn(),
+  rotateCredentialsForMappingId: vi.fn(),
 }));
 
 vi.mock("$lib/server/auth", () => ({
@@ -27,7 +28,7 @@ vi.mock("$lib/dispatcharr/client", () => ({
 }));
 
 vi.mock("$lib/bridge/lifecycle", () => ({
-  rotateCredentials: mocks.rotateCredentials,
+  rotateCredentialsForMappingId: mocks.rotateCredentialsForMappingId,
 }));
 
 function resetAll() {
@@ -84,17 +85,17 @@ describe("POST /api/internal/rotate-credentials/[id]", () => {
     mocks.DispatcharrClient.mockImplementation(function (this: { baseUrl: string }, url: string) {
       this.baseUrl = url;
     });
-    mocks.rotateCredentials.mockResolvedValue(undefined);
+    mocks.rotateCredentialsForMappingId.mockResolvedValue(undefined);
 
     const response = await POST(makeEvent("5"));
 
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ ok: true });
     expect(mocks.requireAdminApi).toHaveBeenCalled();
-    expect(mocks.getUserMappingById).toHaveBeenCalledWith(5);
-    expect(mocks.rotateCredentials).toHaveBeenCalledWith(
+    expect(mocks.getUserMappingById).not.toHaveBeenCalled();
+    expect(mocks.rotateCredentialsForMappingId).toHaveBeenCalledWith(
       expect.objectContaining({ baseUrl: "http://dispatcharr.local" }),
-      MAPPING,
+      5,
       {
         actor: "admin",
         ipAddress: "127.0.0.1",
@@ -154,7 +155,14 @@ describe("POST /api/internal/rotate-credentials/[id]", () => {
     const { POST } = await import("./+server");
 
     mocks.requireAdminApi.mockResolvedValue({ id: 1, username: "admin" });
-    mocks.getUserMappingById.mockReturnValue(null);
+    mocks.getConfig.mockImplementation(async (key: string) => {
+      if (key === "dispatcharr_url") return "http://dispatcharr.local";
+      if (key === "dispatcharr_api_key") return "api-key-123";
+      return null;
+    });
+    mocks.rotateCredentialsForMappingId.mockRejectedValue(
+      new UserMappingNotFoundError("Cannot rotate credentials: user mapping not found"),
+    );
 
     const response = await POST(makeEvent("999"));
 
@@ -204,7 +212,7 @@ describe("POST /api/internal/rotate-credentials/[id]", () => {
     mocks.DispatcharrClient.mockImplementation(function (this: { baseUrl: string }, url: string) {
       this.baseUrl = url;
     });
-    mocks.rotateCredentials.mockRejectedValue(new Error("Dispatcharr API down"));
+    mocks.rotateCredentialsForMappingId.mockRejectedValue(new Error("Dispatcharr API down"));
 
     const response = await POST(makeEvent("5"));
 

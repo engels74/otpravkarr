@@ -102,7 +102,32 @@ function applyFilters(sql: string, params: unknown[]): AuditRow[] {
       const val = params[paramIdx++] as string;
       filtered = filtered.filter((r) => r.action === val);
     }
-    if (sql.includes("actor = ?")) {
+    if (sql.includes("json_valid(detail)")) {
+      // Production code uses instr(lower(col), ?) > 0 with bare lowercased needles,
+      // so '%' / '_' / '\' are literal characters (no SQL wildcard semantics).
+      const actorVal = String(params[paramIdx++]).toLowerCase();
+      const plexVal = String(params[paramIdx++]).toLowerCase();
+      const dispatcharrVal = String(params[paramIdx++]).toLowerCase();
+      filtered = filtered.filter((r) => {
+        let detail: Record<string, unknown> = {};
+        if (r.detail) {
+          try {
+            detail = JSON.parse(r.detail) as Record<string, unknown>;
+          } catch {
+            detail = {};
+          }
+        }
+        return (
+          (r.actor ?? "system").toLowerCase().includes(actorVal) ||
+          String(detail.plex_username ?? "")
+            .toLowerCase()
+            .includes(plexVal) ||
+          String(detail.dispatcharr_username ?? "")
+            .toLowerCase()
+            .includes(dispatcharrVal)
+        );
+      });
+    } else if (sql.includes("actor = ?")) {
       const val = params[paramIdx++] as string;
       filtered = filtered.filter((r) => r.actor === val);
     }
@@ -283,6 +308,149 @@ describe("audit repository", () => {
       expect(total).toBe(2);
       expect(entries).toHaveLength(2);
       expect(entries.every((e) => e.actor === "system")).toBe(true);
+    });
+
+    it("matches NULL actors and substrings under the 'Actor or user' contract", () => {
+      // The UI labels this filter "Actor or user" and intentionally performs
+      // a case-insensitive substring search across actor + user identifiers.
+      // Pin both the NULL-coalesce ("system" matches actor=NULL) and the
+      // substring boundary ("system" matches "subsystem_admin") to prevent
+      // silent regressions back to exact-match semantics.
+      auditRows.push(
+        {
+          id: nextId++,
+          timestamp: "2024-01-01T10:00:00Z",
+          actor: null,
+          action: "sync.completed",
+          detail: null,
+          ip_address: null,
+        },
+        {
+          id: nextId++,
+          timestamp: "2024-01-02T10:00:00Z",
+          actor: "subsystem_admin",
+          action: "admin.login",
+          detail: null,
+          ip_address: null,
+        },
+        {
+          id: nextId++,
+          timestamp: "2024-01-03T10:00:00Z",
+          actor: "admin",
+          action: "admin.login",
+          detail: null,
+          ip_address: null,
+        },
+      );
+
+      const { entries, total } = queryAuditLog({ actor: "system" });
+
+      expect(total).toBe(2);
+      expect(entries).toHaveLength(2);
+      expect(entries.some((e) => e.actor === null)).toBe(true);
+      expect(entries.some((e) => e.actor === "subsystem_admin")).toBe(true);
+    });
+
+    it("treats % and _ in actor input as literal characters, not SQL wildcards", () => {
+      // Dispatcharr usernames routinely contain '_'. The legacy LIKE-based
+      // implementation interpreted '_' as "any single character", so a search
+      // for "alice_xc" wrongly matched "aliceXxc". Pin the literal-character
+      // contract so this regression cannot return.
+      auditRows.push(
+        {
+          id: nextId++,
+          timestamp: "2024-02-01T10:00:00Z",
+          actor: null,
+          action: "user.provisioned",
+          detail: '{"plex_username":"alice","dispatcharr_username":"alice_xc"}',
+          ip_address: null,
+        },
+        {
+          id: nextId++,
+          timestamp: "2024-02-02T10:00:00Z",
+          actor: null,
+          action: "user.provisioned",
+          detail: '{"plex_username":"alice","dispatcharr_username":"aliceXxc"}',
+          ip_address: null,
+        },
+        {
+          id: nextId++,
+          timestamp: "2024-02-03T10:00:00Z",
+          actor: "100%",
+          action: "admin.login",
+          detail: null,
+          ip_address: null,
+        },
+        {
+          id: nextId++,
+          timestamp: "2024-02-04T10:00:00Z",
+          actor: "100abc",
+          action: "admin.login",
+          detail: null,
+          ip_address: null,
+        },
+      );
+
+      // '_' must be literal: only the alice_xc row matches.
+      const underscoreResult = queryAuditLog({ actor: "alice_xc" });
+      expect(underscoreResult.total).toBe(1);
+      expect(underscoreResult.entries).toHaveLength(1);
+      expect(
+        (underscoreResult.entries[0] as (typeof underscoreResult.entries)[number]).detail,
+      ).toContain("alice_xc");
+
+      // '%' must be literal: only the "100%" actor matches, not "100abc".
+      const percentResult = queryAuditLog({ actor: "100%" });
+      expect(percentResult.total).toBe(1);
+      expect(percentResult.entries).toHaveLength(1);
+      expect((percentResult.entries[0] as (typeof percentResult.entries)[number]).actor).toBe(
+        "100%",
+      );
+    });
+
+    it("filters actor search by user identifiers in detail JSON", () => {
+      seedEntries();
+      auditRows.push(
+        {
+          id: nextId++,
+          timestamp: "2024-01-06T10:00:00Z",
+          actor: null,
+          action: "user.provisioned",
+          detail: '{"plex_username":"alice","dispatcharr_username":"alice_xc"}',
+          ip_address: null,
+        },
+        {
+          id: nextId++,
+          timestamp: "2024-01-07T10:00:00Z",
+          actor: null,
+          action: "user.provisioned",
+          detail: '{"plex_username":"bob","dispatcharr_username":"bob_xc"}',
+          ip_address: null,
+        },
+      );
+
+      const { entries, total } = queryAuditLog({ actor: "alice" });
+
+      expect(total).toBe(1);
+      expect(entries).toHaveLength(1);
+      expect((entries[0] as (typeof entries)[number]).detail).toContain("alice_xc");
+    });
+
+    it("filters actor search case-insensitively by Dispatcharr username", () => {
+      seedEntries();
+      auditRows.push({
+        id: nextId++,
+        timestamp: "2024-01-06T10:00:00Z",
+        actor: null,
+        action: "user.provisioned",
+        detail: '{"plex_username":"alice","dispatcharr_username":"alice_xc"}',
+        ip_address: null,
+      });
+
+      const { entries, total } = queryAuditLog({ actor: "ALICE_XC" });
+
+      expect(total).toBe(1);
+      expect(entries).toHaveLength(1);
     });
 
     it("filters by after date", () => {

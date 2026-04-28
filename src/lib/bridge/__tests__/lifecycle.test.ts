@@ -222,6 +222,32 @@ describe("rotateCredentials", () => {
     });
   });
 
+  it("audit log sources dispatcharr_username from the remote-fetched user, not the stale local mapping", async () => {
+    // Pin the audit detail to the *remote* username (`getResult.data.username`),
+    // not the local mapping's stale `dispatcharr_username`. Use distinct values
+    // so a regression that reverts to `mapping.dispatcharr_username` would fail
+    // this assertion. Mirrors the iter-2 provisioner reactivation fix.
+    const mapping = makeMapping({ dispatcharr_username: "stale-local-name" });
+    mockGetUser.mockResolvedValueOnce({
+      ok: true,
+      data: makeDispatcharrUserWithProps({ xc_password: "old" }, { username: "current-remote" }),
+    });
+    mockUpdateUser.mockResolvedValueOnce({
+      ok: true,
+      data: makeDispatcharrUser({ username: "current-remote" }),
+    });
+
+    await rotateCredentials(mockClient, mapping);
+
+    expect(mockAppendAuditLog).toHaveBeenCalledWith({
+      action: AuditAction.USER_CREDENTIALS_ROTATED,
+      detail: {
+        mapping_id: 1,
+        dispatcharr_username: "current-remote",
+      },
+    });
+  });
+
   it("throws when Dispatcharr update fails", async () => {
     const mapping = makeMapping();
     mockGetUser.mockResolvedValueOnce({

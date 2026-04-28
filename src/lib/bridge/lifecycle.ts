@@ -136,7 +136,7 @@ export async function rotateCredentials(
       action: AuditAction.USER_CREDENTIALS_ROTATED,
       detail: {
         mapping_id: mapping.id,
-        dispatcharr_username: mapping.dispatcharr_username,
+        dispatcharr_username: getResult.data.username,
       },
     });
   } catch (err) {

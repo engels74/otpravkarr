@@ -103,9 +103,11 @@ function applyFilters(sql: string, params: unknown[]): AuditRow[] {
       filtered = filtered.filter((r) => r.action === val);
     }
     if (sql.includes("json_valid(detail)")) {
-      const actorVal = String(params[paramIdx++]).replaceAll("%", "").toLowerCase();
-      const plexVal = String(params[paramIdx++]).replaceAll("%", "").toLowerCase();
-      const dispatcharrVal = String(params[paramIdx++]).replaceAll("%", "").toLowerCase();
+      // Production code uses instr(lower(col), ?) > 0 with bare lowercased needles,
+      // so '%' / '_' / '\' are literal characters (no SQL wildcard semantics).
+      const actorVal = String(params[paramIdx++]).toLowerCase();
+      const plexVal = String(params[paramIdx++]).toLowerCase();
+      const dispatcharrVal = String(params[paramIdx++]).toLowerCase();
       filtered = filtered.filter((r) => {
         let detail: Record<string, unknown> = {};
         if (r.detail) {
@@ -347,6 +349,63 @@ describe("audit repository", () => {
       expect(entries).toHaveLength(2);
       expect(entries.some((e) => e.actor === null)).toBe(true);
       expect(entries.some((e) => e.actor === "subsystem_admin")).toBe(true);
+    });
+
+    it("treats % and _ in actor input as literal characters, not SQL wildcards", () => {
+      // Dispatcharr usernames routinely contain '_'. The legacy LIKE-based
+      // implementation interpreted '_' as "any single character", so a search
+      // for "alice_xc" wrongly matched "aliceXxc". Pin the literal-character
+      // contract so this regression cannot return.
+      auditRows.push(
+        {
+          id: nextId++,
+          timestamp: "2024-02-01T10:00:00Z",
+          actor: null,
+          action: "user.provisioned",
+          detail: '{"plex_username":"alice","dispatcharr_username":"alice_xc"}',
+          ip_address: null,
+        },
+        {
+          id: nextId++,
+          timestamp: "2024-02-02T10:00:00Z",
+          actor: null,
+          action: "user.provisioned",
+          detail: '{"plex_username":"alice","dispatcharr_username":"aliceXxc"}',
+          ip_address: null,
+        },
+        {
+          id: nextId++,
+          timestamp: "2024-02-03T10:00:00Z",
+          actor: "100%",
+          action: "admin.login",
+          detail: null,
+          ip_address: null,
+        },
+        {
+          id: nextId++,
+          timestamp: "2024-02-04T10:00:00Z",
+          actor: "100abc",
+          action: "admin.login",
+          detail: null,
+          ip_address: null,
+        },
+      );
+
+      // '_' must be literal: only the alice_xc row matches.
+      const underscoreResult = queryAuditLog({ actor: "alice_xc" });
+      expect(underscoreResult.total).toBe(1);
+      expect(underscoreResult.entries).toHaveLength(1);
+      expect(
+        (underscoreResult.entries[0] as (typeof underscoreResult.entries)[number]).detail,
+      ).toContain("alice_xc");
+
+      // '%' must be literal: only the "100%" actor matches, not "100abc".
+      const percentResult = queryAuditLog({ actor: "100%" });
+      expect(percentResult.total).toBe(1);
+      expect(percentResult.entries).toHaveLength(1);
+      expect((percentResult.entries[0] as (typeof percentResult.entries)[number]).actor).toBe(
+        "100%",
+      );
     });
 
     it("filters actor search by user identifiers in detail JSON", () => {

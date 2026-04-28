@@ -3,9 +3,12 @@ import { generateXcPassword } from "$lib/crypto/passwords";
 import { appendAuditLog } from "$lib/db/repositories/audit";
 import {
   getAllUserMappings,
+  getUserMappingById,
+  getUserMappingsByDispatcharrId,
   updateLastSynced,
   updatePlexIdentity,
   updateUserMapping,
+  updateXcPasswordForMapping,
 } from "$lib/db/repositories/users";
 import type { UserMapping } from "$lib/db/types";
 import { AuditAction } from "$lib/db/types";
@@ -47,6 +50,12 @@ export async function rotateCredentials(
     );
   }
   const dispatcharrUserId = mapping.dispatcharr_user_id;
+  const owners = getUserMappingsByDispatcharrId(dispatcharrUserId);
+  if (owners.length !== 1 || owners[0]?.id !== mapping.id) {
+    throw new Error(
+      `Cannot rotate credentials: Dispatcharr user ID ${dispatcharrUserId} is not uniquely owned by mapping ${mapping.id}`,
+    );
+  }
 
   const newPassword = generateXcPassword();
 
@@ -116,7 +125,10 @@ export async function rotateCredentials(
   }
 
   try {
-    updateUserMapping(mapping.id, { dispatcharr_xc_password_enc: encryptedPassword });
+    const updated = updateXcPasswordForMapping(mapping.id, dispatcharrUserId, encryptedPassword);
+    if (!updated) {
+      throw new Error("guarded local credential update matched no rows");
+    }
 
     appendAuditLog({
       actor: actorContext?.actor,
@@ -132,6 +144,25 @@ export async function rotateCredentials(
       `Dispatcharr password rotated but local DB write failed (state may be inconsistent): ${err instanceof Error ? err.message : String(err)}`,
     );
   }
+}
+
+/**
+ * Rotate credentials by mapping ID, reloading the row immediately before use.
+ * Route handlers should prefer this over passing a potentially stale mapping.
+ */
+export async function rotateCredentialsForMappingId(
+  client: DispatcharrClient,
+  mappingId: number,
+  actorContext?: ActorContext,
+): Promise<void> {
+  const mapping = getUserMappingById(mappingId);
+  if (!mapping) {
+    throw new Error("Cannot rotate credentials: user mapping not found");
+  }
+  if (mapping.is_active !== 1) {
+    throw new Error("Cannot rotate credentials: user is inactive");
+  }
+  await rotateCredentials(client, mapping, actorContext);
 }
 
 /**

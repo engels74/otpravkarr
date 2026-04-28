@@ -102,7 +102,30 @@ function applyFilters(sql: string, params: unknown[]): AuditRow[] {
       const val = params[paramIdx++] as string;
       filtered = filtered.filter((r) => r.action === val);
     }
-    if (sql.includes("actor = ?")) {
+    if (sql.includes("json_extract(detail")) {
+      const actorVal = String(params[paramIdx++]).replaceAll("%", "").toLowerCase();
+      const plexVal = String(params[paramIdx++]).replaceAll("%", "").toLowerCase();
+      const dispatcharrVal = String(params[paramIdx++]).replaceAll("%", "").toLowerCase();
+      filtered = filtered.filter((r) => {
+        let detail: Record<string, unknown> = {};
+        if (r.detail) {
+          try {
+            detail = JSON.parse(r.detail) as Record<string, unknown>;
+          } catch {
+            detail = {};
+          }
+        }
+        return (
+          (r.actor ?? "system").toLowerCase().includes(actorVal) ||
+          String(detail.plex_username ?? "")
+            .toLowerCase()
+            .includes(plexVal) ||
+          String(detail.dispatcharr_username ?? "")
+            .toLowerCase()
+            .includes(dispatcharrVal)
+        );
+      });
+    } else if (sql.includes("actor = ?")) {
       const val = params[paramIdx++] as string;
       filtered = filtered.filter((r) => r.actor === val);
     }
@@ -283,6 +306,51 @@ describe("audit repository", () => {
       expect(total).toBe(2);
       expect(entries).toHaveLength(2);
       expect(entries.every((e) => e.actor === "system")).toBe(true);
+    });
+
+    it("filters actor search by user identifiers in detail JSON", () => {
+      seedEntries();
+      auditRows.push(
+        {
+          id: nextId++,
+          timestamp: "2024-01-06T10:00:00Z",
+          actor: null,
+          action: "user.provisioned",
+          detail: '{"plex_username":"alice","dispatcharr_username":"alice_xc"}',
+          ip_address: null,
+        },
+        {
+          id: nextId++,
+          timestamp: "2024-01-07T10:00:00Z",
+          actor: null,
+          action: "user.provisioned",
+          detail: '{"plex_username":"bob","dispatcharr_username":"bob_xc"}',
+          ip_address: null,
+        },
+      );
+
+      const { entries, total } = queryAuditLog({ actor: "alice" });
+
+      expect(total).toBe(1);
+      expect(entries).toHaveLength(1);
+      expect((entries[0] as (typeof entries)[number]).detail).toContain("alice_xc");
+    });
+
+    it("filters actor search case-insensitively by Dispatcharr username", () => {
+      seedEntries();
+      auditRows.push({
+        id: nextId++,
+        timestamp: "2024-01-06T10:00:00Z",
+        actor: null,
+        action: "user.provisioned",
+        detail: '{"plex_username":"alice","dispatcharr_username":"alice_xc"}',
+        ip_address: null,
+      });
+
+      const { entries, total } = queryAuditLog({ actor: "ALICE_XC" });
+
+      expect(total).toBe(1);
+      expect(entries).toHaveLength(1);
     });
 
     it("filters by after date", () => {

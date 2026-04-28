@@ -4,6 +4,7 @@ import type { UserMapping } from "../types";
 // Prepared statements — lazily initialized on first use
 let stmtByPlexId: ReturnType<typeof db.prepare> | null = null;
 let stmtByDispatcharrId: ReturnType<typeof db.prepare> | null = null;
+let stmtAllByDispatcharrId: ReturnType<typeof db.prepare> | null = null;
 let stmtAllActive: ReturnType<typeof db.prepare> | null = null;
 let stmtAllInactive: ReturnType<typeof db.prepare> | null = null;
 let stmtAll: ReturnType<typeof db.prepare> | null = null;
@@ -22,6 +23,13 @@ function byPlexIdStmt() {
 function byDispatcharrIdStmt() {
   stmtByDispatcharrId ??= db.prepare("SELECT * FROM user_mappings WHERE dispatcharr_user_id = ?");
   return stmtByDispatcharrId;
+}
+
+function allByDispatcharrIdStmt() {
+  stmtAllByDispatcharrId ??= db.prepare(
+    "SELECT * FROM user_mappings WHERE dispatcharr_user_id = ?",
+  );
+  return stmtAllByDispatcharrId;
 }
 
 function allActiveStmt() {
@@ -96,6 +104,13 @@ export function getUserMappingByPlexId(plexAccountId: number): UserMapping | nul
  */
 export function getUserMappingByDispatcharrId(dispatcharrUserId: number): UserMapping | null {
   return (byDispatcharrIdStmt().get(dispatcharrUserId) as UserMapping | null) ?? null;
+}
+
+/**
+ * Find all user mappings that reference the same Dispatcharr user ID.
+ */
+export function getUserMappingsByDispatcharrId(dispatcharrUserId: number): UserMapping[] {
+  return allByDispatcharrIdStmt().all(dispatcharrUserId) as UserMapping[];
 }
 
 /**
@@ -187,6 +202,27 @@ export function updateUserMapping(
 }
 
 /**
+ * Update only the encrypted XC password for the expected automatic mapping.
+ * Returns true when exactly one row was updated.
+ */
+export function updateXcPasswordForMapping(
+  id: number,
+  dispatcharrUserId: number,
+  encryptedPassword: string,
+): boolean {
+  const result = db
+    .prepare(
+      `UPDATE user_mappings
+       SET dispatcharr_xc_password_enc = ?, updated_at = datetime('now')
+       WHERE id = ?
+         AND dispatcharr_user_id = ?
+         AND provisioning_mode = 'automatic'`,
+    )
+    .run(encryptedPassword, id, dispatcharrUserId);
+  return result.changes === 1;
+}
+
+/**
  * Mark a user mapping as inactive, updating `updated_at`.
  */
 export function markMappingInactive(id: number): void {
@@ -225,6 +261,7 @@ export function updatePlexIdentity(
 export function _resetStatementsForTesting(): void {
   stmtByPlexId = null;
   stmtByDispatcharrId = null;
+  stmtAllByDispatcharrId = null;
   stmtAllActive = null;
   stmtAllInactive = null;
   stmtAll = null;

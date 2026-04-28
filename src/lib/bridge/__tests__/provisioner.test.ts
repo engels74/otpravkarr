@@ -260,8 +260,14 @@ describe("provisionUser — reactivation", () => {
     });
     expect(updateUserMapping).toHaveBeenCalledWith(inactive.id, { is_active: 1 });
     expect(appendAuditLog).toHaveBeenCalledWith({
+      actor: "TestUser",
       action: "user.provisioned",
-      detail: { plex_username: "TestUser", reactivated: true },
+      detail: {
+        mapping_id: inactive.id,
+        plex_username: "TestUser",
+        dispatcharr_username: inactive.dispatcharr_username,
+        reactivated: true,
+      },
     });
   });
 
@@ -598,12 +604,15 @@ describe("provisionUser — create (automatic mode)", () => {
 
     // Verify audit log
     expect(appendAuditLog).toHaveBeenCalledWith({
+      actor: "TestUser",
       action: "user.provisioned",
       detail: {
+        mapping_id: 5,
         plex_username: "TestUser",
         dispatcharr_username: "testuser",
         mode: "automatic",
       },
+      ipAddress: undefined,
     });
   });
 
@@ -879,8 +888,10 @@ describe("provisionUser — audit logging", () => {
 
     expect(appendAuditLog).toHaveBeenCalledTimes(1);
     expect(appendAuditLog).toHaveBeenCalledWith({
+      actor: "AuditTestUser",
       action: "user.provisioned",
       detail: expect.objectContaining({
+        mapping_id: 8,
         plex_username: "AuditTestUser",
         mode: "automatic",
       }),
@@ -907,8 +918,15 @@ describe("provisionUser — audit logging", () => {
     });
 
     expect(appendAuditLog).toHaveBeenCalledWith({
+      actor: "TestUser",
       action: "user.provisioned",
-      detail: { plex_username: "TestUser", reactivated: true },
+      detail: {
+        mapping_id: 1,
+        plex_username: "TestUser",
+        dispatcharr_username: "testuser",
+        reactivated: true,
+      },
+      ipAddress: undefined,
     });
   });
 

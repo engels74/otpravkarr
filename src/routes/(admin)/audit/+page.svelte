@@ -217,11 +217,11 @@ function formatDateLabel(value: DateValue | undefined): string {
     </div>
 
     <div class="grid gap-1.5">
-      <Label for="audit-actor-filter" class="text-xs text-foreground">Actor</Label>
+      <Label for="audit-actor-filter" class="text-xs text-foreground">Actor or user</Label>
       <Input
         id="audit-actor-filter"
-        aria-label="Filter by actor"
-        placeholder="Filter by actor…"
+        aria-label="Filter by actor or user"
+        placeholder="Filter by actor or user…"
         class="h-8 w-40"
         value={actorSearchValue}
         oninput={(e) => {

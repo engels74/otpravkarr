@@ -25,12 +25,19 @@ vi.mock("$lib/dispatcharr/endpoints/users", () => ({
 }));
 
 const mockGetAllUserMappings = vi.fn();
+const mockGetUserMappingById = vi.fn();
+const mockGetUserMappingsByDispatcharrId = vi.fn();
 const mockUpdateUserMapping = vi.fn();
+const mockUpdateXcPasswordForMapping = vi.fn();
 const mockUpdateLastSynced = vi.fn();
 const mockUpdatePlexIdentity = vi.fn();
 vi.mock("$lib/db/repositories/users", () => ({
   getAllUserMappings: (...args: unknown[]) => mockGetAllUserMappings(...args),
+  getUserMappingById: (...args: unknown[]) => mockGetUserMappingById(...args),
+  getUserMappingsByDispatcharrId: (...args: unknown[]) =>
+    mockGetUserMappingsByDispatcharrId(...args),
   updateUserMapping: (...args: unknown[]) => mockUpdateUserMapping(...args),
+  updateXcPasswordForMapping: (...args: unknown[]) => mockUpdateXcPasswordForMapping(...args),
   updateLastSynced: (...args: unknown[]) => mockUpdateLastSynced(...args),
   updatePlexIdentity: (...args: unknown[]) => mockUpdatePlexIdentity(...args),
 }));
@@ -61,7 +68,8 @@ vi.mock("$lib/plex/friends", () => ({
 }));
 
 // Import after mocks
-const { rotateCredentials, disableUser, enableUser, reconcileSync } = await import("../lifecycle");
+const { rotateCredentials, rotateCredentialsForMappingId, disableUser, enableUser, reconcileSync } =
+  await import("../lifecycle");
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -120,6 +128,10 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockGenerateXcPassword.mockReturnValue("new-xc-password");
   mockEncrypt.mockResolvedValue("encrypted:value");
+  mockGetUserMappingsByDispatcharrId.mockImplementation((dispatcharrUserId: number) => [
+    makeMapping({ dispatcharr_user_id: dispatcharrUserId }),
+  ]);
+  mockUpdateXcPasswordForMapping.mockReturnValue(true);
 });
 
 // ---------------------------------------------------------------------------
@@ -143,9 +155,52 @@ describe("rotateCredentials", () => {
       custom_properties: { device_fingerprint: "abc", xc_password: "new-xc-password" },
     });
     expect(mockEncrypt).toHaveBeenCalledWith("new-xc-password", "credential-encryption");
-    expect(mockUpdateUserMapping).toHaveBeenCalledWith(1, {
-      dispatcharr_xc_password_enc: "encrypted:value",
+    expect(mockUpdateXcPasswordForMapping).toHaveBeenCalledWith(1, 10, "encrypted:value");
+  });
+
+  it("reloads mapping by ID before rotating credentials", async () => {
+    const mapping = makeMapping({ id: 7, dispatcharr_user_id: 70 });
+    mockGetUserMappingById.mockReturnValueOnce(mapping);
+    mockGetUserMappingsByDispatcharrId.mockReturnValueOnce([mapping]);
+    mockGetUser.mockResolvedValueOnce({
+      ok: true,
+      data: makeDispatcharrUserWithProps({ xc_password: "old" }, { id: 70 }),
     });
+    mockUpdateUser.mockResolvedValueOnce({ ok: true, data: makeDispatcharrUser({ id: 70 }) });
+
+    await rotateCredentialsForMappingId(mockClient, 7);
+
+    expect(mockGetUserMappingById).toHaveBeenCalledWith(7);
+    expect(mockUpdateUser).toHaveBeenCalledWith(mockClient, 70, expect.any(Object));
+    expect(mockUpdateXcPasswordForMapping).toHaveBeenCalledWith(7, 70, "encrypted:value");
+  });
+
+  it("aborts before remote update when Dispatcharr user ID is not uniquely owned", async () => {
+    const mapping = makeMapping();
+    mockGetUserMappingsByDispatcharrId.mockReturnValueOnce([
+      mapping,
+      makeMapping({ id: 2, plex_account_id: 101 }),
+    ]);
+
+    await expect(rotateCredentials(mockClient, mapping)).rejects.toThrow("is not uniquely owned");
+
+    expect(mockGetUser).not.toHaveBeenCalled();
+    expect(mockUpdateUser).not.toHaveBeenCalled();
+    expect(mockUpdateXcPasswordForMapping).not.toHaveBeenCalled();
+  });
+
+  it("throws when guarded local credential update matches no rows after remote rotation", async () => {
+    const mapping = makeMapping();
+    mockGetUser.mockResolvedValueOnce({
+      ok: true,
+      data: makeDispatcharrUserWithProps({ xc_password: "old" }),
+    });
+    mockUpdateUser.mockResolvedValueOnce({ ok: true, data: makeDispatcharrUser() });
+    mockUpdateXcPasswordForMapping.mockReturnValueOnce(false);
+
+    await expect(rotateCredentials(mockClient, mapping)).rejects.toThrow(
+      "guarded local credential update matched no rows",
+    );
   });
 
   it("writes audit log entry with correct action", async () => {

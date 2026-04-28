@@ -1,7 +1,7 @@
 import type { Actions, RequestEvent } from "@sveltejs/kit";
 import { fail, redirect } from "@sveltejs/kit";
 import { env } from "$env/dynamic/private";
-import { rotateCredentials } from "$lib/bridge/lifecycle";
+import { rotateCredentialsForMappingId } from "$lib/bridge/lifecycle";
 import { decrypt } from "$lib/crypto/encryption";
 import { getConfig } from "$lib/db/repositories/config";
 import { updateLastAccessed } from "$lib/db/repositories/users";
@@ -195,7 +195,7 @@ export const actions: Actions = {
       }
 
       const client = new DispatcharrClient(dispatcharrUrl, dispatcharrApiKey);
-      await rotateCredentials(client, locals.user);
+      await rotateCredentialsForMappingId(client, locals.user.id);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Failed to refresh credentials";
       return fail(500, { error: "refresh_failed", message });

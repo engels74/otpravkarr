@@ -7,6 +7,14 @@ function isDateOnlyFilter(value: string): boolean {
   return DATE_ONLY_RE.test(value);
 }
 
+function actorSearchCondition(): string {
+  return `(
+    lower(coalesce(actor, 'system')) LIKE ?
+    OR lower(coalesce(json_extract(detail, '$.plex_username'), '')) LIKE ?
+    OR lower(coalesce(json_extract(detail, '$.dispatcharr_username'), '')) LIKE ?
+  )`;
+}
+
 /**
  * Append an entry to the audit log.
  * Serializes `detail` as JSON if provided.
@@ -50,13 +58,9 @@ export function queryAuditLog(filters: {
   }
 
   if (filters.actor != null) {
-    if (filters.actor.toLowerCase() === "system") {
-      conditions.push("(actor IS NULL OR actor = ?)");
-      params.push("system");
-    } else {
-      conditions.push("actor = ?");
-      params.push(filters.actor);
-    }
+    const search = `%${filters.actor.toLowerCase()}%`;
+    conditions.push(actorSearchCondition());
+    params.push(search, search, search);
   }
 
   if (filters.after != null) {

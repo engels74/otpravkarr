@@ -30,7 +30,7 @@ const INITIAL_PASSWORD_COOKIE_OPTIONS = {
   maxAge: INITIAL_PASSWORD_COOKIE_MAX_AGE,
 };
 
-export const load: PageServerLoad = async ({ cookies }) => {
+export const load: PageServerLoad = async ({ cookies, getClientAddress }) => {
   // 1. Read OAuth ID from cookie, then delete it
   const oauthId = cookies.get(OAUTH_COOKIE_NAME);
   cookies.delete(OAUTH_COOKIE_NAME, {
@@ -105,12 +105,19 @@ export const load: PageServerLoad = async ({ cookies }) => {
   const groupIds = defaultGroupId ? [Number(defaultGroupId)] : [];
   const profileId = defaultProfileId ? Number(defaultProfileId) : undefined;
 
-  const result = await provisionUser(client, {
-    plexIdentity: identity,
-    mode,
-    groupIds,
-    profileId,
-  });
+  const result = await provisionUser(
+    client,
+    {
+      plexIdentity: identity,
+      mode,
+      groupIds,
+      profileId,
+    },
+    {
+      actor: identity.username,
+      ipAddress: getClientAddress?.() ?? "",
+    },
+  );
 
   if (result.status === "failed") {
     console.error("[auth/plex] Provisioning failed for Plex user:", result.error);

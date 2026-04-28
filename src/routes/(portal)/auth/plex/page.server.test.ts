@@ -499,6 +499,9 @@ describe("plex OAuth callback", () => {
         groupIds: [1],
         profileId: 2,
       }),
+      expect.objectContaining({
+        actor: "testuser",
+      }),
     );
   });
 
@@ -639,6 +642,9 @@ describe("plex OAuth callback", () => {
       expect.anything(),
       expect.objectContaining({
         mode: "self_managed",
+      }),
+      expect.objectContaining({
+        actor: "testuser",
       }),
     );
   });

@@ -15,7 +15,7 @@ const mocks = vi.hoisted(() => ({
   listGroups: vi.fn(async () => ({ ok: true, data: [] })),
   listProfiles: vi.fn(async () => ({ ok: true, data: [] })),
   updateUser: vi.fn(async () => ({ ok: true, data: {} })),
-  rotateCredentials: vi.fn(async () => undefined),
+  rotateCredentialsForMappingId: vi.fn(async () => undefined),
   disableUser: vi.fn(async () => undefined),
   enableUser: vi.fn(async () => undefined),
   provisionUser: vi.fn<() => Promise<ProvisioningResult>>(
@@ -59,7 +59,7 @@ vi.mock("$lib/dispatcharr/endpoints/users", () => ({
 }));
 
 vi.mock("$lib/bridge/lifecycle", () => ({
-  rotateCredentials: mocks.rotateCredentials,
+  rotateCredentialsForMappingId: mocks.rotateCredentialsForMappingId,
   disableUser: mocks.disableUser,
   enableUser: mocks.enableUser,
 }));
@@ -77,7 +77,7 @@ function resetMocks() {
   mocks.listGroups.mockClear();
   mocks.listProfiles.mockClear();
   mocks.updateUser.mockClear();
-  mocks.rotateCredentials.mockClear();
+  mocks.rotateCredentialsForMappingId.mockClear();
   mocks.disableUser.mockClear();
   mocks.enableUser.mockClear();
   mocks.provisionUser.mockClear();

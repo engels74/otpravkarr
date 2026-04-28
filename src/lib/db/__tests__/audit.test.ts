@@ -308,6 +308,47 @@ describe("audit repository", () => {
       expect(entries.every((e) => e.actor === "system")).toBe(true);
     });
 
+    it("matches NULL actors and substrings under the 'Actor or user' contract", () => {
+      // The UI labels this filter "Actor or user" and intentionally performs
+      // a case-insensitive substring search across actor + user identifiers.
+      // Pin both the NULL-coalesce ("system" matches actor=NULL) and the
+      // substring boundary ("system" matches "subsystem_admin") to prevent
+      // silent regressions back to exact-match semantics.
+      auditRows.push(
+        {
+          id: nextId++,
+          timestamp: "2024-01-01T10:00:00Z",
+          actor: null,
+          action: "sync.completed",
+          detail: null,
+          ip_address: null,
+        },
+        {
+          id: nextId++,
+          timestamp: "2024-01-02T10:00:00Z",
+          actor: "subsystem_admin",
+          action: "admin.login",
+          detail: null,
+          ip_address: null,
+        },
+        {
+          id: nextId++,
+          timestamp: "2024-01-03T10:00:00Z",
+          actor: "admin",
+          action: "admin.login",
+          detail: null,
+          ip_address: null,
+        },
+      );
+
+      const { entries, total } = queryAuditLog({ actor: "system" });
+
+      expect(total).toBe(2);
+      expect(entries).toHaveLength(2);
+      expect(entries.some((e) => e.actor === null)).toBe(true);
+      expect(entries.some((e) => e.actor === "subsystem_admin")).toBe(true);
+    });
+
     it("filters actor search by user identifiers in detail JSON", () => {
       seedEntries();
       auditRows.push(

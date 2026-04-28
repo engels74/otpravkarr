@@ -160,7 +160,7 @@ export async function provisionUser(
           detail: {
             mapping_id: existingMapping.id,
             plex_username: request.plexIdentity.username,
-            dispatcharr_username: existingMapping.dispatcharr_username,
+            dispatcharr_username: result.data.username,
             reactivated: true,
           },
         });

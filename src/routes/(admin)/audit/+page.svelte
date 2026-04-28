@@ -351,7 +351,7 @@ function formatDateLabel(value: DateValue | undefined): string {
     <Table.Root>
       <Table.Header>
         <Table.Row>
-          <Table.Head class="w-8"><span class="sr-only">Details</span></Table.Head>
+          <Table.Head class="w-10"><span class="sr-only">Details</span></Table.Head>
           <Table.Head class="whitespace-nowrap font-mono text-xs">Timestamp</Table.Head>
           <Table.Head class="hidden lg:table-cell text-xs">Actor</Table.Head>
           <Table.Head class="text-xs">Action</Table.Head>
@@ -373,10 +373,11 @@ function formatDateLabel(value: DateValue | undefined): string {
               onclick={() => entry.detail && toggleRow(entry.id)}
             >
               {#if entry.detail}
-                <Table.Cell class="w-8 px-2">
-                  <button
+                <Table.Cell class="w-10 px-2">
+                  <Button
                     type="button"
-                    class="inline-flex items-center justify-center bg-transparent border-none p-0 cursor-pointer"
+                    variant="ghost"
+                    size="icon-xs"
                     aria-expanded={isExpanded}
                     aria-label={detailToggleLabel(entry, isExpanded)}
                     onclick={(e: MouseEvent) => { e.stopPropagation(); toggleRow(entry.id); }}
@@ -388,10 +389,10 @@ function formatDateLabel(value: DateValue | undefined): string {
                         !isExpanded && "-rotate-90"
                       )}
                     />
-                  </button>
+                  </Button>
                 </Table.Cell>
               {:else}
-                <Table.Cell class="w-8 px-2" aria-hidden="true" />
+                <Table.Cell class="w-10 px-2" aria-hidden="true" />
               {/if}
               <Table.Cell class="whitespace-nowrap font-mono text-xs text-muted-foreground">
                 {formatTimestamp(entry.timestamp)}

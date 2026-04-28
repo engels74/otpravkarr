@@ -2,8 +2,22 @@ import { fireEvent, render, screen } from "@testing-library/svelte";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import CopyableField from "$lib/components/CopyableField.svelte";
 
+const mocks = vi.hoisted(() => ({
+  toastSuccess: vi.fn(),
+  toastError: vi.fn(),
+}));
+
+vi.mock("svelte-sonner", () => ({
+  toast: {
+    success: mocks.toastSuccess,
+    error: mocks.toastError,
+  },
+}));
+
 describe("CopyableField", () => {
   beforeEach(() => {
+    mocks.toastSuccess.mockClear();
+    mocks.toastError.mockClear();
     Object.assign(navigator, {
       clipboard: {
         writeText: vi.fn().mockResolvedValue(undefined),
@@ -37,7 +51,7 @@ describe("CopyableField", () => {
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith("secret-value");
   });
 
-  it("shows checkmark icon after successful copy", async () => {
+  it("shows success feedback after successful copy", async () => {
     const { container } = render(CopyableField, {
       props: { label: "Token", value: "val" },
     });
@@ -53,5 +67,26 @@ describe("CopyableField", () => {
       );
       expect(greenIcon).toBeTruthy();
     });
+    expect(await screen.findByText("Copied Token to clipboard")).toBeInTheDocument();
+    expect(mocks.toastSuccess).toHaveBeenCalledWith("Copied Token to clipboard");
+    expect(mocks.toastError).not.toHaveBeenCalled();
+  });
+
+  it("shows error feedback when clipboard write fails", async () => {
+    Object.assign(navigator, {
+      clipboard: {
+        writeText: vi.fn().mockRejectedValue(new Error("denied")),
+      },
+    });
+    render(CopyableField, {
+      props: { label: "Token", value: "secret-value" },
+    });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Copy Token to clipboard" }));
+
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith("secret-value");
+    expect(await screen.findByText("Couldn't copy to clipboard")).toBeInTheDocument();
+    expect(mocks.toastError).toHaveBeenCalledWith("Couldn't copy to clipboard");
+    expect(mocks.toastSuccess).not.toHaveBeenCalled();
   });
 });

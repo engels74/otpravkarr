@@ -1,4 +1,5 @@
 import { rotateCredentialsForMappingId } from "$lib/bridge/lifecycle";
+import { UserMappingNotFoundError } from "$lib/bridge/types";
 import { getConfig } from "$lib/db/repositories/config";
 import { DispatcharrClient } from "$lib/dispatcharr/client";
 import { requireAdminApi } from "$lib/server/auth";
@@ -27,10 +28,10 @@ export const POST: RequestHandler = async (event) => {
     });
     return Response.json({ ok: true }, { status: 200 });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    if (message.includes("user mapping not found")) {
+    if (err instanceof UserMappingNotFoundError) {
       return Response.json({ ok: false, error: "not_found" }, { status: 404 });
     }
+    const message = err instanceof Error ? err.message : String(err);
     return Response.json(
       {
         ok: false,

@@ -8,10 +8,13 @@ function isDateOnlyFilter(value: string): boolean {
 }
 
 function actorSearchCondition(): string {
+  // Guard json_extract with json_valid: SQLite throws "malformed JSON" if
+  // detail is non-null but not valid JSON, which would break the entire query
+  // for rows written by external tools or legacy migrations.
   return `(
     lower(coalesce(actor, 'system')) LIKE ?
-    OR lower(coalesce(json_extract(detail, '$.plex_username'), '')) LIKE ?
-    OR lower(coalesce(json_extract(detail, '$.dispatcharr_username'), '')) LIKE ?
+    OR lower(coalesce(json_extract(CASE WHEN json_valid(detail) THEN detail ELSE NULL END, '$.plex_username'), '')) LIKE ?
+    OR lower(coalesce(json_extract(CASE WHEN json_valid(detail) THEN detail ELSE NULL END, '$.dispatcharr_username'), '')) LIKE ?
   )`;
 }
 

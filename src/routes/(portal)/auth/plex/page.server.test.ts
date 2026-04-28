@@ -197,7 +197,11 @@ describe("plex OAuth callback", () => {
     const { load } = await import("./+page.server");
     const { cookies } = createCookies();
 
-    await expect(load({ cookies } as unknown as Parameters<typeof load>[0])).rejects.toMatchObject({
+    await expect(
+      load({ cookies, getClientAddress: () => "127.0.0.1" } as unknown as Parameters<
+        typeof load
+      >[0]),
+    ).rejects.toMatchObject({
       status: 400,
     });
   });
@@ -207,7 +211,9 @@ describe("plex OAuth callback", () => {
     const { cookies, deleteFn } = createCookies();
 
     try {
-      await load({ cookies } as unknown as Parameters<typeof load>[0]);
+      await load({ cookies, getClientAddress: () => "127.0.0.1" } as unknown as Parameters<
+        typeof load
+      >[0]);
     } catch {
       // redirect expected
     }
@@ -225,7 +231,11 @@ describe("plex OAuth callback", () => {
     const { load } = await import("./+page.server");
     const { cookies } = createCookies();
 
-    await expect(load({ cookies } as unknown as Parameters<typeof load>[0])).rejects.toMatchObject({
+    await expect(
+      load({ cookies, getClientAddress: () => "127.0.0.1" } as unknown as Parameters<
+        typeof load
+      >[0]),
+    ).rejects.toMatchObject({
       status: 400,
     });
   });
@@ -236,9 +246,11 @@ describe("plex OAuth callback", () => {
     const { load } = await import("./+page.server");
     const { cookies } = createCookies();
 
-    await expect(load({ cookies } as unknown as Parameters<typeof load>[0])).rejects.toThrow(
-      "network failure",
-    );
+    await expect(
+      load({ cookies, getClientAddress: () => "127.0.0.1" } as unknown as Parameters<
+        typeof load
+      >[0]),
+    ).rejects.toThrow("network failure");
   });
 
   it("throws 500 when plex_admin_token is missing", async () => {
@@ -247,7 +259,11 @@ describe("plex OAuth callback", () => {
     const { load } = await import("./+page.server");
     const { cookies } = createCookies();
 
-    await expect(load({ cookies } as unknown as Parameters<typeof load>[0])).rejects.toMatchObject({
+    await expect(
+      load({ cookies, getClientAddress: () => "127.0.0.1" } as unknown as Parameters<
+        typeof load
+      >[0]),
+    ).rejects.toMatchObject({
       status: 500,
     });
   });
@@ -258,7 +274,11 @@ describe("plex OAuth callback", () => {
     const { load } = await import("./+page.server");
     const { cookies } = createCookies();
 
-    await expect(load({ cookies } as unknown as Parameters<typeof load>[0])).rejects.toMatchObject({
+    await expect(
+      load({ cookies, getClientAddress: () => "127.0.0.1" } as unknown as Parameters<
+        typeof load
+      >[0]),
+    ).rejects.toMatchObject({
       status: 403,
     });
   });
@@ -269,7 +289,11 @@ describe("plex OAuth callback", () => {
     const { load } = await import("./+page.server");
     const { cookies } = createCookies();
 
-    await expect(load({ cookies } as unknown as Parameters<typeof load>[0])).rejects.toMatchObject({
+    await expect(
+      load({ cookies, getClientAddress: () => "127.0.0.1" } as unknown as Parameters<
+        typeof load
+      >[0]),
+    ).rejects.toMatchObject({
       status: 403,
     });
   });
@@ -298,7 +322,11 @@ describe("plex OAuth callback", () => {
     const { load } = await import("./+page.server");
     const { cookies } = createCookies();
 
-    await expect(load({ cookies } as unknown as Parameters<typeof load>[0])).rejects.toMatchObject({
+    await expect(
+      load({ cookies, getClientAddress: () => "127.0.0.1" } as unknown as Parameters<
+        typeof load
+      >[0]),
+    ).rejects.toMatchObject({
       status: 403,
     });
 
@@ -312,7 +340,9 @@ describe("plex OAuth callback", () => {
     const { cookies } = createCookies();
 
     try {
-      await load({ cookies } as unknown as Parameters<typeof load>[0]);
+      await load({ cookies, getClientAddress: () => "127.0.0.1" } as unknown as Parameters<
+        typeof load
+      >[0]);
     } catch {
       // redirect expected
     }
@@ -328,7 +358,11 @@ describe("plex OAuth callback", () => {
     const { load } = await import("./+page.server");
     const { cookies } = createCookies();
 
-    await expect(load({ cookies } as unknown as Parameters<typeof load>[0])).rejects.toMatchObject({
+    await expect(
+      load({ cookies, getClientAddress: () => "127.0.0.1" } as unknown as Parameters<
+        typeof load
+      >[0]),
+    ).rejects.toMatchObject({
       status: 403,
     });
 
@@ -343,7 +377,11 @@ describe("plex OAuth callback", () => {
     const { load } = await import("./+page.server");
     const { cookies } = createCookies();
 
-    await expect(load({ cookies } as unknown as Parameters<typeof load>[0])).rejects.toMatchObject({
+    await expect(
+      load({ cookies, getClientAddress: () => "127.0.0.1" } as unknown as Parameters<
+        typeof load
+      >[0]),
+    ).rejects.toMatchObject({
       status: 500,
     });
   });
@@ -354,7 +392,11 @@ describe("plex OAuth callback", () => {
     const { load } = await import("./+page.server");
     const { cookies } = createCookies();
 
-    await expect(load({ cookies } as unknown as Parameters<typeof load>[0])).rejects.toMatchObject({
+    await expect(
+      load({ cookies, getClientAddress: () => "127.0.0.1" } as unknown as Parameters<
+        typeof load
+      >[0]),
+    ).rejects.toMatchObject({
       status: 502,
       body: { message: "Unable to set up your account. Please contact the administrator." },
     });
@@ -364,7 +406,11 @@ describe("plex OAuth callback", () => {
     const { load } = await import("./+page.server");
     const { cookies, set } = createCookies();
 
-    await expect(load({ cookies } as unknown as Parameters<typeof load>[0])).rejects.toMatchObject({
+    await expect(
+      load({ cookies, getClientAddress: () => "127.0.0.1" } as unknown as Parameters<
+        typeof load
+      >[0]),
+    ).rejects.toMatchObject({
       status: 303,
       location: "/",
     });
@@ -387,7 +433,11 @@ describe("plex OAuth callback", () => {
     const { load } = await import("./+page.server");
     const { cookies } = createCookies();
 
-    await expect(load({ cookies } as unknown as Parameters<typeof load>[0])).rejects.toMatchObject({
+    await expect(
+      load({ cookies, getClientAddress: () => "127.0.0.1" } as unknown as Parameters<
+        typeof load
+      >[0]),
+    ).rejects.toMatchObject({
       status: 303,
       location: "/",
     });
@@ -411,7 +461,11 @@ describe("plex OAuth callback", () => {
     const { load } = await import("./+page.server");
     const { cookies, set } = createCookies();
 
-    await expect(load({ cookies } as unknown as Parameters<typeof load>[0])).rejects.toMatchObject({
+    await expect(
+      load({ cookies, getClientAddress: () => "127.0.0.1" } as unknown as Parameters<
+        typeof load
+      >[0]),
+    ).rejects.toMatchObject({
       status: 303,
       location: "/",
     });
@@ -454,7 +508,11 @@ describe("plex OAuth callback", () => {
     const { load } = await import("./+page.server");
     const { cookies } = createCookies();
 
-    await expect(load({ cookies } as unknown as Parameters<typeof load>[0])).rejects.toMatchObject({
+    await expect(
+      load({ cookies, getClientAddress: () => "127.0.0.1" } as unknown as Parameters<
+        typeof load
+      >[0]),
+    ).rejects.toMatchObject({
       status: 303,
       location: "/",
     });
@@ -470,7 +528,11 @@ describe("plex OAuth callback", () => {
     const { load } = await import("./+page.server");
     const { cookies } = createCookies();
 
-    await expect(load({ cookies } as unknown as Parameters<typeof load>[0])).rejects.toMatchObject({
+    await expect(
+      load({ cookies, getClientAddress: () => "127.0.0.1" } as unknown as Parameters<
+        typeof load
+      >[0]),
+    ).rejects.toMatchObject({
       status: 303,
       location: "/",
     });
@@ -483,7 +545,9 @@ describe("plex OAuth callback", () => {
     const { cookies } = createCookies();
 
     try {
-      await load({ cookies } as unknown as Parameters<typeof load>[0]);
+      await load({ cookies, getClientAddress: () => "127.0.0.1" } as unknown as Parameters<
+        typeof load
+      >[0]);
     } catch {
       // redirect expected
     }
@@ -540,7 +604,11 @@ describe("plex OAuth callback", () => {
     const { load } = await import("./+page.server");
     const { cookies } = createCookies();
 
-    await expect(load({ cookies } as unknown as Parameters<typeof load>[0])).rejects.toMatchObject({
+    await expect(
+      load({ cookies, getClientAddress: () => "127.0.0.1" } as unknown as Parameters<
+        typeof load
+      >[0]),
+    ).rejects.toMatchObject({
       status: 303,
       location: "/welcome",
     });
@@ -582,7 +650,11 @@ describe("plex OAuth callback", () => {
     const { load } = await import("./+page.server");
     const { cookies } = createCookies();
 
-    await expect(load({ cookies } as unknown as Parameters<typeof load>[0])).rejects.toMatchObject({
+    await expect(
+      load({ cookies, getClientAddress: () => "127.0.0.1" } as unknown as Parameters<
+        typeof load
+      >[0]),
+    ).rejects.toMatchObject({
       status: 303,
       location: "/welcome",
     });
@@ -621,7 +693,11 @@ describe("plex OAuth callback", () => {
     const { load } = await import("./+page.server");
     const { cookies } = createCookies();
 
-    await expect(load({ cookies } as unknown as Parameters<typeof load>[0])).rejects.toMatchObject({
+    await expect(
+      load({ cookies, getClientAddress: () => "127.0.0.1" } as unknown as Parameters<
+        typeof load
+      >[0]),
+    ).rejects.toMatchObject({
       status: 403,
     });
   });
@@ -633,7 +709,9 @@ describe("plex OAuth callback", () => {
     const { cookies } = createCookies();
 
     try {
-      await load({ cookies } as unknown as Parameters<typeof load>[0]);
+      await load({ cookies, getClientAddress: () => "127.0.0.1" } as unknown as Parameters<
+        typeof load
+      >[0]);
     } catch {
       // redirect expected
     }

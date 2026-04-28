@@ -23,7 +23,7 @@ import {
   retryAsync,
   retryResult,
 } from "$lib/utils/retry";
-import type { SyncReport } from "./types";
+import { type SyncReport, UserMappingNotFoundError } from "./types";
 
 const CREDENTIAL_PURPOSE = "credential-encryption";
 
@@ -157,7 +157,7 @@ export async function rotateCredentialsForMappingId(
 ): Promise<void> {
   const mapping = getUserMappingById(mappingId);
   if (!mapping) {
-    throw new Error("Cannot rotate credentials: user mapping not found");
+    throw new UserMappingNotFoundError("Cannot rotate credentials: user mapping not found");
   }
   if (mapping.is_active !== 1) {
     throw new Error("Cannot rotate credentials: user is inactive");

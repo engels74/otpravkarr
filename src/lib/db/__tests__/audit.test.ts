@@ -102,7 +102,7 @@ function applyFilters(sql: string, params: unknown[]): AuditRow[] {
       const val = params[paramIdx++] as string;
       filtered = filtered.filter((r) => r.action === val);
     }
-    if (sql.includes("json_extract(detail")) {
+    if (sql.includes("json_valid(detail)")) {
       const actorVal = String(params[paramIdx++]).replaceAll("%", "").toLowerCase();
       const plexVal = String(params[paramIdx++]).replaceAll("%", "").toLowerCase();
       const dispatcharrVal = String(params[paramIdx++]).replaceAll("%", "").toLowerCase();

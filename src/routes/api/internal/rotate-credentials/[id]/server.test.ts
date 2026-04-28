@@ -1,6 +1,7 @@
 // @vitest-environment node
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { UserMappingNotFoundError } from "$lib/bridge/types";
 
 const mocks = vi.hoisted(() => ({
   requireAdminApi: vi.fn(),
@@ -160,7 +161,7 @@ describe("POST /api/internal/rotate-credentials/[id]", () => {
       return null;
     });
     mocks.rotateCredentialsForMappingId.mockRejectedValue(
-      new Error("Cannot rotate credentials: user mapping not found"),
+      new UserMappingNotFoundError("Cannot rotate credentials: user mapping not found"),
     );
 
     const response = await POST(makeEvent("999"));

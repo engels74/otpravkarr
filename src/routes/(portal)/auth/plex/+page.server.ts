@@ -115,7 +115,7 @@ export const load: PageServerLoad = async ({ cookies, getClientAddress }) => {
     },
     {
       actor: identity.username,
-      ipAddress: getClientAddress?.() ?? "",
+      ipAddress: getClientAddress(),
     },
   );
 

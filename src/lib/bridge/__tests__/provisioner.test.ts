@@ -899,7 +899,15 @@ describe("provisionUser — audit logging", () => {
   });
 
   it("creates audit entry for reactivation", async () => {
-    const inactive = makeMapping({ is_active: 0, dispatcharr_user_id: 42 });
+    // Pin the audit detail to the *remote* username (`result.data.username`),
+    // not the local mapping's stale `dispatcharr_username`. Use distinct values
+    // so a regression that reverts to `existingMapping.dispatcharr_username`
+    // would fail this assertion.
+    const inactive = makeMapping({
+      is_active: 0,
+      dispatcharr_user_id: 42,
+      dispatcharr_username: "stale-local-name",
+    });
     const reactivated = makeMapping({ is_active: 1 });
 
     vi.mocked(getUserMappingByPlexId)
@@ -908,7 +916,7 @@ describe("provisionUser — audit logging", () => {
 
     vi.mocked(getUser).mockResolvedValue({
       ok: true,
-      data: makeDispatcharrUser(),
+      data: makeDispatcharrUser({ username: "testuser" }),
     } as DispatcharrResult<DispatcharrUser>);
 
     await provisionUser(mockClient, {

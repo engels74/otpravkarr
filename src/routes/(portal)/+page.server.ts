@@ -173,7 +173,7 @@ export const actions: Actions = {
     }
   },
 
-  refreshCredentials: async ({ locals }) => {
+  refreshCredentials: async ({ locals, getClientAddress }) => {
     if (!locals.user) {
       return fail(401, { error: "not_authenticated" });
     }
@@ -195,7 +195,10 @@ export const actions: Actions = {
       }
 
       const client = new DispatcharrClient(dispatcharrUrl, dispatcharrApiKey);
-      await rotateCredentialsForMappingId(client, locals.user.id);
+      await rotateCredentialsForMappingId(client, locals.user.id, {
+        actor: locals.user.plex_username,
+        ipAddress: getClientAddress(),
+      });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Failed to refresh credentials";
       return fail(500, { error: "refresh_failed", message });

@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   invalidateAll: vi.fn(async () => undefined),
@@ -47,6 +47,10 @@ describe("admin dashboard page", () => {
   beforeEach(() => {
     vi.unstubAllGlobals();
     vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it("shows Running in the sync status card while manual sync is pending", async () => {

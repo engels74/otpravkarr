@@ -663,13 +663,17 @@ describe("portal page server", () => {
       await expect(
         action({
           locals: { user: createUser() },
+          getClientAddress: () => "127.0.0.1",
         } as unknown as Parameters<typeof action>[0]),
       ).rejects.toMatchObject({
         status: 303,
         location: "/",
       });
 
-      expect(mocks.rotateCredentialsForMappingId).toHaveBeenCalledWith(expect.anything(), 1);
+      expect(mocks.rotateCredentialsForMappingId).toHaveBeenCalledWith(expect.anything(), 1, {
+        actor: "testuser",
+        ipAddress: "127.0.0.1",
+      });
     });
 
     it("returns 500 on rotation failure", async () => {
@@ -681,6 +685,7 @@ describe("portal page server", () => {
 
       const result = await action({
         locals: { user: createUser() },
+        getClientAddress: () => "127.0.0.1",
       } as unknown as Parameters<typeof action>[0]);
 
       expect(result).toMatchObject({

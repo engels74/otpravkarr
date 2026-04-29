@@ -108,12 +108,13 @@ export const actions: Actions = {
         error: urlResult.error.issues[0]?.message ?? "Invalid Plex server URL",
       });
     }
+    const normalizedServerUrl = urlResult.data.plexServerUrl;
 
     try {
-      const serverInfo = await validateServerToken(serverUrl, effectiveToken);
+      const serverInfo = await validateServerToken(normalizedServerUrl, effectiveToken);
 
-      if (serverUrl !== (currentServerUrl ?? "")) {
-        await setConfig("plex_server_url", serverUrl);
+      if (normalizedServerUrl !== (currentServerUrl ?? "")) {
+        await setConfig("plex_server_url", normalizedServerUrl);
         changedFields.push("plex_server_url");
       }
 
@@ -185,8 +186,10 @@ export const actions: Actions = {
         error: validation.error.issues[0]?.message ?? "Invalid Dispatcharr settings",
       });
     }
+    const normalizedUrl = validation.data.dispatcharrUrl;
+    const normalizedExternalUrl = validation.data.dispatcharrExternalUrl ?? "";
 
-    const client = new DispatcharrClient(url, effectiveKey);
+    const client = new DispatcharrClient(normalizedUrl, effectiveKey);
     const healthResult = await createHealthEndpoints(client).checkHealth();
     if (!healthResult.ok) {
       return fail(400, { error: "Could not connect to Dispatcharr" });
@@ -200,8 +203,8 @@ export const actions: Actions = {
       return fail(400, { error: "Dispatcharr API key is invalid" });
     }
 
-    if (url !== (currentUrl ?? "")) {
-      await setConfig("dispatcharr_url", url);
+    if (normalizedUrl !== (currentUrl ?? "")) {
+      await setConfig("dispatcharr_url", normalizedUrl);
       changedFields.push("dispatcharr_url");
     }
 
@@ -210,8 +213,8 @@ export const actions: Actions = {
       changedFields.push("dispatcharr_api_key");
     }
 
-    if (externalUrl !== (currentExternalUrl ?? "")) {
-      await setConfig("dispatcharr_external_url", externalUrl);
+    if (normalizedExternalUrl !== (currentExternalUrl ?? "")) {
+      await setConfig("dispatcharr_external_url", normalizedExternalUrl);
       changedFields.push("dispatcharr_external_url");
     }
 
@@ -284,19 +287,21 @@ export const actions: Actions = {
       return fail(400, { error: `Invalid origin: ${invalidOrigin}` });
     }
 
-    if (origins.length > 0) {
-      // The lockout guard must match what CSRF validation actually checks:
-      // the request Origin header (not url.origin, which may differ behind a reverse proxy).
-      // Fall back to event.url.origin when Origin header is absent (e.g. same-origin or
-      // non-browser clients) so the guard is never silently skipped.
-      const requestOrigin = request.headers.get("Origin") ?? event.url.origin;
-      const normalizedRequestOrigin = requestOrigin.replace(/\/+$/, "").toLowerCase();
-      const normalizedAllowed = origins.map((o) => o.replace(/\/+$/, "").toLowerCase());
-      if (!normalizedAllowed.includes(normalizedRequestOrigin)) {
-        return fail(400, {
-          error: `Current origin (${requestOrigin}) must be included in the allowed origins list to avoid locking yourself out.`,
-        });
-      }
+    if (origins.length === 0) {
+      return fail(400, { error: "At least one origin is required" });
+    }
+
+    // The lockout guard must match what CSRF validation actually checks:
+    // the request Origin header (not url.origin, which may differ behind a reverse proxy).
+    // Fall back to event.url.origin when Origin header is absent (e.g. same-origin or
+    // non-browser clients) so the guard is never silently skipped.
+    const requestOrigin = request.headers.get("Origin") ?? event.url.origin;
+    const normalizedRequestOrigin = requestOrigin.replace(/\/+$/, "").toLowerCase();
+    const normalizedAllowed = origins.map((o) => o.replace(/\/+$/, "").toLowerCase());
+    if (!normalizedAllowed.includes(normalizedRequestOrigin)) {
+      return fail(400, {
+        error: `Current origin (${requestOrigin}) must be included in the allowed origins list to avoid locking yourself out.`,
+      });
     }
 
     const actor = locals.admin?.username ?? "unknown";

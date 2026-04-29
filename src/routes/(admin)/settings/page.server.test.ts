@@ -188,7 +188,7 @@ describe("admin settings actions", () => {
     );
   });
 
-  it("keeps empty allowed origins as an empty list", async () => {
+  it("rejects an empty allowed-origins list to prevent CSRF lockout", async () => {
     const { actions } = await import("./+page.server");
     const updateSecurity = actions.updateSecurity;
     if (!updateSecurity) throw new Error("updateSecurity action is undefined");
@@ -200,8 +200,13 @@ describe("admin settings actions", () => {
       createActionEvent(body) as unknown as Parameters<typeof updateSecurity>[0],
     );
 
-    expect(result).toEqual({ success: true, message: "Security settings saved." });
-    expect(state.configValues.get("allowed_origins")).toBe(JSON.stringify([]));
+    expect(result).toMatchObject({
+      status: 400,
+      data: { error: "At least one origin is required" },
+    });
+    expect(mocks.setConfig).not.toHaveBeenCalled();
+    expect(mocks.invalidateConfigCache).not.toHaveBeenCalled();
+    expect(mocks.appendAuditLog).not.toHaveBeenCalled();
   });
 
   it("rejects allowed origins that exclude the request Origin header (lockout guard)", async () => {

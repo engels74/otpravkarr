@@ -37,6 +37,7 @@ const initialDispatcharrProfiles = untrack(() => data.dispatcharrProfiles);
 let step = $state(initialStep);
 let submitting = $state(false);
 let stepErrors = $state<StepErrors>({});
+let connectingSeconds = $state(0);
 
 // ── Step data ───────────────────────────────────────────────────
 let adminUsername = $state("");
@@ -131,6 +132,21 @@ $effect(() => {
   if (typeof window !== "undefined") {
     currentOrigin = window.location.origin;
   }
+});
+
+// Tick a one-second elapsed counter while the Plex connection step is in flight.
+// The /configurePlex action retries with backoff (up to ~20s) so users need to
+// see something is still happening — otherwise it looks like the page froze.
+$effect(() => {
+  if (!submitting || step !== 2) {
+    connectingSeconds = 0;
+    return;
+  }
+  connectingSeconds = 0;
+  const id = setInterval(() => {
+    connectingSeconds += 1;
+  }, 1000);
+  return () => clearInterval(id);
 });
 
 // Only treat this page as a popup callback on the client when window.opener
@@ -384,7 +400,13 @@ function enhanceHandler(nextStep?: number) {
     <p class="text-sm text-muted-foreground">Plex sign-in complete. This window will close automatically.</p>
   </div>
 {:else}
-<main class="min-h-screen flex flex-col items-center justify-start sm:justify-center px-4 py-8 sm:py-12 bg-background text-foreground">
+<a
+  href="#main-content"
+  class="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:rounded-md focus:bg-background focus:px-3 focus:py-2 focus:ring-2 focus:ring-primary"
+>
+  Skip to main content
+</a>
+<main id="main-content" tabindex="-1" class="min-h-screen flex flex-col items-center justify-start sm:justify-center px-4 py-8 sm:py-12 bg-background text-foreground">
   <!-- ─── Header ──────────────────────────────────────────── -->
   <div class="mb-8 text-center">
     <h1 class="text-2xl font-semibold tracking-tight">
@@ -722,7 +744,7 @@ function enhanceHandler(nextStep?: number) {
                         <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" class="opacity-25" />
                         <path d="M4 12a8 8 0 018-8" stroke="currentColor" stroke-width="3" stroke-linecap="round" class="opacity-75" />
                       </svg>
-                      Testing connection…
+                      Testing connection… ({connectingSeconds}s, may take up to ~20s)
                     {:else}
                       Test Connection
                     {/if}
@@ -817,7 +839,7 @@ function enhanceHandler(nextStep?: number) {
                             <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" class="opacity-25" />
                             <path d="M4 12a8 8 0 018-8" stroke="currentColor" stroke-width="3" stroke-linecap="round" class="opacity-75" />
                           </svg>
-                          Connecting…
+                          Connecting… ({connectingSeconds}s, may take up to ~20s)
                         {:else}
                           Complete Connection
                         {/if}
@@ -855,7 +877,7 @@ function enhanceHandler(nextStep?: number) {
                             <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" class="opacity-25" />
                             <path d="M4 12a8 8 0 018-8" stroke="currentColor" stroke-width="3" stroke-linecap="round" class="opacity-75" />
                           </svg>
-                          Completing…
+                          Completing… ({connectingSeconds}s, may take up to ~20s)
                         {:else}
                           Complete Connection
                         {/if}

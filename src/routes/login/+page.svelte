@@ -88,7 +88,13 @@ function enhanceHandler() {
   <title>Login — otpravkarr</title>
 </svelte:head>
 
-<main class="hero-glow-bg min-h-screen flex flex-col items-center justify-center px-4 py-12 text-foreground">
+<a
+  href="#main-content"
+  class="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:rounded-md focus:bg-background focus:px-3 focus:py-2 focus:ring-2 focus:ring-primary"
+>
+  Skip to main content
+</a>
+<main id="main-content" tabindex="-1" class="hero-glow-bg min-h-screen flex flex-col items-center justify-center px-4 py-12 text-foreground">
   <div class="reveal reveal-1 mb-8 text-center">
     <p class="eyebrow">OTPRAVKARR</p>
     <h1 class="display-hero mt-2">Welcome back.</h1>

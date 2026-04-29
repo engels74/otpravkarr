@@ -12,8 +12,7 @@ import { requireAdmin } from "$lib/server/auth";
 import { parseAndNormalizeOrigins } from "$lib/server/origins";
 import {
   AuditRetentionSchema,
-  isHttpUrl,
-  isSafeHttpSecretUrl,
+  DispatcharrConfigSchema,
   PlexTokenSchema,
   SyncIntervalSchema,
   sanitizeString,
@@ -176,13 +175,14 @@ export const actions: Actions = {
       return fail(400, { error: "Dispatcharr URL and API key are required" });
     }
 
-    if (!isHttpUrl(url)) {
-      return fail(400, { error: "Dispatcharr URL must use http or https" });
-    }
-
-    if (externalUrl && !isSafeHttpSecretUrl(externalUrl)) {
+    const validation = DispatcharrConfigSchema.safeParse({
+      dispatcharrUrl: url,
+      dispatcharrApiKey: effectiveKey,
+      dispatcharrExternalUrl: externalUrl || undefined,
+    });
+    if (!validation.success) {
       return fail(400, {
-        error: "External URL must use HTTPS (HTTP only allowed for localhost, 127.0.0.1, or [::1])",
+        error: validation.error.issues[0]?.message ?? "Invalid Dispatcharr settings",
       });
     }
 

@@ -88,6 +88,24 @@ describe("admin settings page", () => {
     expect(externalUrlInput.value).toBe("https://external.example.com");
   });
 
+  it("wraps long Machine ID inside the Plex card on narrow viewports", async () => {
+    const { default: SettingsPage } = await import("./+page.svelte");
+    const longMachineId = "abcdef0123456789".repeat(4);
+    const { container } = render(SettingsPage, {
+      props: {
+        data: { ...defaultData, plex: { ...defaultData.plex, machineId: longMachineId } },
+      },
+    });
+
+    const machineIdValue = Array.from(container.querySelectorAll("p")).find(
+      (el) => el.textContent === longMachineId,
+    );
+    if (!machineIdValue) throw new Error("Machine ID value not found");
+
+    expect(machineIdValue.className).toContain("break-all");
+    expect(machineIdValue.className).toContain("min-w-0");
+  });
+
   it("clears stale Plex errors on server URL correction and shows updated success state", async () => {
     const { default: SettingsPage } = await import("./+page.svelte");
 

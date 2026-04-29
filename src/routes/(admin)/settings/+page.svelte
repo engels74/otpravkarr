@@ -125,9 +125,9 @@ function makeEnhance(section: string) {
         </div>
 
         {#if data.plex.machineId}
-          <div class="grid gap-1.5">
+          <div class="grid min-w-0 gap-1.5">
             <Label>Machine ID</Label>
-            <p class="font-mono text-sm text-muted-foreground">{data.plex.machineId}</p>
+            <p class="min-w-0 break-all font-mono text-sm text-muted-foreground">{data.plex.machineId}</p>
           </div>
         {/if}
       </Card.Content>

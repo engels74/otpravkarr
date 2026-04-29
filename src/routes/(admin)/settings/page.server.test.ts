@@ -447,7 +447,7 @@ describe("admin settings actions", () => {
       throw new Error("updateDispatcharrConnection action is undefined");
     }
 
-    state.configValues.set("dispatcharr_url", "http://dispatcharr.local");
+    state.configValues.set("dispatcharr_url", "http://localhost:9192");
     state.configValues.set("dispatcharr_api_key", "existing-api-key");
     mocks.checkHealth.mockResolvedValueOnce({
       ok: true,
@@ -455,7 +455,7 @@ describe("admin settings actions", () => {
     });
 
     const body = new FormData();
-    body.set("dispatcharr_url", "http://dispatcharr.local");
+    body.set("dispatcharr_url", "http://localhost:9192");
     body.set("dispatcharr_api_key", "");
 
     const result = await updateDispatcharrConnection(
@@ -467,13 +467,45 @@ describe("admin settings actions", () => {
       data: { error: "Dispatcharr API key is invalid" },
     });
     expect(mocks.DispatcharrClient).toHaveBeenCalledWith(
-      "http://dispatcharr.local",
+      "http://localhost:9192",
       "existing-api-key",
     );
     expect(mocks.createHealthEndpoints).toHaveBeenCalledOnce();
     expect(mocks.checkHealth).toHaveBeenCalledOnce();
     expect(mocks.setConfig).not.toHaveBeenCalled();
     expect(mocks.invalidateConfigCache).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 with HTTPS guard when dispatcharr URL uses non-loopback http", async () => {
+    const { actions } = await import("./+page.server");
+    const updateDispatcharrConnection = actions.updateDispatcharrConnection;
+    if (!updateDispatcharrConnection) {
+      throw new Error("updateDispatcharrConnection action is undefined");
+    }
+
+    state.configValues.set("dispatcharr_api_key", "existing-api-key");
+
+    const body = new FormData();
+    body.set("dispatcharr_url", "http://dispatcharr.example.com");
+    body.set("dispatcharr_api_key", "");
+
+    const result = await updateDispatcharrConnection(
+      createActionEvent(body) as unknown as Parameters<typeof updateDispatcharrConnection>[0],
+    );
+
+    expect(result).toMatchObject({
+      status: 400,
+      data: {
+        error:
+          "Dispatcharr URL must use HTTPS (HTTP only allowed for localhost, 127.0.0.1, or [::1])",
+      },
+    });
+    expect(mocks.DispatcharrClient).not.toHaveBeenCalled();
+    expect(mocks.createHealthEndpoints).not.toHaveBeenCalled();
+    expect(mocks.checkHealth).not.toHaveBeenCalled();
+    expect(mocks.setConfig).not.toHaveBeenCalled();
+    expect(mocks.invalidateConfigCache).not.toHaveBeenCalled();
+    expect(mocks.appendAuditLog).not.toHaveBeenCalled();
   });
 
   it("returns 400 when dispatcharr external URL uses non-loopback http", async () => {
@@ -486,7 +518,7 @@ describe("admin settings actions", () => {
     state.configValues.set("dispatcharr_api_key", "existing-api-key");
 
     const body = new FormData();
-    body.set("dispatcharr_url", "http://dispatcharr.local");
+    body.set("dispatcharr_url", "https://dispatcharr.local");
     body.set("dispatcharr_api_key", "");
     body.set("dispatcharr_external_url", "http://public.example.com");
 
@@ -513,7 +545,7 @@ describe("admin settings actions", () => {
     }
 
     const body = new FormData();
-    body.set("dispatcharr_url", "http://dispatcharr.local");
+    body.set("dispatcharr_url", "http://localhost:9192");
     body.set("dispatcharr_api_key", "");
 
     const result = await updateDispatcharrConnection(
@@ -538,7 +570,7 @@ describe("admin settings actions", () => {
       throw new Error("updateDispatcharrConnection action is undefined");
     }
 
-    state.configValues.set("dispatcharr_url", "http://dispatcharr.local");
+    state.configValues.set("dispatcharr_url", "http://localhost:9192");
     state.configValues.set("dispatcharr_api_key", "existing-api-key");
     mocks.checkHealth.mockResolvedValueOnce({
       ok: false,
@@ -546,7 +578,7 @@ describe("admin settings actions", () => {
     } as MockHealthResult);
 
     const body = new FormData();
-    body.set("dispatcharr_url", "http://dispatcharr.local");
+    body.set("dispatcharr_url", "http://localhost:9192");
     body.set("dispatcharr_api_key", "");
 
     const result = await updateDispatcharrConnection(
@@ -558,7 +590,7 @@ describe("admin settings actions", () => {
       data: { error: "Could not connect to Dispatcharr" },
     });
     expect(mocks.DispatcharrClient).toHaveBeenCalledWith(
-      "http://dispatcharr.local",
+      "http://localhost:9192",
       "existing-api-key",
     );
     expect(mocks.createHealthEndpoints).toHaveBeenCalledOnce();
@@ -574,7 +606,7 @@ describe("admin settings actions", () => {
       throw new Error("updateDispatcharrConnection action is undefined");
     }
 
-    state.configValues.set("dispatcharr_url", "http://dispatcharr.local");
+    state.configValues.set("dispatcharr_url", "http://localhost:9192");
     state.configValues.set("dispatcharr_api_key", "existing-api-key");
     mocks.checkHealth.mockResolvedValueOnce({
       ok: true,
@@ -582,7 +614,7 @@ describe("admin settings actions", () => {
     });
 
     const body = new FormData();
-    body.set("dispatcharr_url", "http://dispatcharr.local");
+    body.set("dispatcharr_url", "http://localhost:9192");
     body.set("dispatcharr_api_key", "");
 
     const result = await updateDispatcharrConnection(
@@ -594,7 +626,7 @@ describe("admin settings actions", () => {
       data: { error: "Dispatcharr server is unreachable" },
     });
     expect(mocks.DispatcharrClient).toHaveBeenCalledWith(
-      "http://dispatcharr.local",
+      "http://localhost:9192",
       "existing-api-key",
     );
     expect(mocks.createHealthEndpoints).toHaveBeenCalledOnce();

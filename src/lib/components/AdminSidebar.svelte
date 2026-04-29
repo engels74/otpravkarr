@@ -115,7 +115,7 @@ const navItems = [
       <Separator orientation="vertical" class="mr-2 !h-4" />
       <span class="text-sm font-medium text-muted-foreground">Admin</span>
     </header>
-    <main id="main-content" class={cn("flex-1 p-6", className)}>
+    <main id="main-content" tabindex="-1" class={cn("flex-1 p-6", className)}>
       {@render children()}
     </main>
   </SidebarInset>

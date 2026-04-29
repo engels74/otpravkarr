@@ -92,7 +92,8 @@ export const PlexTokenSchema = z.object({
     .refine(
       isSafeHttpSecretUrl,
       "Plex server URL must use HTTPS (HTTP only allowed for localhost, 127.0.0.1, or [::1])",
-    ),
+    )
+    .transform((val) => new URL(val).origin),
 });
 
 // ---------------------------------------------------------------------------
@@ -107,18 +108,24 @@ export const DispatcharrConfigSchema = z.object({
     .refine(
       isSafeHttpSecretUrl,
       "Dispatcharr URL must use HTTPS (HTTP only allowed for localhost, 127.0.0.1, or [::1])",
-    ),
+    )
+    .transform((val) => new URL(val).origin),
   dispatcharrApiKey: z.string().trim().min(1, "Dispatcharr API key is required"),
   dispatcharrExternalUrl: z
-    .string()
-    .trim()
-    .url("External URL must be a valid URL")
-    .refine(
-      isSafeHttpSecretUrl,
-      "External URL must use HTTPS (HTTP only allowed for localhost, 127.0.0.1, or [::1])",
+    .preprocess(
+      (val) => (typeof val === "string" && val.trim() === "" ? undefined : val),
+      z
+        .string()
+        .trim()
+        .url("External URL must be a valid URL")
+        .refine(
+          isSafeHttpSecretUrl,
+          "External URL must use HTTPS (HTTP only allowed for localhost, 127.0.0.1, or [::1])",
+        )
+        .transform((val) => new URL(val).origin)
+        .optional(),
     )
-    .optional()
-    .or(z.literal("")),
+    .optional(),
 });
 
 // ---------------------------------------------------------------------------

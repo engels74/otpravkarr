@@ -315,6 +315,39 @@ describe("PlexTokenSchema", () => {
     });
     expect(result.success).toBe(false);
   });
+
+  it("strips a trailing slash from plexServerUrl", () => {
+    const result = PlexTokenSchema.safeParse({
+      plexToken: "my-token",
+      plexServerUrl: "https://plex.example.com:32400/",
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.plexServerUrl).toBe("https://plex.example.com:32400");
+    }
+  });
+
+  it("leaves a plexServerUrl without trailing slash unchanged", () => {
+    const result = PlexTokenSchema.safeParse({
+      plexToken: "my-token",
+      plexServerUrl: "https://plex.example.com:32400",
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.plexServerUrl).toBe("https://plex.example.com:32400");
+    }
+  });
+
+  it("drops a path component from plexServerUrl, leaving only the origin", () => {
+    const result = PlexTokenSchema.safeParse({
+      plexToken: "my-token",
+      plexServerUrl: "https://plex.example.com:32400/web",
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.plexServerUrl).toBe("https://plex.example.com:32400");
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -499,6 +532,63 @@ describe("DispatcharrConfigSchema", () => {
       dispatcharrExternalUrl: "file:///etc/passwd",
     });
     expect(result.success).toBe(false);
+  });
+
+  it("strips a trailing slash from dispatcharrUrl", () => {
+    const result = DispatcharrConfigSchema.safeParse({
+      dispatcharrUrl: "https://dispatcharr.example.com/",
+      dispatcharrApiKey: "api-key-123",
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.dispatcharrUrl).toBe("https://dispatcharr.example.com");
+    }
+  });
+
+  it("leaves a dispatcharrUrl without trailing slash unchanged", () => {
+    const result = DispatcharrConfigSchema.safeParse({
+      dispatcharrUrl: "https://dispatcharr.example.com",
+      dispatcharrApiKey: "api-key-123",
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.dispatcharrUrl).toBe("https://dispatcharr.example.com");
+    }
+  });
+
+  it("drops a path component from dispatcharrUrl, leaving only the origin", () => {
+    const result = DispatcharrConfigSchema.safeParse({
+      dispatcharrUrl: "https://dispatcharr.example.com:8000/api/v1",
+      dispatcharrApiKey: "api-key-123",
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.dispatcharrUrl).toBe("https://dispatcharr.example.com:8000");
+    }
+  });
+
+  it("strips a trailing slash from dispatcharrExternalUrl", () => {
+    const result = DispatcharrConfigSchema.safeParse({
+      dispatcharrUrl: "https://dispatcharr.example.com",
+      dispatcharrApiKey: "api-key-123",
+      dispatcharrExternalUrl: "https://public.example.com/",
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.dispatcharrExternalUrl).toBe("https://public.example.com");
+    }
+  });
+
+  it("drops a path component from dispatcharrExternalUrl, leaving only the origin", () => {
+    const result = DispatcharrConfigSchema.safeParse({
+      dispatcharrUrl: "https://dispatcharr.example.com",
+      dispatcharrApiKey: "api-key-123",
+      dispatcharrExternalUrl: "https://public.example.com/iptv",
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.dispatcharrExternalUrl).toBe("https://public.example.com");
+    }
   });
 });
 

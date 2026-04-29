@@ -45,6 +45,11 @@ class SidebarState {
     if (e.key === SIDEBAR_KEYBOARD_SHORTCUT && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
       this.toggle();
+      return;
+    }
+    if (e.key === "Escape" && this.isMobile && this.openMobile) {
+      e.preventDefault();
+      this.setOpenMobile(false);
     }
   };
 

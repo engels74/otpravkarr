@@ -26,7 +26,7 @@ $effect(() => {
       Skip to main content
     </a>
     <PortalHeader plexUsername={data.user.plexUsername} plexThumb={data.user.plexThumb} />
-    <main id="main-content" class="flex-1 p-6">
+    <main id="main-content" tabindex="-1" class="flex-1 p-6">
       {@render children()}
     </main>
   </div>

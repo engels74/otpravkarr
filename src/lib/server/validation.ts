@@ -35,6 +35,21 @@ export const LoginSchema = z.object({
 });
 
 // ---------------------------------------------------------------------------
+// Setup — Recover with admin login
+// ---------------------------------------------------------------------------
+
+export const RecoverWithAdminSchema = z.object({
+  username: z
+    .string()
+    .trim()
+    .regex(
+      /^[a-zA-Z0-9_-]{3,32}$/,
+      "Username must be 3-32 characters (letters, numbers, underscore, dash)",
+    ),
+  password: z.string().min(1, "Password is required").max(256),
+});
+
+// ---------------------------------------------------------------------------
 // Setup — Create Admin
 // ---------------------------------------------------------------------------
 

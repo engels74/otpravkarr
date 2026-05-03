@@ -20,9 +20,19 @@ const mocks = vi.hoisted(() => ({
   }),
   setupLimiterCheck: vi.fn((_: string) => ({ allowed: state.limiterAllowed })),
   requireSetupIncomplete: vi.fn(),
+  isSetupComplete: vi.fn(async () => false),
   hashAdminPassword: vi.fn(async () => "hashed-password"),
+  verifyAdminPassword: vi.fn(async () => true),
   createAdmin: vi.fn(),
   adminExists: vi.fn(() => false),
+  getAdminByUsername: vi.fn(
+    (_: string) =>
+      null as null | {
+        id: number;
+        username: string;
+        password_hash: string;
+      },
+  ),
   appendAuditLog: vi.fn(),
   createSession: vi.fn(() => "session-id"),
   deleteSession: vi.fn((_id: string) => {}),
@@ -39,11 +49,13 @@ vi.mock("$env/dynamic/private", () => ({
 
 vi.mock("$lib/crypto/passwords", () => ({
   hashAdminPassword: mocks.hashAdminPassword,
+  verifyAdminPassword: mocks.verifyAdminPassword,
 }));
 
 vi.mock("$lib/db/repositories/admin", () => ({
   createAdmin: mocks.createAdmin,
   adminExists: mocks.adminExists,
+  getAdminByUsername: mocks.getAdminByUsername,
 }));
 
 vi.mock("$lib/db/repositories/audit", () => ({
@@ -63,6 +75,8 @@ vi.mock("$lib/db/repositories/sessions", () => ({
 vi.mock("$lib/db/types", () => ({
   AuditAction: {
     SETUP_COMPLETED: "SETUP_COMPLETED",
+    SETUP_RECOVERY_LOGIN: "setup.recovery_login",
+    CONFIG_CHANGED: "config.changed",
   },
 }));
 
@@ -131,6 +145,7 @@ vi.mock("$lib/server/auth", () => ({
   },
   ADMIN_SESSION_TTL: 3600,
   isSecure: true,
+  isSetupComplete: mocks.isSetupComplete,
   requireSetupIncomplete: mocks.requireSetupIncomplete,
   SETUP_COMPLETED_CONFIG_KEY: "setup_completed",
   SESSION_COOKIE_NAME: "otpravkarr_session",
@@ -227,9 +242,12 @@ function resetStateAndMocks() {
   mocks.setConfig.mockClear();
   mocks.setupLimiterCheck.mockClear();
   mocks.requireSetupIncomplete.mockClear();
+  mocks.isSetupComplete.mockClear().mockResolvedValue(false);
   mocks.hashAdminPassword.mockClear();
+  mocks.verifyAdminPassword.mockClear().mockResolvedValue(true);
   mocks.createAdmin.mockClear();
   mocks.adminExists.mockClear().mockReturnValue(false);
+  mocks.getAdminByUsername.mockClear().mockReturnValue(null);
   mocks.appendAuditLog.mockClear();
   mocks.createSession.mockClear();
   mocks.deleteSession.mockClear();
@@ -1864,5 +1882,147 @@ describe("configureDispatcharr retry behavior", () => {
       data: { error: expect.stringContaining("API key is invalid") },
     });
     expect(mockCheckHealth).toHaveBeenCalledOnce();
+  });
+});
+
+describe("setup recovery via admin login", () => {
+  beforeEach(() => {
+    resetStateAndMocks();
+  });
+
+  function adminFixture() {
+    return {
+      id: 1,
+      username: "dogfood-admin",
+      password_hash: "argon2-hashed",
+      created_at: "2026-01-01 00:00:00",
+      updated_at: "2026-01-01 00:00:00",
+    };
+  }
+
+  async function callRecover(body: FormData, cookieJar = createCookies()) {
+    const request = new Request("http://localhost/setup", { method: "POST", body });
+    const { actions } = await import("./+page.server");
+    const recoverWithAdmin = actions.recoverWithAdmin;
+    if (!recoverWithAdmin) throw new Error("recoverWithAdmin action is undefined");
+    const result = await recoverWithAdmin({
+      request,
+      cookies: cookieJar.cookies,
+      getClientAddress: () => "127.0.0.1",
+    } as unknown as Parameters<typeof recoverWithAdmin>[0]);
+    return { result, ...cookieJar };
+  }
+
+  it("re-issues a claim cookie when valid admin credentials are supplied", async () => {
+    mocks.adminExists.mockReturnValue(true);
+    mocks.getAdminByUsername.mockReturnValue(adminFixture());
+    mocks.verifyAdminPassword.mockResolvedValue(true);
+    const proof = "22222222-2222-2222-2222-222222222222";
+    vi.spyOn(crypto, "randomUUID").mockReturnValue(proof);
+
+    const body = new FormData();
+    body.set("username", "dogfood-admin");
+    body.set("password", "DogfoodTestPass2026XYZ");
+
+    const { result, setCalls } = await callRecover(body);
+
+    expect(result).toEqual({ success: true });
+    expect(state.configValues.get(setupClaimedKey)).toBe("true");
+    expect(state.configValues.get(setupClaimProofKey)).toBe(proof);
+    expect(state.configValues.get(setupClaimedAtKey)).toBeDefined();
+    const claimCookie = setCalls.find((c) => c.name === setupClaimCookie);
+    expect(claimCookie).toBeDefined();
+    expect(claimCookie?.value).toBe(proof);
+    expect(mocks.appendAuditLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "setup.recovery_login",
+        actor: "dogfood-admin",
+      }),
+    );
+  });
+
+  it("rejects with invalid_credentials when password verification fails", async () => {
+    mocks.adminExists.mockReturnValue(true);
+    mocks.getAdminByUsername.mockReturnValue(adminFixture());
+    mocks.verifyAdminPassword.mockResolvedValue(false);
+
+    const body = new FormData();
+    body.set("username", "dogfood-admin");
+    body.set("password", "wrong-password");
+
+    const { result } = await callRecover(body);
+
+    expect(result).toMatchObject({
+      status: 401,
+      data: { error: "invalid_credentials" },
+    });
+    expect(mocks.appendAuditLog).not.toHaveBeenCalled();
+  });
+
+  it("rate limits per IP via the setup limiter", async () => {
+    mocks.adminExists.mockReturnValue(true);
+    state.limiterAllowed = false;
+
+    const body = new FormData();
+    body.set("username", "dogfood-admin");
+    body.set("password", "DogfoodTestPass2026XYZ");
+
+    const { result } = await callRecover(body);
+
+    expect(result).toMatchObject({
+      status: 429,
+      data: { error: "rate_limited" },
+    });
+    expect(mocks.verifyAdminPassword).not.toHaveBeenCalled();
+  });
+
+  it("returns 404 when setup is already complete", async () => {
+    mocks.isSetupComplete.mockResolvedValue(true);
+    mocks.adminExists.mockReturnValue(true);
+
+    const body = new FormData();
+    body.set("username", "dogfood-admin");
+    body.set("password", "DogfoodTestPass2026XYZ");
+
+    const { result } = await callRecover(body);
+
+    expect(result).toMatchObject({
+      status: 404,
+      data: { error: "not_found" },
+    });
+  });
+
+  it("renews the claim cookie when one is already valid", async () => {
+    mocks.adminExists.mockReturnValue(true);
+    state.configValues.set(setupClaimedKey, "true");
+    state.configValues.set(setupClaimProofKey, "existing-proof");
+    state.configValues.set(setupClaimedAtKey, String(Date.now()));
+    const cookieJar = createCookies({ [setupClaimCookie]: "existing-proof" });
+
+    const body = new FormData();
+    body.set("username", "dogfood-admin");
+    body.set("password", "DogfoodTestPass2026XYZ");
+
+    const { result, setCalls } = await callRecover(body, cookieJar);
+
+    expect(result).toEqual({ success: true });
+    expect(mocks.verifyAdminPassword).not.toHaveBeenCalled();
+    const claimCookie = setCalls.find((c) => c.name === setupClaimCookie);
+    expect(claimCookie?.value).toBe("existing-proof");
+  });
+
+  it("returns 409 when no admin account exists", async () => {
+    mocks.adminExists.mockReturnValue(false);
+
+    const body = new FormData();
+    body.set("username", "dogfood-admin");
+    body.set("password", "DogfoodTestPass2026XYZ");
+
+    const { result } = await callRecover(body);
+
+    expect(result).toMatchObject({
+      status: 409,
+      data: { error: "no_admin" },
+    });
   });
 });

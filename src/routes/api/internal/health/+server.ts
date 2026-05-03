@@ -1,7 +1,6 @@
 import { getHealthStatus } from "$lib/scheduler/jobs/health";
 import { requireAdminApi } from "$lib/server/auth";
 import { getServerStartTime } from "$lib/server/uptime";
-import { version } from "../../../../../package.json";
 import type { RequestHandler } from "./$types";
 
 function deriveStatus(health: ReturnType<typeof getHealthStatus>): "ok" | "degraded" | "unhealthy" {
@@ -50,6 +49,5 @@ export const GET: RequestHandler = async (event) => {
       },
     },
     uptime,
-    version,
   });
 };

@@ -1,8 +1,12 @@
 import type { Actions, Cookies, RequestEvent } from "@sveltejs/kit";
 import { fail, redirect } from "@sveltejs/kit";
 import { clearBootstrapToken, validateBootstrapToken } from "$lib/crypto/bootstrap";
-import { hashAdminPassword } from "$lib/crypto/passwords";
-import { adminExists, createAdmin as insertAdmin } from "$lib/db/repositories/admin";
+import { hashAdminPassword, verifyAdminPassword } from "$lib/crypto/passwords";
+import {
+  adminExists,
+  getAdminByUsername,
+  createAdmin as insertAdmin,
+} from "$lib/db/repositories/admin";
 import { appendAuditLog } from "$lib/db/repositories/audit";
 import { getConfig, setConfig } from "$lib/db/repositories/config";
 import { createSession, deleteSession } from "$lib/db/repositories/sessions";
@@ -19,6 +23,7 @@ import {
   ADMIN_COOKIE_OPTIONS,
   ADMIN_SESSION_TTL,
   isSecure,
+  isSetupComplete,
   requireSetupIncomplete,
   SESSION_COOKIE_NAME,
   SETUP_COMPLETED_CONFIG_KEY,
@@ -31,6 +36,8 @@ import {
   DispatcharrConfigSchema,
   OriginsSchema,
   PlexTokenSchema,
+  parseFormData,
+  RecoverWithAdminSchema,
   sanitizeString,
 } from "$lib/server/validation";
 import { probeXcSurface } from "$lib/url/discover";
@@ -253,6 +260,8 @@ export const load = async ({ url, cookies }: RequestEvent) => {
   const { dispatcharrGroups, dispatcharrProfiles } = claimActive
     ? await loadDispatcharrSetupPayload(resumePhase)
     : { dispatcharrGroups: [], dispatcharrProfiles: [] };
+  const adminPresent = adminExists();
+  const recoveryAvailable = adminPresent && !claimActive;
 
   return {
     claimActive,
@@ -260,6 +269,8 @@ export const load = async ({ url, cookies }: RequestEvent) => {
     dispatcharrGroups,
     dispatcharrProfiles,
     oauthCallback,
+    adminPresent,
+    recoveryAvailable,
   };
 };
 
@@ -299,6 +310,68 @@ export const actions: Actions = {
     cookies.set(SETUP_CLAIM_COOKIE_NAME, claimProof, SETUP_CLAIM_COOKIE_OPTIONS);
 
     safeAuditSetupStep("setup-wizard", "bootstrap_token_claimed", {}, getClientAddress());
+
+    return { success: true };
+  },
+
+  recoverWithAdmin: async ({ request, cookies, getClientAddress }) => {
+    if (await isSetupComplete()) {
+      return fail(404, { error: "not_found" });
+    }
+    if (!adminExists()) {
+      return fail(409, { error: "no_admin" });
+    }
+    if (await hasActiveSetupClaim(cookies)) {
+      await renewSetupClaim(cookies);
+      return { success: true };
+    }
+
+    const clientAddress = getClientAddress();
+    const limit = setupLimiter.check(clientAddress);
+    if (!limit.allowed) {
+      return fail(429, { error: "rate_limited" });
+    }
+
+    const formData = await request.formData();
+    const parsed = parseFormData(formData, RecoverWithAdminSchema);
+    if (!parsed.success) {
+      return fail(400, { error: "invalid_input" });
+    }
+
+    const { username, password } = parsed.data;
+    const admin = getAdminByUsername(username);
+    if (!admin) {
+      return fail(401, { error: "invalid_credentials" });
+    }
+
+    const passwordValid = await verifyAdminPassword(password, admin.password_hash);
+    if (!passwordValid) {
+      return fail(401, { error: "invalid_credentials" });
+    }
+
+    const existingProof = await getActiveSetupClaimProof();
+    const proof = existingProof ?? crypto.randomUUID();
+    if (!existingProof) {
+      await Promise.all([
+        setConfig(SETUP_CLAIMED_CONFIG_KEY, SETUP_CLAIMED_VALUE),
+        setConfig(SETUP_CLAIM_PROOF_CONFIG_KEY, proof, true),
+      ]);
+    }
+    await setConfig(SETUP_CLAIMED_AT_CONFIG_KEY, String(Date.now()));
+    cookies.set(SETUP_CLAIM_COOKIE_NAME, proof, SETUP_CLAIM_COOKIE_OPTIONS);
+
+    appendAuditLog({
+      action: AuditAction.SETUP_RECOVERY_LOGIN,
+      actor: admin.username,
+      detail: { ip: clientAddress },
+      ipAddress: clientAddress,
+    });
+    safeAuditSetupStep(
+      "setup-wizard",
+      "setup_resumed_via_admin",
+      { username: admin.username },
+      clientAddress,
+    );
 
     return { success: true };
   },

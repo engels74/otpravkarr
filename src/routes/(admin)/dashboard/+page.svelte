@@ -130,10 +130,10 @@ async function runSyncNow() {
   <div class="grid gap-4 sm:grid-cols-3">
     <!-- Plex -->
     <div class="kpi-tile">
-      <div class="flex items-center justify-between">
-        <span class="eyebrow">Plex</span>
+      <div class="flex min-w-0 items-center justify-between">
+        <span class="eyebrow truncate">Plex</span>
         <span
-          class={`h-2 w-2 rounded-full ${plexHealthy ? "bg-green-500" : "bg-destructive"}`}
+          class={`ml-2 h-2 w-2 shrink-0 rounded-full ${plexHealthy ? "bg-green-500" : "bg-destructive"}`}
           aria-hidden="true"
         ></span>
       </div>
@@ -145,10 +145,10 @@ async function runSyncNow() {
 
     <!-- Dispatcharr -->
     <div class="kpi-tile">
-      <div class="flex items-center justify-between">
-        <span class="eyebrow">Dispatcharr</span>
+      <div class="flex min-w-0 items-center justify-between">
+        <span class="eyebrow truncate">Dispatcharr</span>
         <span
-          class={`h-2 w-2 rounded-full ${dispatcharrHealthy ? "bg-green-500" : "bg-destructive"}`}
+          class={`ml-2 h-2 w-2 shrink-0 rounded-full ${dispatcharrHealthy ? "bg-green-500" : "bg-destructive"}`}
           aria-hidden="true"
         ></span>
       </div>
@@ -166,10 +166,10 @@ async function runSyncNow() {
 
     <!-- SQLite -->
     <div class="kpi-tile">
-      <div class="flex items-center justify-between">
-        <span class="eyebrow">SQLite</span>
+      <div class="flex min-w-0 items-center justify-between">
+        <span class="eyebrow truncate">SQLite</span>
         <span
-          class={`h-2 w-2 rounded-full ${dbHealthy ? "bg-green-500" : "bg-destructive"}`}
+          class={`ml-2 h-2 w-2 shrink-0 rounded-full ${dbHealthy ? "bg-green-500" : "bg-destructive"}`}
           aria-hidden="true"
         ></span>
       </div>

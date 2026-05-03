@@ -289,7 +289,7 @@ describe("hooks security headers", () => {
     mockValidateOrigin.mockImplementation(() => {
       throw {
         status: 403,
-        body: { message: "CSRF validation failed: origin not allowed" },
+        body: { message: "origin not allowed" },
       };
     });
     const event = createMockEvent({
@@ -304,7 +304,7 @@ describe("hooks security headers", () => {
 
     expect(response.status).toBe(403);
     expect(await response.json()).toEqual({
-      message: "CSRF validation failed: origin not allowed",
+      message: "origin not allowed",
     });
     expectStandardSecurityHeaders(response);
     expect(event.setHeaders).not.toHaveBeenCalled();
@@ -317,7 +317,7 @@ describe("hooks security headers", () => {
     mockValidateOrigin.mockImplementation(() => {
       throw {
         status: 403,
-        body: { message: "CSRF validation failed: missing Origin header" },
+        body: { message: "missing origin header" },
       };
     });
     const event = createMockEvent({
@@ -335,7 +335,7 @@ describe("hooks security headers", () => {
 
     expect(response.status).toBe(403);
     expect(await response.json()).toEqual({
-      message: "CSRF validation failed: missing Origin header",
+      message: "missing origin header",
     });
     expectStandardSecurityHeaders(response);
     expect(event.setHeaders).not.toHaveBeenCalled();

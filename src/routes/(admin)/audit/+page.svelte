@@ -146,7 +146,7 @@ function formatTimestamp(ts: string): string {
 }
 
 function formatDetail(detail: string | null): string {
-  if (!detail) return "";
+  if (!detail) return "No additional details for this event.";
   try {
     return JSON.stringify(JSON.parse(detail), null, 2);
   } catch {
@@ -369,31 +369,27 @@ function formatDateLabel(value: DateValue | undefined): string {
           {#each data.entries as entry (entry.id)}
             {@const isExpanded = expandedRows[entry.id] === true}
             <Table.Row
-              class={entry.detail ? "cursor-pointer" : ""}
-              onclick={() => entry.detail && toggleRow(entry.id)}
+              class="cursor-pointer"
+              onclick={() => toggleRow(entry.id)}
             >
-              {#if entry.detail}
-                <Table.Cell class="w-10 px-2">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-xs"
-                    aria-expanded={isExpanded}
-                    aria-label={detailToggleLabel(entry, isExpanded)}
-                    onclick={(e: MouseEvent) => { e.stopPropagation(); toggleRow(entry.id); }}
-                  >
-                    <ChevronDownIcon
-                      class={cn(
-                        "h-3.5 w-3.5 text-muted-foreground transition-transform",
-                        isExpanded && "rotate-0",
-                        !isExpanded && "-rotate-90"
-                      )}
-                    />
-                  </Button>
-                </Table.Cell>
-              {:else}
-                <Table.Cell class="w-10 px-2" aria-hidden="true" />
-              {/if}
+              <Table.Cell class="w-10 px-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-xs"
+                  aria-expanded={isExpanded}
+                  aria-label={detailToggleLabel(entry, isExpanded)}
+                  onclick={(e: MouseEvent) => { e.stopPropagation(); toggleRow(entry.id); }}
+                >
+                  <ChevronDownIcon
+                    class={cn(
+                      "h-3.5 w-3.5 text-muted-foreground transition-transform",
+                      isExpanded && "rotate-0",
+                      !isExpanded && "-rotate-90"
+                    )}
+                  />
+                </Button>
+              </Table.Cell>
               <Table.Cell class="whitespace-nowrap font-mono text-xs text-muted-foreground">
                 {formatTimestamp(entry.timestamp)}
               </Table.Cell>
@@ -409,10 +405,14 @@ function formatDateLabel(value: DateValue | undefined): string {
                 {entry.ip_address ?? "—"}
               </Table.Cell>
             </Table.Row>
-            {#if isExpanded && entry.detail}
+            {#if isExpanded}
               <Table.Row>
                 <Table.Cell colspan={5} class="bg-muted/50 px-4 py-3">
-                  <pre class="text-xs font-mono whitespace-pre-wrap break-all text-foreground">{formatDetail(entry.detail)}</pre>
+                  {#if entry.detail}
+                    <pre class="text-xs font-mono whitespace-pre-wrap break-all text-foreground">{formatDetail(entry.detail)}</pre>
+                  {:else}
+                    <p class="text-xs text-muted-foreground">{formatDetail(null)}</p>
+                  {/if}
                 </Table.Cell>
               </Table.Row>
             {/if}

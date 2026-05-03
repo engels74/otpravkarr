@@ -9,12 +9,7 @@ interface Props {
 
 let { steps, currentStep, class: className }: Props = $props();
 
-// Progress percentage along the connector line. With N steps, the line spans
-// from the centre of step 0 to the centre of step N-1. We fill it relative
-// to the current step (0..N-1).
-let progressPct = $derived(
-  steps.length > 1 ? Math.max(0, Math.min(100, (currentStep / (steps.length - 1)) * 100)) : 0,
-);
+let clampedStep = $derived(Math.max(0, Math.min(currentStep, Math.max(0, steps.length - 1))));
 </script>
 
 <nav aria-label="Setup progress" class={cn("w-full", className)}>
@@ -25,8 +20,9 @@ let progressPct = $derived(
       aria-hidden="true"
     ></div>
     <div
-      class="absolute left-0 top-3.5 h-px -translate-y-1/2 bg-primary transition-[width] duration-300"
-      style="width: {progressPct}%"
+      class="setup-wizard-fill absolute left-0 top-3.5 h-px -translate-y-1/2 bg-primary transition-[width] duration-300"
+      data-step={clampedStep}
+      data-total={steps.length}
       aria-hidden="true"
     ></div>
 
@@ -73,3 +69,17 @@ let progressPct = $derived(
     </ol>
   </div>
 </nav>
+
+<style>
+  .setup-wizard-fill { width: 0%; }
+  .setup-wizard-fill[data-total="2"][data-step="1"] { width: 100%; }
+  .setup-wizard-fill[data-total="3"][data-step="1"] { width: 50%; }
+  .setup-wizard-fill[data-total="3"][data-step="2"] { width: 100%; }
+  .setup-wizard-fill[data-total="4"][data-step="1"] { width: 33.3333%; }
+  .setup-wizard-fill[data-total="4"][data-step="2"] { width: 66.6667%; }
+  .setup-wizard-fill[data-total="4"][data-step="3"] { width: 100%; }
+  .setup-wizard-fill[data-total="5"][data-step="1"] { width: 25%; }
+  .setup-wizard-fill[data-total="5"][data-step="2"] { width: 50%; }
+  .setup-wizard-fill[data-total="5"][data-step="3"] { width: 75%; }
+  .setup-wizard-fill[data-total="5"][data-step="4"] { width: 100%; }
+</style>

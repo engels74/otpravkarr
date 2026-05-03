@@ -281,8 +281,14 @@ async function runSyncNow() {
   <div class="grid gap-4 lg:grid-cols-2">
     <!-- ─── Recent Activity ─────────────────────────────── -->
     <Card.Root>
-      <Card.Header>
+      <Card.Header class="flex flex-row items-center justify-between">
         <Card.Title class="text-base">Recent Activity</Card.Title>
+        <a
+          href="/audit"
+          class="text-xs text-muted-foreground hover:text-foreground"
+        >
+          View all →
+        </a>
       </Card.Header>
       <Card.Content class="px-0">
         {#if data.recentAudit.length > 0}

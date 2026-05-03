@@ -30,6 +30,7 @@ export const POST: RequestHandler = async (event) => {
   try {
     const exclusive = await scheduler.runExclusive("plex-dispatcharr-sync", async () => {
       try {
+        // actor is the admin who triggered this sync; scheduler-driven runs use actor: undefined (rendered as "system")
         appendAuditLog({
           actor: admin.username,
           action: AuditAction.SYNC_STARTED,

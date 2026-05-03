@@ -40,7 +40,11 @@ export default defineConfig({
     },
     {
       name: "app",
-      testMatch: ["admin-dashboard.spec.ts", "admin-users.spec.ts"],
+      testMatch: [
+        "admin-dashboard.spec.ts",
+        "admin-users.spec.ts",
+        "admin-audit-pagination.spec.ts",
+      ],
       dependencies: ["auth"],
       use: { storageState: ADMIN_STORAGE_STATE },
     },
@@ -68,6 +72,7 @@ export default defineConfig({
       ORIGIN: `http://localhost:${E2E_PORT}`,
       PORT: String(E2E_PORT),
       HOST: "localhost",
+      E2E_SEED_AUDIT: "1",
     },
     stdout: "pipe",
   },

@@ -92,6 +92,25 @@ async function seed() {
     stmt.run(key, value);
   }
 
+  // Opt-in: seed enough audit rows so paginated views always have multiple pages.
+  // Other E2E specs that assert on a clean audit log are unaffected unless this is set.
+  if (process.env.E2E_SEED_AUDIT === "1") {
+    // Offset each row's timestamp by seconds: the column default `datetime('now')` is second-resolution and the audit query has no tiebreaker, so a tight loop would produce non-deterministic pagination.
+    const auditStmt = db.prepare(
+      `INSERT INTO audit_log (actor, action, detail, ip_address, timestamp) VALUES (?, ?, ?, ?, datetime('now', '-' || ? || ' seconds'))`,
+    );
+    for (let i = 0; i < 12; i++) {
+      auditStmt.run(
+        ADMIN_USERNAME,
+        "config.changed",
+        JSON.stringify({ seed: i }),
+        "127.0.0.1",
+        12 - i,
+      );
+    }
+    console.log(`  Seeded 12 audit rows (E2E_SEED_AUDIT=1)`);
+  }
+
   db.close();
   console.log(`Seeded database at ${dbPath} with admin "${ADMIN_USERNAME}"`);
 }

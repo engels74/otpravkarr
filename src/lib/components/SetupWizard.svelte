@@ -82,4 +82,9 @@ let clampedStep = $derived(Math.max(0, Math.min(currentStep, Math.max(0, steps.l
   .setup-wizard-fill[data-total="5"][data-step="2"] { width: 50%; }
   .setup-wizard-fill[data-total="5"][data-step="3"] { width: 75%; }
   .setup-wizard-fill[data-total="5"][data-step="4"] { width: 100%; }
+  .setup-wizard-fill[data-total="6"][data-step="1"] { width: 20%; }
+  .setup-wizard-fill[data-total="6"][data-step="2"] { width: 40%; }
+  .setup-wizard-fill[data-total="6"][data-step="3"] { width: 60%; }
+  .setup-wizard-fill[data-total="6"][data-step="4"] { width: 80%; }
+  .setup-wizard-fill[data-total="6"][data-step="5"] { width: 100%; }
 </style>

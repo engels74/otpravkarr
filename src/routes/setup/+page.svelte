@@ -292,7 +292,13 @@ function enhanceHandler(nextStep?: number) {
 
         // Step 0: Claim success
         if (step === 0 && d.success) {
-          step = data.resumePhase;
+          if (Array.isArray(d.dispatcharrGroups)) {
+            dispatcharrGroups = d.dispatcharrGroups;
+          }
+          if (Array.isArray(d.dispatcharrProfiles)) {
+            dispatcharrProfiles = d.dispatcharrProfiles;
+          }
+          step = d.resumePhase ?? data.resumePhase;
           return;
         }
 

@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/svelte";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import SettingsPage from "./+page.svelte";
 
 type MockActionResult = {
   type: "success" | "failure" | "error";
@@ -79,8 +80,6 @@ describe("admin settings page", () => {
   });
 
   it("renders external URL input with correct value", async () => {
-    const { default: SettingsPage } = await import("./+page.svelte");
-
     const { container } = render(SettingsPage, { props: { data: defaultData } });
     const externalUrlInput = container.querySelector<HTMLInputElement>("#dispatcharr_external_url");
     if (!externalUrlInput) throw new Error("External URL input not found");
@@ -89,7 +88,6 @@ describe("admin settings page", () => {
   });
 
   it("wraps long Machine ID inside the Plex card on narrow viewports", async () => {
-    const { default: SettingsPage } = await import("./+page.svelte");
     const longMachineId = "abcdef0123456789".repeat(4);
     const { container } = render(SettingsPage, {
       props: {
@@ -107,8 +105,6 @@ describe("admin settings page", () => {
   });
 
   it("clears stale Plex errors on server URL correction and shows updated success state", async () => {
-    const { default: SettingsPage } = await import("./+page.svelte");
-
     state.queuedResults.push({
       type: "failure",
       data: { error: "Plex token and server URL are required" },
@@ -138,8 +134,6 @@ describe("admin settings page", () => {
   });
 
   it("renders section-specific accessible names for save buttons", async () => {
-    const { default: SettingsPage } = await import("./+page.svelte");
-
     render(SettingsPage, { props: { data: defaultData } });
 
     expect(screen.getByRole("button", { name: "Save Plex settings" })).toBeTruthy();
@@ -150,8 +144,6 @@ describe("admin settings page", () => {
   });
 
   it("shows sync interval validation inline and ties it to the input", async () => {
-    const { default: SettingsPage } = await import("./+page.svelte");
-
     state.queuedResults.push({
       type: "failure",
       data: { error: "Sync interval must be a number between 1 and 1440" },

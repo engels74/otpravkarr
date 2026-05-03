@@ -322,7 +322,10 @@ export const actions: Actions = {
     }
     if (await hasActiveSetupClaim(cookies)) {
       await renewSetupClaim(cookies);
-      return { success: true };
+      const resumePhase = await deriveSetupResumePhase();
+      const { dispatcharrGroups, dispatcharrProfiles } =
+        await loadDispatcharrSetupPayload(resumePhase);
+      return { success: true, resumePhase, dispatcharrGroups, dispatcharrProfiles };
     }
 
     const clientAddress = getClientAddress();
@@ -379,7 +382,11 @@ export const actions: Actions = {
       clientAddress,
     );
 
-    return { success: true };
+    const resumePhase = await deriveSetupResumePhase();
+    const { dispatcharrGroups, dispatcharrProfiles } =
+      await loadDispatcharrSetupPayload(resumePhase);
+
+    return { success: true, resumePhase, dispatcharrGroups, dispatcharrProfiles };
   },
 
   createAdmin: async ({ request, cookies, getClientAddress }) => {

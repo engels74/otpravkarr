@@ -1,10 +1,9 @@
 import { render } from "@testing-library/svelte";
 import { describe, expect, it } from "vitest";
+import LoginPage from "./+page.svelte";
 
 describe("login page", () => {
   it("allows empty submits to reach the server action", async () => {
-    const { default: LoginPage } = await import("./+page.svelte");
-
     const { container } = render(LoginPage);
     const form = container.querySelector<HTMLFormElement>('form[method="POST"]');
     if (!form) throw new Error("Login form not found");

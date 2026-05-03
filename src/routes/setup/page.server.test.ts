@@ -1926,7 +1926,14 @@ describe("setup recovery via admin login", () => {
 
       const { result, setCalls } = await callRecover(body);
 
-      expect(result).toEqual({ success: true });
+      expect(result).toEqual(
+        expect.objectContaining({
+          success: true,
+          resumePhase: 2,
+          dispatcharrGroups: [],
+          dispatcharrProfiles: [],
+        }),
+      );
       expect(state.configValues.get(setupClaimedKey)).toBe("true");
       expect(state.configValues.get(setupClaimProofKey)).toBe(proof);
       expect(state.configValues.get(setupClaimedAtKey)).toBeDefined();
@@ -2008,7 +2015,14 @@ describe("setup recovery via admin login", () => {
 
     const { result, setCalls } = await callRecover(body, cookieJar);
 
-    expect(result).toEqual({ success: true });
+    expect(result).toEqual(
+      expect.objectContaining({
+        success: true,
+        resumePhase: 2,
+        dispatcharrGroups: [],
+        dispatcharrProfiles: [],
+      }),
+    );
     expect(mocks.verifyAdminPassword).not.toHaveBeenCalled();
     const claimCookie = setCalls.find((c) => c.name === setupClaimCookie);
     expect(claimCookie?.value).toBe("existing-proof");

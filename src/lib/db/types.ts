@@ -61,6 +61,7 @@ export interface ConfigEntry {
 
 export const AuditAction = {
   SETUP_COMPLETED: "setup.completed",
+  SETUP_RECOVERY_LOGIN: "setup.recovery_login",
   ADMIN_LOGIN: "admin.login",
   USER_PROVISIONED: "user.provisioned",
   USER_RE_ENABLED: "user.re_enabled",

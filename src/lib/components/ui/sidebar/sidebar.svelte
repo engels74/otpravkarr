@@ -2,7 +2,6 @@
 import type { HTMLAttributes } from "svelte/elements";
 import * as Sheet from "$lib/components/ui/sheet/index.js";
 import { cn, type WithElementRef } from "$lib/utils.js";
-import { SIDEBAR_WIDTH_MOBILE } from "./constants.js";
 import { useSidebar } from "./context.svelte.js";
 
 let {
@@ -24,6 +23,7 @@ const _sidebar = useSidebar();
 
 {#if collapsible === "none"}
 	<div
+		id="sidebar-main"
 		class={cn(
 			"bg-sidebar text-sidebar-foreground flex h-full w-[var(--sidebar-width)] flex-col",
 			className
@@ -39,15 +39,15 @@ const _sidebar = useSidebar();
 		{...restProps}
 	>
 		<Sheet.Content
+			id="sidebar-main"
 			bind:ref
 			data-sidebar="sidebar"
 			data-slot="sidebar"
 			data-mobile="true"
 			class={cn(
-				"bg-sidebar text-sidebar-foreground w-[var(--sidebar-width)] p-0 [&>button]:hidden",
+				"bg-sidebar text-sidebar-foreground sidebar-mobile-width w-[var(--sidebar-width)] p-0 [&>button]:hidden",
 				className
 			)}
-			style="--sidebar-width: {SIDEBAR_WIDTH_MOBILE};"
 			{side}
 		>
 			<Sheet.Header class="sr-only">
@@ -61,6 +61,7 @@ const _sidebar = useSidebar();
 	</Sheet.Root>
 {:else}
 	<div
+		id="sidebar-main"
 		bind:this={ref}
 		class="text-sidebar-foreground group peer hidden md:block"
 		data-state={_sidebar.state}
@@ -106,3 +107,9 @@ const _sidebar = useSidebar();
 		</div>
 	</div>
 {/if}
+
+<style>
+	:global(.sidebar-mobile-width) {
+		--sidebar-width: 18rem;
+	}
+</style>

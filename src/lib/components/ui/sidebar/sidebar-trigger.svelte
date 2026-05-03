@@ -25,6 +25,8 @@ const _sidebar = useSidebar();
 	size="icon-sm"
 	class={cn("cn-sidebar-trigger", className)}
 	type="button"
+	aria-expanded={_sidebar.open}
+	aria-controls="sidebar-main"
 	onclick={(e) => {
 		onclick?.(e);
 		_sidebar.toggle();

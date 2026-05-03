@@ -41,7 +41,7 @@ describe("validateOrigin", () => {
     } catch (e: unknown) {
       const err = e as { status: number; body: { message: string } };
       expect(err.status).toBe(403);
-      expect(err.body.message).toBe("CSRF validation failed: missing Origin header");
+      expect(err.body.message).toBe("missing origin header");
     }
   });
 
@@ -66,7 +66,7 @@ describe("validateOrigin", () => {
     } catch (e: unknown) {
       const err = e as { status: number; body: { message: string } };
       expect(err.status).toBe(403);
-      expect(err.body.message).toBe("CSRF validation failed: origin not allowed");
+      expect(err.body.message).toBe("origin not allowed");
     }
   });
 
@@ -134,7 +134,7 @@ describe("validateOrigin", () => {
     } catch (e: unknown) {
       const err = e as { status: number; body: { message: string } };
       expect(err.status).toBe(403);
-      expect(err.body.message).toBe("CSRF validation failed: invalid Origin header");
+      expect(err.body.message).toBe("invalid origin header");
     }
   });
 
@@ -145,7 +145,7 @@ describe("validateOrigin", () => {
     } catch (e: unknown) {
       const err = e as { status: number; body: { message: string } };
       expect(err.status).toBe(403);
-      expect(err.body.message).toBe("CSRF validation failed: invalid Origin header");
+      expect(err.body.message).toBe("invalid origin header");
     }
   });
 });

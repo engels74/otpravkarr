@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { UserMapping } from "$lib/db/types";
 import type { DispatcharrGroup } from "$lib/dispatcharr/types";
+import UsersPage from "./+page.svelte";
 
 const mocks = vi.hoisted(() => ({
   applyAction: vi.fn(async () => undefined),
@@ -68,8 +69,6 @@ function mockFetch(response: Response | Promise<Response>) {
 }
 
 async function renderAndClickRotate() {
-  const { default: UsersPage } = await import("./+page.svelte");
-
   render(UsersPage, { props: { data: defaultData } });
   await fireEvent.click(screen.getByRole("button", { name: "Open actions for testuser" }));
   await fireEvent.click(await screen.findByText("Rotate Credentials"));

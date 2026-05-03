@@ -13,8 +13,9 @@ let {
   showIcon?: boolean;
 } = $props();
 
-// Random width between 50% and 90%
-const _width = `${Math.floor(Math.random() * 40) + 50}%`;
+// Discretized width bucket between 50% and 90% so the visual variety stays
+// while staying within the static CSS table below (CSP forbids inline style).
+const _widthBucket = String((Math.floor(Math.random() * 5) + 5) * 10);
 </script>
 
 <div
@@ -28,9 +29,18 @@ const _width = `${Math.floor(Math.random() * 40) + 50}%`;
 		<Skeleton class="size-4 rounded-md" data-sidebar="menu-skeleton-icon" />
 	{/if}
 	<Skeleton
-		class="h-4 max-w-[var(--skeleton-width)] flex-1"
+		class="sidebar-menu-skeleton-text h-4 flex-1"
 		data-sidebar="menu-skeleton-text"
-		style="--skeleton-width: {_width};"
+		data-width={_widthBucket}
 	/>
 	{@render children?.()}
 </div>
+
+<style>
+	:global(.sidebar-menu-skeleton-text) { max-width: 70%; }
+	:global(.sidebar-menu-skeleton-text[data-width="50"]) { max-width: 50%; }
+	:global(.sidebar-menu-skeleton-text[data-width="60"]) { max-width: 60%; }
+	:global(.sidebar-menu-skeleton-text[data-width="70"]) { max-width: 70%; }
+	:global(.sidebar-menu-skeleton-text[data-width="80"]) { max-width: 80%; }
+	:global(.sidebar-menu-skeleton-text[data-width="90"]) { max-width: 90%; }
+</style>

@@ -13,8 +13,7 @@ let { ...restProps }: SonnerProps = $props();
 
 <Sonner
 	theme={mode.current ?? "system"}
-	class="toaster group pointer-events-none [&_li]:pointer-events-auto"
-	style="--normal-bg: var(--color-popover); --normal-text: var(--color-popover-foreground); --normal-border: var(--color-border);"
+	class="cn-sonner toaster group pointer-events-none [&_li]:pointer-events-auto"
 	{...restProps}
 >
 	{#snippet loadingIcon()}
@@ -33,3 +32,11 @@ let { ...restProps }: SonnerProps = $props();
 		<TriangleAlertIcon class="size-4" />
 	{/snippet}
 </Sonner>
+
+<style>
+	:global(.cn-sonner) {
+		--normal-bg: var(--color-popover);
+		--normal-text: var(--color-popover-foreground);
+		--normal-border: var(--color-border);
+	}
+</style>

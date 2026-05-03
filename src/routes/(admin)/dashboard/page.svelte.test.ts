@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import DashboardPage from "./+page.svelte";
 
 const mocks = vi.hoisted(() => ({
   invalidateAll: vi.fn(async () => undefined),
@@ -59,7 +60,6 @@ describe("admin dashboard page", () => {
       "fetch",
       vi.fn(async () => pendingSync),
     );
-    const { default: DashboardPage } = await import("./+page.svelte");
 
     render(DashboardPage, { props: { data } });
     await fireEvent.click(screen.getByRole("button", { name: "Run sync now" }));

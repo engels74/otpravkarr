@@ -66,7 +66,7 @@ describe("GET /api/internal/health", () => {
 
     expect(response.status).toBe(200);
     expect(body.status).toBe("ok");
-    expect(body.version).toBe("0.0.1");
+    expect(body).not.toHaveProperty("version");
     expect(body.uptime).toBeGreaterThanOrEqual(0);
     expect(body.checks.plex.status).toBe("healthy");
     expect(body.checks.plex.lastChecked).toBe("2026-01-01T00:00:00.000Z");

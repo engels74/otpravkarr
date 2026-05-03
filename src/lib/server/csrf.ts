@@ -19,12 +19,12 @@ export function validateOrigin(request: Request, allowedOrigins: string[]): void
   const rawOrigin = request.headers.get("Origin");
 
   if (!rawOrigin) {
-    throw error(403, "CSRF validation failed: missing Origin header");
+    throw error(403, "missing origin header");
   }
 
   const normalizedOrigin = canonicalize(rawOrigin);
   if (!normalizedOrigin) {
-    throw error(403, "CSRF validation failed: invalid Origin header");
+    throw error(403, "invalid origin header");
   }
 
   const normalizedAllowed = allowedOrigins
@@ -32,6 +32,6 @@ export function validateOrigin(request: Request, allowedOrigins: string[]): void
     .filter((value): value is string => value !== null);
 
   if (!normalizedAllowed.includes(normalizedOrigin)) {
-    throw error(403, "CSRF validation failed: origin not allowed");
+    throw error(403, "origin not allowed");
   }
 }

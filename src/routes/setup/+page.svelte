@@ -18,6 +18,8 @@ type SetupPageData = {
   dispatcharrGroups: Array<{ id: number; name: string }>;
   dispatcharrProfiles: Array<{ id: number; name: string }>;
   oauthCallback: boolean;
+  adminPresent: boolean;
+  recoveryAvailable: boolean;
 };
 
 type StepErrors = Record<string, string>;
@@ -87,6 +89,15 @@ let showConfirmPassword = $state(false);
 // Password strength
 let password = $state("");
 let confirmPassword = $state("");
+
+// Recovery (admin-credentials) form for the claim step
+let recoveryUsername = $state("");
+let recoveryPassword = $state("");
+let recoveryShowPassword = $state(false);
+let useRecoveryFlow = $state(true);
+let recoveryCanSubmit = $derived(
+  recoveryUsername.trim().length >= 3 && recoveryPassword.length > 0,
+);
 
 // Step 5 defaults
 let defaultGroupId = $state<string>("");
@@ -281,7 +292,13 @@ function enhanceHandler(nextStep?: number) {
 
         // Step 0: Claim success
         if (step === 0 && d.success) {
-          step = data.resumePhase;
+          if (Array.isArray(d.dispatcharrGroups)) {
+            dispatcharrGroups = d.dispatcharrGroups;
+          }
+          if (Array.isArray(d.dispatcharrProfiles)) {
+            dispatcharrProfiles = d.dispatcharrProfiles;
+          }
+          step = d.resumePhase ?? data.resumePhase;
           return;
         }
 
@@ -424,64 +441,171 @@ function enhanceHandler(nextStep?: number) {
   <div class="w-full max-w-xl">
     <!-- ─────────── Step 0: Claim Instance ─────────── -->
     {#if step === 0}
-      <Card.Root class="surface-elevated">
-        <Card.Header>
-          <Card.Title class="text-lg">Claim this instance</Card.Title>
-          <Card.Description>
-            Enter the bootstrap token from your server logs to prove you own this instance.
-          </Card.Description>
-        </Card.Header>
-        <Card.Content>
-          {#if hasError && stepErrors.error !== 'rate_limited'}
-            <Alert.Root variant="destructive" class="mb-4">
-              <Alert.Title>Verification failed</Alert.Title>
-              <Alert.Description>
-                {stepErrors.token ?? stepErrors.message ?? 'Invalid or expired token.'}
-              </Alert.Description>
-            </Alert.Root>
-          {/if}
+      {#if data.recoveryAvailable && useRecoveryFlow}
+        <Card.Root class="surface-elevated">
+          <Card.Header>
+            <Card.Title class="text-lg">Resume setup</Card.Title>
+            <Card.Description>
+              Sign in with your existing admin account to continue where you left off.
+            </Card.Description>
+          </Card.Header>
+          <Card.Content>
+            {#if hasError && stepErrors.error !== 'rate_limited'}
+              <Alert.Root variant="destructive" class="mb-4">
+                <Alert.Title>Sign-in failed</Alert.Title>
+                <Alert.Description>
+                  {#if stepErrors.error === 'invalid_credentials'}
+                    Username or password is incorrect.
+                  {:else if stepErrors.error === 'no_admin'}
+                    No admin account found. Use the bootstrap token instead.
+                  {:else}
+                    {stepErrors.message ?? 'Sign-in failed. Try again.'}
+                  {/if}
+                </Alert.Description>
+              </Alert.Root>
+            {/if}
 
-          {#if stepErrors.error === 'rate_limited'}
-            <Alert.Root class="mb-4">
-              <Alert.Title>Too many attempts</Alert.Title>
-              <Alert.Description>
-                Please wait a moment before trying again.
-              </Alert.Description>
-            </Alert.Root>
-          {/if}
+            {#if stepErrors.error === 'rate_limited'}
+              <Alert.Root class="mb-4">
+                <Alert.Title>Too many attempts</Alert.Title>
+                <Alert.Description>
+                  Please wait a moment before trying again.
+                </Alert.Description>
+              </Alert.Root>
+            {/if}
 
-          <form method="POST" action="?/claimInstance" use:enhance={enhanceHandler()}>
-            <div class="grid gap-4">
-              <div class="grid gap-2">
-                <Label for="bootstrap-token">Bootstrap token</Label>
-                <Input
-                  id="bootstrap-token"
-                  name="token"
-                  type="text"
-                  placeholder="xxxx-xxxx-xxxx"
-                  autocomplete="off"
-                  class="font-mono text-sm"
-                  required
-                />
-                <p class="text-xs text-muted-foreground">
-                  Find this token in your server's startup logs or environment variables.
-                </p>
+            <form method="POST" action="?/recoverWithAdmin" use:enhance={enhanceHandler()}>
+              <div class="grid gap-4">
+                <div class="grid gap-2">
+                  <Label for="recovery-username">Admin username</Label>
+                  <Input
+                    id="recovery-username"
+                    name="username"
+                    type="text"
+                    autocomplete="username"
+                    required
+                    minlength={3}
+                    maxlength={32}
+                    pattern="[a-zA-Z0-9_\-]+"
+                    bind:value={recoveryUsername}
+                  />
+                </div>
+                <div class="grid gap-2">
+                  <Label for="recovery-password">Admin password</Label>
+                  <div class="relative">
+                    <Input
+                      id="recovery-password"
+                      name="password"
+                      type={recoveryShowPassword ? 'text' : 'password'}
+                      autocomplete="current-password"
+                      required
+                      bind:value={recoveryPassword}
+                    />
+                    <button
+                      type="button"
+                      class="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground transition-colors"
+                      onclick={() => (recoveryShowPassword = !recoveryShowPassword)}
+                      aria-label={recoveryShowPassword ? 'Hide password' : 'Show password'}
+                    >
+                      {#if recoveryShowPassword}
+                        <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94" /><path d="M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19" /><line x1="1" y1="1" x2="23" y2="23" /></svg>
+                      {:else}
+                        <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
+                      {/if}
+                    </button>
+                  </div>
+                </div>
+                <Button type="submit" disabled={submitting || !recoveryCanSubmit} class="w-full">
+                  {#if submitting}
+                    <svg class="mr-2 h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" class="opacity-25" />
+                      <path d="M4 12a8 8 0 018-8" stroke="currentColor" stroke-width="3" stroke-linecap="round" class="opacity-75" />
+                    </svg>
+                    Signing in…
+                  {:else}
+                    Resume Setup
+                  {/if}
+                </Button>
+                <button
+                  type="button"
+                  class="text-xs text-muted-foreground hover:text-foreground underline underline-offset-4"
+                  onclick={() => { useRecoveryFlow = false; stepErrors = {}; }}
+                >
+                  I have the bootstrap token instead
+                </button>
               </div>
-              <Button type="submit" disabled={submitting} class="w-full">
-                {#if submitting}
-                  <svg class="mr-2 h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                    <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" class="opacity-25" />
-                    <path d="M4 12a8 8 0 018-8" stroke="currentColor" stroke-width="3" stroke-linecap="round" class="opacity-75" />
-                  </svg>
-                  Verifying…
-                {:else}
-                  Verify Token
+            </form>
+          </Card.Content>
+        </Card.Root>
+      {:else}
+        <Card.Root class="surface-elevated">
+          <Card.Header>
+            <Card.Title class="text-lg">Claim this instance</Card.Title>
+            <Card.Description>
+              Enter the bootstrap token from your server logs to prove you own this instance.
+            </Card.Description>
+          </Card.Header>
+          <Card.Content>
+            {#if hasError && stepErrors.error !== 'rate_limited'}
+              <Alert.Root variant="destructive" class="mb-4">
+                <Alert.Title>Verification failed</Alert.Title>
+                <Alert.Description>
+                  {stepErrors.token ?? stepErrors.message ?? 'Invalid or expired token.'}
+                </Alert.Description>
+              </Alert.Root>
+            {/if}
+
+            {#if stepErrors.error === 'rate_limited'}
+              <Alert.Root class="mb-4">
+                <Alert.Title>Too many attempts</Alert.Title>
+                <Alert.Description>
+                  Please wait a moment before trying again.
+                </Alert.Description>
+              </Alert.Root>
+            {/if}
+
+            <form method="POST" action="?/claimInstance" use:enhance={enhanceHandler()}>
+              <div class="grid gap-4">
+                <div class="grid gap-2">
+                  <Label for="bootstrap-token">Bootstrap token</Label>
+                  <Input
+                    id="bootstrap-token"
+                    name="token"
+                    type="text"
+                    placeholder="xxxx-xxxx-xxxx"
+                    autocomplete="off"
+                    class="font-mono text-sm"
+                    required
+                  />
+                  <p class="text-xs text-muted-foreground">
+                    Find this token in your server's startup logs or environment variables.
+                  </p>
+                </div>
+                <Button type="submit" disabled={submitting} class="w-full">
+                  {#if submitting}
+                    <svg class="mr-2 h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" class="opacity-25" />
+                      <path d="M4 12a8 8 0 018-8" stroke="currentColor" stroke-width="3" stroke-linecap="round" class="opacity-75" />
+                    </svg>
+                    Verifying…
+                  {:else}
+                    Verify Token
+                  {/if}
+                </Button>
+                {#if data.recoveryAvailable}
+                  <button
+                    type="button"
+                    class="text-xs text-muted-foreground hover:text-foreground underline underline-offset-4"
+                    onclick={() => { useRecoveryFlow = true; stepErrors = {}; }}
+                  >
+                    Sign in with admin account instead
+                  </button>
                 {/if}
-              </Button>
-            </div>
-          </form>
-        </Card.Content>
-      </Card.Root>
+              </div>
+            </form>
+          </Card.Content>
+        </Card.Root>
+      {/if}
     {/if}
 
     <!-- ─────────── Step 1: Create Admin ─────────── -->

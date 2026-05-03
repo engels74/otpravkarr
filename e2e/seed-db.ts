@@ -61,6 +61,31 @@ async function seed() {
     console.log("  Applied initial migration");
   }
 
+  const stmt = db.prepare(
+    `INSERT OR REPLACE INTO config (key, value, updated_at) VALUES (?, ?, datetime('now'))`,
+  );
+
+  // Setup-pre-admin mode: stop the seeder right after claiming the wizard
+  // (no admin, no Plex/Dispatcharr config). The matching cookie value is
+  // emitted via the fixed proof below so a Playwright spec can attach it
+  // before navigating to /setup. Mutually exclusive with the default seed.
+  if (process.env.E2E_SEED_SETUP_PRE_ADMIN === "1") {
+    const claimProof = process.env.E2E_SETUP_CLAIM_PROOF ?? "e2e-fresh-setup-proof";
+    const preAdminConfigs: [string, string][] = [
+      ["setup_completed", "false"],
+      ["setup_claimed", "true"],
+      ["setup_claim_proof", claimProof],
+      ["setup_claimed_at", String(Date.now())],
+      ["allowed_origins", JSON.stringify(["http://localhost:4173"])],
+    ];
+    for (const [key, value] of preAdminConfigs) {
+      stmt.run(key, value);
+    }
+    db.close();
+    console.log(`Seeded database at ${dbPath} in pre-admin setup mode`);
+    return;
+  }
+
   // Insert admin account
   db.run(`INSERT OR IGNORE INTO admin_accounts (username, password_hash) VALUES (?, ?)`, [
     ADMIN_USERNAME,
@@ -83,10 +108,6 @@ async function seed() {
     ["sync_interval_minutes", "15"],
     ["default_provisioning_mode", "automatic"],
   ];
-
-  const stmt = db.prepare(
-    `INSERT OR REPLACE INTO config (key, value, updated_at) VALUES (?, ?, datetime('now'))`,
-  );
 
   for (const [key, value] of configs) {
     stmt.run(key, value);

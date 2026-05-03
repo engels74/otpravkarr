@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/svelte";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AuditEntry } from "$lib/db/types";
+import AuditPage from "./+page.svelte";
 
 const mocks = vi.hoisted(() => ({
   goto: vi.fn(async () => undefined),
@@ -46,8 +47,6 @@ describe("admin audit page", () => {
   });
 
   it("renders a 24px detail expand control and expands formatted JSON", async () => {
-    const { default: AuditPage } = await import("./+page.svelte");
-
     render(AuditPage, { props: { data: defaultData } });
 
     const expandButton = screen.getByRole("button", {

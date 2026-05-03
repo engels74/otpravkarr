@@ -28,4 +28,12 @@ test.describe("Admin audit pagination", () => {
     await expect(page).toHaveURL(/page=1(?!\d)/);
     await expect(page.getByText(/Page 1 of/)).toBeVisible();
   });
+
+  // Regression coverage for P06-ISSUE-002: the date filter button label should
+  // reflect the active `?after=` value when arriving from a deep link.
+  test("After-date filter button reflects URL state on load", async ({ page }) => {
+    await page.goto("/audit?after=2026-05-01");
+
+    await expect(page.getByRole("button", { name: /2026-05-01/ })).toBeVisible();
+  });
 });

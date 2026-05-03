@@ -326,8 +326,8 @@ async function copyOneTimePassword() {
     </Select.Root>
 
     <Input
-      placeholder="Search username..."
-      aria-label="Search users by username"
+      placeholder="Search users by username…"
+      aria-label="Search users by username…"
       class="w-[200px] text-foreground"
       value={searchValue}
       oninput={onSearchInput}

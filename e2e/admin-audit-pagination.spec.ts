@@ -20,12 +20,12 @@ test.describe("Admin audit pagination", () => {
 
     await page.getByRole("button", { name: /Next/ }).click();
 
-    await expect(page).toHaveURL(/page=2/);
+    await expect(page).toHaveURL(/page=2(?!\d)/);
     await expect(page.getByText(/Page 2 of/)).toBeVisible();
 
     await page.getByRole("button", { name: /Previous/ }).click();
 
-    await expect(page).toHaveURL(/page=1/);
+    await expect(page).toHaveURL(/page=1(?!\d)/);
     await expect(page.getByText(/Page 1 of/)).toBeVisible();
   });
 });

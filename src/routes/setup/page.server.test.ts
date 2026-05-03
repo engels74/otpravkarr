@@ -1918,27 +1918,30 @@ describe("setup recovery via admin login", () => {
     mocks.getAdminByUsername.mockReturnValue(adminFixture());
     mocks.verifyAdminPassword.mockResolvedValue(true);
     const proof = "22222222-2222-2222-2222-222222222222";
-    vi.spyOn(crypto, "randomUUID").mockReturnValue(proof);
+    const randomUuidSpy = vi.spyOn(crypto, "randomUUID").mockReturnValue(proof);
+    try {
+      const body = new FormData();
+      body.set("username", "dogfood-admin");
+      body.set("password", "DogfoodTestPass2026XYZ");
 
-    const body = new FormData();
-    body.set("username", "dogfood-admin");
-    body.set("password", "DogfoodTestPass2026XYZ");
+      const { result, setCalls } = await callRecover(body);
 
-    const { result, setCalls } = await callRecover(body);
-
-    expect(result).toEqual({ success: true });
-    expect(state.configValues.get(setupClaimedKey)).toBe("true");
-    expect(state.configValues.get(setupClaimProofKey)).toBe(proof);
-    expect(state.configValues.get(setupClaimedAtKey)).toBeDefined();
-    const claimCookie = setCalls.find((c) => c.name === setupClaimCookie);
-    expect(claimCookie).toBeDefined();
-    expect(claimCookie?.value).toBe(proof);
-    expect(mocks.appendAuditLog).toHaveBeenCalledWith(
-      expect.objectContaining({
-        action: "setup.recovery_login",
-        actor: "dogfood-admin",
-      }),
-    );
+      expect(result).toEqual({ success: true });
+      expect(state.configValues.get(setupClaimedKey)).toBe("true");
+      expect(state.configValues.get(setupClaimProofKey)).toBe(proof);
+      expect(state.configValues.get(setupClaimedAtKey)).toBeDefined();
+      const claimCookie = setCalls.find((c) => c.name === setupClaimCookie);
+      expect(claimCookie).toBeDefined();
+      expect(claimCookie?.value).toBe(proof);
+      expect(mocks.appendAuditLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: "setup.recovery_login",
+          actor: "dogfood-admin",
+        }),
+      );
+    } finally {
+      randomUuidSpy.mockRestore();
+    }
   });
 
   it("rejects with invalid_credentials when password verification fails", async () => {

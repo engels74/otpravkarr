@@ -36,7 +36,6 @@ import {
   DispatcharrConfigSchema,
   OriginsSchema,
   PlexTokenSchema,
-  parseFormData,
   RecoverWithAdminSchema,
   sanitizeString,
 } from "$lib/server/validation";
@@ -333,7 +332,14 @@ export const actions: Actions = {
     }
 
     const formData = await request.formData();
-    const parsed = parseFormData(formData, RecoverWithAdminSchema);
+    // Validate username via schema (sanitized), but read password raw to match
+    // how it was stored by createAdmin and how /login authenticates. Sanitizing
+    // the password would trim whitespace and collapse internal space runs,
+    // breaking recovery for admins whose passwords contain such characters.
+    const parsed = RecoverWithAdminSchema.safeParse({
+      username: sanitizeString(String(formData.get("username") ?? "")),
+      password: String(formData.get("password") ?? ""),
+    });
     if (!parsed.success) {
       return fail(400, { error: "invalid_input" });
     }

@@ -49,6 +49,9 @@ class MockStatement {
     if (sql.startsWith("UPDATE user_mappings")) {
       return updateUserMapping(sql, flatParams as unknown[]);
     }
+    if (sql.startsWith("DELETE FROM user_mappings WHERE id = ?")) {
+      return deleteUserMapping(flatParams as unknown[]);
+    }
     return { changes: 0, lastInsertRowid: 0 };
   }
 }
@@ -152,6 +155,13 @@ function updateUserMapping(
   }
 
   return { changes: 1, lastInsertRowid: 0 };
+}
+
+function deleteUserMapping(params: unknown[]): { changes: number; lastInsertRowid: number } {
+  const rows = tables.user_mappings ?? [];
+  const before = rows.length;
+  tables.user_mappings = rows.filter((r) => r.id !== params[0]);
+  return { changes: before - (tables.user_mappings?.length ?? 0), lastInsertRowid: 0 };
 }
 
 class MockDatabase {
@@ -499,6 +509,34 @@ describe("user mappings repository", () => {
 
       const row = usersModule.getUserMappingByPlexId(1);
       expect(row?.updated_at).toBeTruthy();
+    });
+  });
+
+  describe("deleteUserMapping", () => {
+    it("deletes an existing mapping from all lookup paths", () => {
+      const deleted = usersModule.createUserMapping(
+        createTestMapping({ plex_account_id: 1, plex_uuid: "u1", dispatcharr_user_id: 100 }),
+      );
+      const retained = usersModule.createUserMapping(
+        createTestMapping({ plex_account_id: 2, plex_uuid: "u2", dispatcharr_user_id: 200 }),
+      );
+
+      expect(usersModule.deleteUserMapping(deleted.id)).toBe(true);
+
+      expect(usersModule.getUserMappingById(deleted.id)).toBeNull();
+      expect(usersModule.getUserMappingByPlexId(1)).toBeNull();
+      expect(usersModule.getUserMappingByDispatcharrId(100)).toBeNull();
+      expect(usersModule.getAllUserMappings()).toEqual([retained]);
+    });
+
+    it("returns false and leaves rows untouched when the mapping does not exist", () => {
+      const existing = usersModule.createUserMapping(
+        createTestMapping({ plex_account_id: 1, plex_uuid: "u1" }),
+      );
+
+      expect(usersModule.deleteUserMapping(999)).toBe(false);
+
+      expect(usersModule.getAllUserMappings()).toEqual([existing]);
     });
   });
 });

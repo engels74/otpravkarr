@@ -12,6 +12,9 @@ const mocks = vi.hoisted(() => ({
     () => null as { id: number; dispatcharr_user_id: number | null } | null,
   ),
   updateUserMapping: vi.fn(),
+  deleteUserMapping: vi.fn(() => true),
+  deleteUserSessionsByUserRef: vi.fn(() => 0),
+  transaction: vi.fn((fn: () => unknown) => fn),
   listGroups: vi.fn(async () => ({ ok: true, data: [] })),
   listProfiles: vi.fn(async () => ({ ok: true, data: [] })),
   updateUser: vi.fn(async () => ({ ok: true, data: {} })),
@@ -28,6 +31,12 @@ vi.mock("$lib/server/auth", () => ({
   requireAdmin: mocks.requireAdmin,
 }));
 
+vi.mock("$lib/db/connection", () => ({
+  db: {
+    transaction: mocks.transaction,
+  },
+}));
+
 vi.mock("$lib/db/repositories/config", () => ({
   getConfig: mocks.getConfig,
 }));
@@ -37,9 +46,14 @@ vi.mock("$lib/db/repositories/audit", () => ({
 }));
 
 vi.mock("$lib/db/repositories/users", () => ({
+  deleteUserMapping: mocks.deleteUserMapping,
   getAllUserMappings: mocks.getAllUserMappings,
   getUserMappingById: mocks.getUserMappingById,
   updateUserMapping: mocks.updateUserMapping,
+}));
+
+vi.mock("$lib/db/repositories/sessions", () => ({
+  deleteUserSessionsByUserRef: mocks.deleteUserSessionsByUserRef,
 }));
 
 vi.mock("$lib/dispatcharr/client", () => ({
@@ -74,6 +88,12 @@ function resetMocks() {
   mocks.getAllUserMappings.mockClear();
   mocks.getUserMappingById.mockClear();
   mocks.updateUserMapping.mockClear();
+  mocks.deleteUserMapping.mockClear();
+  mocks.deleteUserMapping.mockReturnValue(true);
+  mocks.deleteUserSessionsByUserRef.mockClear();
+  mocks.deleteUserSessionsByUserRef.mockReturnValue(0);
+  mocks.transaction.mockClear();
+  mocks.transaction.mockImplementation((fn: () => unknown) => fn);
   mocks.listGroups.mockClear();
   mocks.listProfiles.mockClear();
   mocks.updateUser.mockClear();
@@ -82,6 +102,7 @@ function resetMocks() {
   mocks.enableUser.mockClear();
   mocks.provisionUser.mockClear();
   mocks.appendAuditLog.mockClear();
+  mocks.appendAuditLog.mockImplementation(() => undefined);
 }
 
 function createActionEvent(body: FormData) {
@@ -134,6 +155,225 @@ describe("admin users actions", () => {
         after: [5, 7],
       },
       ipAddress: "127.0.0.1",
+    });
+  });
+
+  describe("deleteMapping", () => {
+    function makeDeletableMapping(overrides?: Record<string, unknown>) {
+      return {
+        id: 5,
+        plex_account_id: 12345,
+        plex_uuid: "abc-uuid",
+        plex_username: "testuser",
+        plex_email: "test@example.com",
+        plex_thumb: null,
+        dispatcharr_user_id: null,
+        dispatcharr_username: null,
+        dispatcharr_xc_password_enc: null,
+        dispatcharr_group_ids: "[]",
+        dispatcharr_profile_id: null,
+        provisioning_mode: "automatic",
+        is_active: 0,
+        ...overrides,
+      };
+    }
+
+    it("deletes an eligible local mapping, removes portal sessions, and writes audit", async () => {
+      const { actions } = await import("./+page.server");
+      const deleteMapping = actions.deleteMapping;
+      if (!deleteMapping) throw new Error("deleteMapping action is undefined");
+
+      mocks.getUserMappingById.mockReturnValueOnce(
+        makeDeletableMapping({ id: 5, plex_username: "alice", provisioning_mode: "staff" }),
+      );
+      mocks.deleteUserSessionsByUserRef.mockReturnValueOnce(2);
+      mocks.deleteUserMapping.mockReturnValueOnce(true);
+
+      const body = new FormData();
+      body.set("id", "5");
+
+      const result = await deleteMapping(
+        createActionEvent(body) as unknown as Parameters<typeof deleteMapping>[0],
+      );
+
+      expect(result).toMatchObject({ success: true });
+      expect(mocks.transaction).toHaveBeenCalledTimes(1);
+      expect(mocks.deleteUserSessionsByUserRef).toHaveBeenCalledWith("5");
+      expect(mocks.deleteUserMapping).toHaveBeenCalledWith(5);
+      expect(mocks.getConfig).not.toHaveBeenCalled();
+      expect(mocks.updateUser).not.toHaveBeenCalled();
+      expect(mocks.appendAuditLog).toHaveBeenCalledWith({
+        actor: "admin",
+        action: "user.mapping_deleted",
+        detail: {
+          mapping_id: 5,
+          plex_username: "alice",
+          plex_account_id: 12345,
+          provisioning_mode: "staff",
+          was_active: false,
+        },
+        ipAddress: "127.0.0.1",
+      });
+    });
+
+    it("rejects mappings that still have a Dispatcharr account", async () => {
+      const { actions } = await import("./+page.server");
+      const deleteMapping = actions.deleteMapping;
+      if (!deleteMapping) throw new Error("deleteMapping action is undefined");
+
+      mocks.getUserMappingById.mockReturnValueOnce(
+        makeDeletableMapping({
+          dispatcharr_user_id: 42,
+          dispatcharr_xc_password_enc: "encrypted",
+          is_active: 1,
+        }),
+      );
+
+      const body = new FormData();
+      body.set("id", "5");
+
+      const result = await deleteMapping(
+        createActionEvent(body) as unknown as Parameters<typeof deleteMapping>[0],
+      );
+
+      expect(result).toMatchObject({
+        status: 400,
+        data: { error: "Disable the user before deleting the local mapping." },
+      });
+      expect(mocks.deleteUserSessionsByUserRef).not.toHaveBeenCalled();
+      expect(mocks.deleteUserMapping).not.toHaveBeenCalled();
+      expect(mocks.appendAuditLog).not.toHaveBeenCalled();
+    });
+
+    it("rejects mappings that still have a stored XC credential", async () => {
+      const { actions } = await import("./+page.server");
+      const deleteMapping = actions.deleteMapping;
+      if (!deleteMapping) throw new Error("deleteMapping action is undefined");
+
+      mocks.getUserMappingById.mockReturnValueOnce(
+        makeDeletableMapping({ dispatcharr_xc_password_enc: "encrypted" }),
+      );
+
+      const body = new FormData();
+      body.set("id", "5");
+
+      const result = await deleteMapping(
+        createActionEvent(body) as unknown as Parameters<typeof deleteMapping>[0],
+      );
+
+      expect(result).toMatchObject({
+        status: 400,
+        data: { error: "Disable the user before deleting the local mapping." },
+      });
+      expect(mocks.deleteUserSessionsByUserRef).not.toHaveBeenCalled();
+      expect(mocks.deleteUserMapping).not.toHaveBeenCalled();
+    });
+
+    it("rejects missing id and missing mapping", async () => {
+      const { actions } = await import("./+page.server");
+      const deleteMapping = actions.deleteMapping;
+      if (!deleteMapping) throw new Error("deleteMapping action is undefined");
+
+      const missingIdResult = await deleteMapping(
+        createActionEvent(new FormData()) as unknown as Parameters<typeof deleteMapping>[0],
+      );
+      expect(missingIdResult).toMatchObject({
+        status: 400,
+        data: { error: "Missing user mapping ID" },
+      });
+      expect(mocks.getUserMappingById).not.toHaveBeenCalled();
+
+      const body = new FormData();
+      body.set("id", "5");
+      const missingMappingResult = await deleteMapping(
+        createActionEvent(body) as unknown as Parameters<typeof deleteMapping>[0],
+      );
+
+      expect(missingMappingResult).toMatchObject({
+        status: 400,
+        data: { error: "User mapping not found" },
+      });
+      expect(mocks.deleteUserSessionsByUserRef).not.toHaveBeenCalled();
+      expect(mocks.deleteUserMapping).not.toHaveBeenCalled();
+    });
+
+    it("rejects non-strict or unsafe id strings", async () => {
+      const { actions } = await import("./+page.server");
+      const deleteMapping = actions.deleteMapping;
+      if (!deleteMapping) throw new Error("deleteMapping action is undefined");
+
+      for (const submittedId of ["1e3", "5.0", "9007199254740993"]) {
+        const body = new FormData();
+        body.set("id", submittedId);
+
+        const result = await deleteMapping(
+          createActionEvent(body) as unknown as Parameters<typeof deleteMapping>[0],
+        );
+
+        expect(result).toMatchObject({
+          status: 400,
+          data: { error: "Missing user mapping ID" },
+        });
+      }
+
+      expect(mocks.getUserMappingById).not.toHaveBeenCalled();
+      expect(mocks.transaction).not.toHaveBeenCalled();
+    });
+
+    it("does not mask a successful delete when audit logging fails", async () => {
+      const { actions } = await import("./+page.server");
+      const deleteMapping = actions.deleteMapping;
+      if (!deleteMapping) throw new Error("deleteMapping action is undefined");
+
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+      mocks.getUserMappingById.mockReturnValueOnce(makeDeletableMapping());
+      mocks.deleteUserMapping.mockReturnValueOnce(true);
+      mocks.appendAuditLog.mockImplementationOnce(() => {
+        throw new Error("audit unavailable");
+      });
+
+      const body = new FormData();
+      body.set("id", "5");
+
+      const result = await deleteMapping(
+        createActionEvent(body) as unknown as Parameters<typeof deleteMapping>[0],
+      );
+
+      expect(result).toMatchObject({ success: true });
+      expect(mocks.transaction).toHaveBeenCalledTimes(1);
+      expect(mocks.deleteUserSessionsByUserRef).toHaveBeenCalledWith("5");
+      expect(mocks.deleteUserMapping).toHaveBeenCalledWith(5);
+      expect(warnSpy).toHaveBeenCalledWith(
+        "Failed to append audit log for USER_MAPPING_DELETED: audit unavailable",
+      );
+
+      warnSpy.mockRestore();
+    });
+
+    it("fails inside the delete transaction when the mapping delete affects no rows", async () => {
+      const { actions } = await import("./+page.server");
+      const deleteMapping = actions.deleteMapping;
+      if (!deleteMapping) throw new Error("deleteMapping action is undefined");
+
+      mocks.getUserMappingById.mockReturnValueOnce(makeDeletableMapping());
+      mocks.deleteUserSessionsByUserRef.mockReturnValueOnce(1);
+      mocks.deleteUserMapping.mockReturnValueOnce(false);
+
+      const body = new FormData();
+      body.set("id", "5");
+
+      const result = await deleteMapping(
+        createActionEvent(body) as unknown as Parameters<typeof deleteMapping>[0],
+      );
+
+      expect(result).toMatchObject({
+        status: 500,
+        data: { error: "Failed to delete local mapping" },
+      });
+      expect(mocks.transaction).toHaveBeenCalledTimes(1);
+      expect(mocks.deleteUserSessionsByUserRef).toHaveBeenCalledWith("5");
+      expect(mocks.deleteUserMapping).toHaveBeenCalledWith(5);
+      expect(mocks.appendAuditLog).not.toHaveBeenCalled();
     });
   });
 

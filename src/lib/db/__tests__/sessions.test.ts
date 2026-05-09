@@ -63,6 +63,14 @@ class MockStatement {
       return { changes: before - sessionRows.length };
     }
 
+    if (sql.includes("DELETE FROM sessions WHERE user_ref = ? AND session_type = 'user'")) {
+      const before = sessionRows.length;
+      sessionRows = sessionRows.filter(
+        (r) => !(r.user_ref === params[0] && r.session_type === "user"),
+      );
+      return { changes: before - sessionRows.length };
+    }
+
     if (sql.includes("DELETE FROM sessions WHERE expires_at")) {
       const now = new Date()
         .toISOString()
@@ -113,8 +121,14 @@ vi.mock("../connection", () => ({
   getDb: () => mockDb,
 }));
 
-const { createSession, getSession, deleteSession, deleteExpiredSessions, refreshSession } =
-  await import("../repositories/sessions");
+const {
+  createSession,
+  getSession,
+  deleteSession,
+  deleteUserSessionsByUserRef,
+  deleteExpiredSessions,
+  refreshSession,
+} = await import("../repositories/sessions");
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -200,6 +214,28 @@ describe("sessions repository", () => {
 
     it("does not throw for non-existent session", () => {
       expect(() => deleteSession("nope")).not.toThrow();
+    });
+  });
+
+  describe("deleteUserSessionsByUserRef", () => {
+    it("deletes only user sessions for the given mapping reference", () => {
+      const targetUserSession = createSession("5", "user", 3600);
+      const targetAdminSession = createSession("5", "admin", 3600);
+      const otherUserSession = createSession("6", "user", 3600);
+
+      expect(deleteUserSessionsByUserRef("5")).toBe(1);
+
+      expect(getSession(targetUserSession)).toBeNull();
+      expect(getSession(targetAdminSession)).not.toBeNull();
+      expect(getSession(otherUserSession)).not.toBeNull();
+    });
+
+    it("returns 0 when no matching user sessions exist", () => {
+      createSession("5", "admin", 3600);
+      createSession("6", "user", 3600);
+
+      expect(deleteUserSessionsByUserRef("5")).toBe(0);
+      expect(sessionRows).toHaveLength(2);
     });
   });
 

@@ -1,5 +1,5 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/svelte";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { UserMapping } from "$lib/db/types";
 import type { DispatcharrGroup } from "$lib/dispatcharr/types";
 import UsersPage from "./+page.svelte";
@@ -84,6 +84,10 @@ describe("admin users page", () => {
     mocks.toastError.mockClear();
   });
 
+  afterEach(() => {
+    cleanup();
+  });
+
   it("rotates credentials through the internal API and refreshes page data", async () => {
     const fetchMock = mockFetch(Response.json({ ok: true }));
 
@@ -129,5 +133,65 @@ describe("admin users page", () => {
     });
     expect(mocks.toastSuccess).not.toHaveBeenCalled();
     expect(mocks.invalidateAll).not.toHaveBeenCalled();
+  });
+
+  it("shows delete local mapping for eligible inactive local-only rows", async () => {
+    render(UsersPage, {
+      props: {
+        data: {
+          ...defaultData,
+          mappings: [
+            {
+              ...mapping,
+              dispatcharr_user_id: null,
+              dispatcharr_username: null,
+              dispatcharr_xc_password_enc: null,
+              is_active: 0,
+            },
+          ],
+        },
+      },
+    });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Open actions for testuser" }));
+
+    expect(await screen.findByText("Delete local mapping")).toBeTruthy();
+  });
+
+  it("does not show delete local mapping for active remote-backed rows", async () => {
+    render(UsersPage, { props: { data: defaultData } });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Open actions for testuser" }));
+
+    expect(screen.queryByText("Delete local mapping")).toBeNull();
+  });
+
+  it("uses clear local-only destructive copy in the delete confirmation", async () => {
+    render(UsersPage, {
+      props: {
+        data: {
+          ...defaultData,
+          mappings: [
+            {
+              ...mapping,
+              dispatcharr_user_id: null,
+              dispatcharr_username: null,
+              dispatcharr_xc_password_enc: null,
+              is_active: 0,
+            },
+          ],
+        },
+      },
+    });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Open actions for testuser" }));
+    await fireEvent.click(await screen.findByText("Delete local mapping"));
+
+    expect(await screen.findByText("Delete local mapping for testuser?")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "This removes only the local otpravkarr mapping and saved metadata. It does not contact Dispatcharr. The Plex user can be provisioned again by signing in.",
+      ),
+    ).toBeTruthy();
   });
 });

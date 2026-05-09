@@ -64,6 +64,7 @@ export const AuditAction = {
   SETUP_RECOVERY_LOGIN: "setup.recovery_login",
   ADMIN_LOGIN: "admin.login",
   USER_PROVISIONED: "user.provisioned",
+  USER_MAPPING_DELETED: "user.mapping_deleted",
   USER_RE_ENABLED: "user.re_enabled",
   USER_DISABLED: "user.disabled",
   USER_CREDENTIALS_ROTATED: "user.credentials_rotated",

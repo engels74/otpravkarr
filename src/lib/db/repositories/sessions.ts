@@ -49,6 +49,18 @@ export function deleteSession(id: string): void {
 }
 
 /**
+ * Delete portal sessions for a local user mapping reference.
+ * Admin sessions with the same user_ref are intentionally preserved.
+ */
+export function deleteUserSessionsByUserRef(userRef: string): number {
+  const db = getDb();
+  const result = db
+    .prepare("DELETE FROM sessions WHERE user_ref = ? AND session_type = 'user'")
+    .run(userRef);
+  return result.changes;
+}
+
+/**
  * Refresh a session's expiry by extending it from now.
  * Used for sliding session refresh on each valid request.
  */

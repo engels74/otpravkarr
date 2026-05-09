@@ -1,15 +1,24 @@
 <p align="center">
-  <img src="./static/otpravkarr-icon.svg" alt="Otpravkarr" width="140" height="140" />
+  <img src="static/otpravkarr-icon.svg" alt="Otpravkarr Logo" width="256" height="256">
 </p>
 
 <h1 align="center">Otpravkarr</h1>
 
 <p align="center">
-  Bridges Plex user accounts to <a href="https://github.com/Dispatcharr/Dispatcharr">Dispatcharr</a> IPTV — generates per-user M3U/EPG URLs, syncs Plex friends automatically, and provides an admin dashboard for management.
+  <strong>Plex user provisioning and per-user IPTV access for Dispatcharr</strong>
 </p>
 
 <p align="center">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg" alt="License: AGPL-3.0" /></a>
+  <a href="https://github.com/engels74/otpravkarr/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue.svg" alt="License"></a>
+  <img src="https://img.shields.io/badge/bun-%23000000.svg?logo=bun&logoColor=white" alt="Bun">
+  <img src="https://img.shields.io/badge/SvelteKit-FF3E00?logo=svelte&logoColor=white" alt="SvelteKit">
+  <img src="https://img.shields.io/badge/Svelte-FF3E00?logo=svelte&logoColor=white" alt="Svelte">
+  <img src="https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white" alt="TypeScript">
+  <img src="https://img.shields.io/badge/SQLite-003B57?logo=sqlite&logoColor=white" alt="SQLite">
+  <img src="https://img.shields.io/badge/UnoCSS-333333?logo=unocss&logoColor=white" alt="UnoCSS">
+  <img src="https://img.shields.io/badge/Plex-E5A00D?logo=plex&logoColor=white" alt="Plex">
+  <a href="https://github.com/Dispatcharr/Dispatcharr"><img src="https://img.shields.io/badge/Dispatcharr-IPTV-04b4ea" alt="Dispatcharr"></a>
+  <a href="https://deepwiki.com/engels74/otpravkarr"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki"></a>
 </p>
 
 ## Prerequisites

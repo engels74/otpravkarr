@@ -1,6 +1,7 @@
 import { fail } from "@sveltejs/kit";
 import { disableUser, enableUser, rotateCredentialsForMappingId } from "$lib/bridge/lifecycle";
 import { provisionUser } from "$lib/bridge/provisioner";
+import { db } from "$lib/db/connection";
 import { appendAuditLog } from "$lib/db/repositories/audit";
 import { getConfig } from "$lib/db/repositories/config";
 import { deleteUserSessionsByUserRef } from "$lib/db/repositories/sessions";
@@ -336,8 +337,13 @@ export const actions: Actions = {
   deleteMapping: async (event) => {
     const admin = await requireAdmin(event);
     const fd = await event.request.formData();
-    const id = Number(fd.get("id"));
-    if (!Number.isInteger(id) || id <= 0) {
+    const rawId = fd.get("id");
+    if (typeof rawId !== "string" || !/^[1-9]\d*$/.test(rawId)) {
+      return fail(400, { error: "Missing user mapping ID" });
+    }
+
+    const id = Number(rawId);
+    if (!Number.isSafeInteger(id)) {
       return fail(400, { error: "Missing user mapping ID" });
     }
 
@@ -347,17 +353,18 @@ export const actions: Actions = {
       return fail(400, { error: "Disable the user before deleting the local mapping." });
     }
 
-    let deleted = false;
     try {
-      deleteUserSessionsByUserRef(String(mapping.id));
-      deleted = deleteUserMapping(mapping.id);
+      db.transaction(() => {
+        deleteUserSessionsByUserRef(String(mapping.id));
+        if (!deleteUserMapping(mapping.id)) {
+          throw new Error("Failed to delete local mapping");
+        }
+      })();
     } catch (err) {
       return fail(500, {
         error: err instanceof Error ? err.message : "Failed to delete local mapping",
       });
     }
-
-    if (!deleted) return fail(500, { error: "Failed to delete local mapping" });
 
     try {
       appendAuditLog({

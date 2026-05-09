@@ -14,6 +14,7 @@ let stmtLastAccessed: ReturnType<typeof db.prepare> | null = null;
 let stmtLastSynced: ReturnType<typeof db.prepare> | null = null;
 let stmtPlexIdentity: ReturnType<typeof db.prepare> | null = null;
 let stmtGetById: ReturnType<typeof db.prepare> | null = null;
+let stmtDeleteById: ReturnType<typeof db.prepare> | null = null;
 
 function byPlexIdStmt() {
   stmtByPlexId ??= db.prepare("SELECT * FROM user_mappings WHERE plex_account_id = ?");
@@ -90,6 +91,11 @@ function plexIdentityStmt() {
 function getByIdStmt() {
   stmtGetById ??= db.prepare("SELECT * FROM user_mappings WHERE id = ?");
   return stmtGetById;
+}
+
+function deleteByIdStmt() {
+  stmtDeleteById ??= db.prepare("DELETE FROM user_mappings WHERE id = ?");
+  return stmtDeleteById;
 }
 
 /**
@@ -256,6 +262,15 @@ export function updatePlexIdentity(
 }
 
 /**
+ * Delete a user mapping by primary key.
+ * Returns true when exactly one row was deleted.
+ */
+export function deleteUserMapping(id: number): boolean {
+  const result = deleteByIdStmt().run(id);
+  return result.changes === 1;
+}
+
+/**
  * Reset prepared statements — for testing only.
  */
 export function _resetStatementsForTesting(): void {
@@ -271,4 +286,5 @@ export function _resetStatementsForTesting(): void {
   stmtLastSynced = null;
   stmtPlexIdentity = null;
   stmtGetById = null;
+  stmtDeleteById = null;
 }

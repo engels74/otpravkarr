@@ -3,7 +3,9 @@ import { disableUser, enableUser, rotateCredentialsForMappingId } from "$lib/bri
 import { provisionUser } from "$lib/bridge/provisioner";
 import { appendAuditLog } from "$lib/db/repositories/audit";
 import { getConfig } from "$lib/db/repositories/config";
+import { deleteUserSessionsByUserRef } from "$lib/db/repositories/sessions";
 import {
+  deleteUserMapping,
   getAllUserMappings,
   getUserMappingById,
   updateUserMapping,
@@ -325,6 +327,55 @@ export const actions: Actions = {
       // audit log failure should not mask the successful profile change
       console.warn(
         `Failed to append audit log for USER_PROFILE_CHANGED: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+
+    return { success: true };
+  },
+
+  deleteMapping: async (event) => {
+    const admin = await requireAdmin(event);
+    const fd = await event.request.formData();
+    const id = Number(fd.get("id"));
+    if (!Number.isInteger(id) || id <= 0) {
+      return fail(400, { error: "Missing user mapping ID" });
+    }
+
+    const mapping = getUserMappingById(id);
+    if (!mapping) return fail(400, { error: "User mapping not found" });
+    if (mapping.dispatcharr_user_id != null || mapping.dispatcharr_xc_password_enc != null) {
+      return fail(400, { error: "Disable the user before deleting the local mapping." });
+    }
+
+    let deleted = false;
+    try {
+      deleteUserSessionsByUserRef(String(mapping.id));
+      deleted = deleteUserMapping(mapping.id);
+    } catch (err) {
+      return fail(500, {
+        error: err instanceof Error ? err.message : "Failed to delete local mapping",
+      });
+    }
+
+    if (!deleted) return fail(500, { error: "Failed to delete local mapping" });
+
+    try {
+      appendAuditLog({
+        actor: admin.username,
+        action: AuditAction.USER_MAPPING_DELETED,
+        detail: {
+          mapping_id: mapping.id,
+          plex_username: mapping.plex_username,
+          plex_account_id: mapping.plex_account_id,
+          provisioning_mode: mapping.provisioning_mode,
+          was_active: mapping.is_active === 1,
+        },
+        ipAddress: event.getClientAddress(),
+      });
+    } catch (err) {
+      // audit log failure should not mask the successful local delete
+      console.warn(
+        `Failed to append audit log for USER_MAPPING_DELETED: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
 

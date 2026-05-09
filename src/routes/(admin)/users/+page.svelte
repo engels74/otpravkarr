@@ -6,6 +6,7 @@ import EllipsisIcon from "lucide-svelte/icons/ellipsis";
 import InfoIcon from "lucide-svelte/icons/info";
 import KeyRoundIcon from "lucide-svelte/icons/key-round";
 import LayersIcon from "lucide-svelte/icons/layers";
+import Trash2Icon from "lucide-svelte/icons/trash-2";
 import UsersIcon from "lucide-svelte/icons/users";
 import { toast } from "svelte-sonner";
 import { applyAction, enhance } from "$app/forms";
@@ -45,10 +46,12 @@ let profileDialogOpen = $state(false);
 let detailDialogOpen = $state(false);
 let passwordDialogOpen = $state(false);
 let disableDialogOpen = $state(false);
+let deleteDialogOpen = $state(false);
 let selectedMapping = $state<UserMapping | null>(null);
 let selectedGroupIds = $state<number[]>([]);
 let selectedProfileId = $state<number | null>(null);
 let disablingMapping = $state<UserMapping | null>(null);
+let deletingMapping = $state<UserMapping | null>(null);
 let oneTimePassword = $state("");
 let passwordCopyStatus = $state<"idle" | "copied" | "failed">("idle");
 
@@ -98,6 +101,10 @@ function getStatus(m: UserMapping): "active" | "inactive" | "orphaned" {
   if (m.is_active === 0) return "inactive";
   if (m.dispatcharr_user_id == null) return "orphaned";
   return "active";
+}
+
+function canDeleteLocalMapping(m: UserMapping): boolean {
+  return m.dispatcharr_user_id == null && m.dispatcharr_xc_password_enc == null;
 }
 
 function modeLabelText(mode: ProvisioningMode): string {
@@ -237,6 +244,34 @@ function makeEnableEnhance() {
         }
       } finally {
         submitting = false;
+      }
+    };
+  };
+}
+
+function makeDeleteEnhance() {
+  return () => {
+    submitting = true;
+    return async ({ result, update }: { result: ActionResult; update: () => Promise<void> }) => {
+      try {
+        if (result.type === "success") {
+          toast.success("Local mapping deleted.");
+          await update();
+        } else if (result.type === "failure") {
+          toast.error(
+            (result.data as { error?: string } | undefined)?.error ??
+              "Failed to delete local mapping.",
+          );
+          await update();
+        } else {
+          await applyAction(result);
+        }
+      } finally {
+        submitting = false;
+        deleteDialogOpen = false;
+        detailDialogOpen = false;
+        deletingMapping = null;
+        selectedMapping = null;
       }
     };
   };
@@ -440,6 +475,18 @@ async function copyOneTimePassword() {
                       <InfoIcon class="h-3.5 w-3.5" />
                       View Details
                     </DropdownMenu.Item>
+                    {#if canDeleteLocalMapping(m)}
+                      <DropdownMenu.Item
+                        onclick={() => {
+                          deletingMapping = m;
+                          deleteDialogOpen = true;
+                        }}
+                        class="text-destructive focus:text-destructive"
+                      >
+                        <Trash2Icon class="h-3.5 w-3.5" />
+                        Delete local mapping
+                      </DropdownMenu.Item>
+                    {/if}
                   </DropdownMenu.Content>
                 </DropdownMenu.Root>
               </Table.Cell>
@@ -684,6 +731,24 @@ async function copyOneTimePassword() {
         <input type="hidden" name="id" value={disablingMapping.id} />
         <Button variant="destructive" type="submit" disabled={submitting}>
           {submitting ? "Disabling…" : "Disable User"}
+        </Button>
+      </form>
+    {/if}
+  {/snippet}
+</ConfirmDialog>
+
+<!-- Delete Local Mapping Confirmation Dialog -->
+<ConfirmDialog
+  bind:open={deleteDialogOpen}
+  title={deletingMapping ? `Delete local mapping for ${deletingMapping.plex_username}?` : "Delete local mapping?"}
+  description="This removes only the local otpravkarr mapping and saved metadata. It does not contact Dispatcharr. The Plex user can be provisioned again by signing in."
+>
+  {#snippet confirm()}
+    {#if deletingMapping}
+      <form method="POST" action="?/deleteMapping" use:enhance={makeDeleteEnhance()}>
+        <input type="hidden" name="id" value={deletingMapping.id} />
+        <Button variant="destructive" type="submit" disabled={submitting}>
+          {submitting ? "Deleting…" : "Delete local mapping"}
         </Button>
       </form>
     {/if}

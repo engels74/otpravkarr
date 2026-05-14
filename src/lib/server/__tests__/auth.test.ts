@@ -577,19 +577,8 @@ describe("auth guards", () => {
       });
     });
 
-    it("throws error(404) when setup_completed is unset but a legacy admin exists", async () => {
+    it("does not throw when setup_completed is unset", async () => {
       mockSetupCompleted = null;
-      mockAdminExists = true;
-
-      await expect(requireSetupIncomplete()).rejects.toMatchObject({
-        type: "error",
-        status: 404,
-      });
-    });
-
-    it("does not throw when setup_completed is unset and no admin exists yet", async () => {
-      mockSetupCompleted = null;
-      mockAdminExists = false;
       await expect(requireSetupIncomplete()).resolves.toBeUndefined();
     });
   });
@@ -609,15 +598,8 @@ describe("auth guards", () => {
       await expect(isSetupComplete()).resolves.toBe(true);
     });
 
-    it("returns true when setup_completed is unset but a legacy admin exists", async () => {
+    it("returns false when setup_completed is unset", async () => {
       mockSetupCompleted = null;
-      mockAdminExists = true;
-      await expect(isSetupComplete()).resolves.toBe(true);
-    });
-
-    it("returns false when setup_completed is unset and no admin exists yet", async () => {
-      mockSetupCompleted = null;
-      mockAdminExists = false;
       await expect(isSetupComplete()).resolves.toBe(false);
     });
   });

@@ -120,7 +120,7 @@ Shared runes state module (`src/lib/state/user-session.svelte.ts`): export a `$s
 - Always import the SQLite handle as `db` from `$lib/db/connection`. It is a Proxy that lazy-initializes — do not call `new Database(...)` elsewhere.
 - All credentialled outbound URLs (Plex server URL, Dispatcharr URL, Dispatcharr external URL) must pass `isSafeHttpSecretUrl` before being stored or used. The Zod schemas in `validation.ts` already do this — keep new URL fields consistent.
 - Sessions are a single cookie (`SESSION_COOKIE_NAME = "otpravkarr_session"`) with `session_type` of `"admin"` or `"user"`. Use `requireAdmin` / `requireAdminApi` / `requireUser`; do not invent a third gate.
-- Setup is gated by the `setup_completed` config row, not by the presence of an admin account (legacy installs fall back to `adminExists()`). When extending setup, update `SETUP_COMPLETED_CONFIG_KEY` writes in `src/routes/setup/+page.server.ts`.
+- Setup is gated by the `setup_completed` config row, not by the presence of an admin account. When extending setup, update `SETUP_COMPLETED_CONFIG_KEY` writes in `src/routes/setup/+page.server.ts`.
 - The bootstrap token is in-memory and per-process. Restarting invalidates it; printing it lives in `hooks.server.ts:printBootstrapBanner`.
 - Tests use Vitest (`vitest.config.ts`, jsdom, `$lib` alias, `$app/forms` stubbed via `src/lib/test-stubs/app-forms.ts`); `vitest-setup.ts` is the global setup. E2E tests live in `e2e/` and are excluded from Vitest. Co-locate unit tests in `__tests__/` next to the code they cover.
 - Biome is the only linter/formatter. Do not add ESLint, Prettier, or Tailwind.

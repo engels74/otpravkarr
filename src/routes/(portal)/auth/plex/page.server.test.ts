@@ -1,7 +1,7 @@
 // @vitest-environment node
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { UserMapping } from "$lib/db/types";
+import type { AdminAccount, UserMapping } from "$lib/db/types";
 
 const state = vi.hoisted(() => ({
   oauthCookie: "oauth-pin-id" as string | undefined,
@@ -9,6 +9,13 @@ const state = vi.hoisted(() => ({
   configValues: {} as Record<string, string | null>,
   existingMappingByPlexId: null as UserMapping | null,
   cachedFriends: null as null | Array<{ id: number; email: string; status: string }>,
+  configuredAdmin: {
+    id: 1,
+    username: "admin",
+    password_hash: "hashed-password",
+    created_at: "2024-01-01 00:00:00",
+    updated_at: "2024-01-01 00:00:00",
+  } as AdminAccount | null,
   friends: [{ id: 12345, email: "test@example.com", status: "accepted" }] as Array<{
     id: number;
     email: string;
@@ -63,6 +70,7 @@ const mocks = vi.hoisted(() => ({
   createSession: vi.fn((_ref: string, _type: string, _ttl: number) => "session-id"),
   deleteSession: vi.fn((_id: string) => {}),
   updateLastAccessed: vi.fn((_id: number) => {}),
+  getConfiguredAdminAccount: vi.fn(async () => state.configuredAdmin),
   DispatcharrClient: vi.fn(),
   sealInitialPasswordFlash: vi.fn(async (_password: string) => "sealed-initial-password"),
 }));
@@ -110,6 +118,15 @@ vi.mock("$lib/dispatcharr/client", () => ({
 }));
 
 vi.mock("$lib/server/auth", () => ({
+  ADMIN_COOKIE_OPTIONS: {
+    path: "/",
+    httpOnly: true,
+    secure: false,
+    sameSite: "strict",
+    maxAge: 3600,
+  },
+  ADMIN_SESSION_TTL: 3600,
+  getConfiguredAdminAccount: mocks.getConfiguredAdminAccount,
   SESSION_COOKIE_NAME: "otpravkarr_session",
   USER_COOKIE_OPTIONS: {
     path: "/",
@@ -156,6 +173,13 @@ function resetAll() {
   };
   state.existingMappingByPlexId = null;
   state.cachedFriends = null;
+  state.configuredAdmin = {
+    id: 1,
+    username: "admin",
+    password_hash: "hashed-password",
+    created_at: "2024-01-01 00:00:00",
+    updated_at: "2024-01-01 00:00:00",
+  };
   state.friends = [{ id: 12345, email: "test@example.com", status: "accepted" }];
   state.provisionResult = {
     status: "provisioned",
@@ -483,7 +507,7 @@ describe("plex OAuth callback", () => {
     expect(mocks.sealInitialPasswordFlash).toHaveBeenCalledWith("TempPassword!23");
   });
 
-  it("redirects server owner to root when a one-time password needs display", async () => {
+  it("creates an admin session for the server owner and skips provisioning", async () => {
     mocks.completeOAuth.mockResolvedValueOnce({
       id: 99999,
       uuid: "admin-uuid",
@@ -493,20 +517,9 @@ describe("plex OAuth callback", () => {
       authenticationToken: "admin-token",
     });
     state.configValues.default_provisioning_mode = "self_managed";
-    state.provisionResult = {
-      status: "provisioned",
-      mapping: {
-        ...(state.provisionResult.mapping as UserMapping),
-        id: 5,
-        plex_account_id: 99999,
-        plex_username: "admin",
-        provisioning_mode: "self_managed",
-      },
-      initialPassword: "TempPassword!23",
-    };
 
     const { load } = await import("./+page.server");
-    const { cookies } = createCookies();
+    const { cookies, set } = createCookies();
 
     await expect(
       load({ cookies, getClientAddress: () => "127.0.0.1" } as unknown as Parameters<
@@ -514,8 +527,25 @@ describe("plex OAuth callback", () => {
       >[0]),
     ).rejects.toMatchObject({
       status: 303,
-      location: "/",
+      location: "/dashboard",
     });
+
+    expect(mocks.getConfiguredAdminAccount).toHaveBeenCalled();
+    expect(mocks.createSession).toHaveBeenCalledWith("admin", "admin", 3600);
+    expect(set).toHaveBeenCalledWith(
+      "otpravkarr_session",
+      "session-id",
+      expect.objectContaining({
+        path: "/",
+        httpOnly: true,
+        sameSite: "strict",
+      }),
+    );
+    expect(mocks.fetchFriends).not.toHaveBeenCalled();
+    expect(mocks.getUserMappingByPlexId).not.toHaveBeenCalled();
+    expect(mocks.provisionUser).not.toHaveBeenCalled();
+    expect(mocks.DispatcharrClient).not.toHaveBeenCalled();
+    expect(mocks.sealInitialPasswordFlash).not.toHaveBeenCalled();
   });
 
   it("handles already_exists provisioning result", async () => {
@@ -569,7 +599,7 @@ describe("plex OAuth callback", () => {
     );
   });
 
-  it("redirects server owner to /welcome after sign-in", async () => {
+  it("deletes a prior session before creating an admin session for the server owner", async () => {
     mocks.completeOAuth.mockResolvedValueOnce({
       id: 99999,
       uuid: "admin-uuid",
@@ -578,28 +608,7 @@ describe("plex OAuth callback", () => {
       thumb: "",
       authenticationToken: "admin-token",
     });
-    state.provisionResult = {
-      status: "already_exists",
-      mapping: {
-        id: 5,
-        plex_account_id: 99999,
-        plex_uuid: "admin-uuid",
-        plex_username: "admin",
-        plex_email: "admin@example.com",
-        plex_thumb: null,
-        dispatcharr_user_id: 50,
-        dispatcharr_username: "admin",
-        dispatcharr_xc_password_enc: "enc-pw",
-        dispatcharr_group_ids: "[1]",
-        dispatcharr_profile_id: 2,
-        provisioning_mode: "automatic",
-        is_active: 1,
-        created_at: "2024-01-01 00:00:00",
-        updated_at: "2024-01-01 00:00:00",
-        last_synced_at: null,
-        last_accessed_at: null,
-      },
-    };
+    state.priorSessionCookie = "prior-session-id";
 
     const { load } = await import("./+page.server");
     const { cookies } = createCookies();
@@ -610,8 +619,14 @@ describe("plex OAuth callback", () => {
       >[0]),
     ).rejects.toMatchObject({
       status: 303,
-      location: "/welcome",
+      location: "/dashboard",
     });
+
+    expect(mocks.deleteSession).toHaveBeenCalledWith("prior-session-id");
+    expect(mocks.createSession).toHaveBeenCalledWith("admin", "admin", 3600);
+    const deleteOrder = mocks.deleteSession.mock.invocationCallOrder[0] ?? Infinity;
+    const createOrder = mocks.createSession.mock.invocationCallOrder[0] ?? -Infinity;
+    expect(deleteOrder).toBeLessThan(createOrder);
   });
 
   it("allows server owner through even when not in friends list", async () => {
@@ -624,28 +639,6 @@ describe("plex OAuth callback", () => {
       authenticationToken: "admin-token",
     });
     state.friends = [];
-    state.provisionResult = {
-      status: "provisioned",
-      mapping: {
-        id: 5,
-        plex_account_id: 99999,
-        plex_uuid: "admin-uuid",
-        plex_username: "admin",
-        plex_email: "admin@example.com",
-        plex_thumb: null,
-        dispatcharr_user_id: 50,
-        dispatcharr_username: "admin",
-        dispatcharr_xc_password_enc: "enc-pw",
-        dispatcharr_group_ids: "[1]",
-        dispatcharr_profile_id: 2,
-        provisioning_mode: "automatic",
-        is_active: 1,
-        created_at: "2024-01-01 00:00:00",
-        updated_at: "2024-01-01 00:00:00",
-        last_synced_at: null,
-        last_accessed_at: null,
-      },
-    };
 
     const { load } = await import("./+page.server");
     const { cookies } = createCookies();
@@ -656,11 +649,14 @@ describe("plex OAuth callback", () => {
       >[0]),
     ).rejects.toMatchObject({
       status: 303,
-      location: "/welcome",
+      location: "/dashboard",
     });
+
+    expect(mocks.fetchFriends).not.toHaveBeenCalled();
+    expect(mocks.provisionUser).not.toHaveBeenCalled();
   });
 
-  it("blocks server owner when their mapping is inactive", async () => {
+  it("ignores an inactive duplicate mapping for the server owner", async () => {
     mocks.completeOAuth.mockResolvedValueOnce({
       id: 99999,
       uuid: "admin-uuid",
@@ -698,8 +694,38 @@ describe("plex OAuth callback", () => {
         typeof load
       >[0]),
     ).rejects.toMatchObject({
-      status: 403,
+      status: 303,
+      location: "/dashboard",
     });
+
+    expect(mocks.getUserMappingByPlexId).not.toHaveBeenCalled();
+    expect(mocks.provisionUser).not.toHaveBeenCalled();
+  });
+
+  it("throws 500 when server owner cannot resolve a configured admin account", async () => {
+    mocks.completeOAuth.mockResolvedValueOnce({
+      id: 99999,
+      uuid: "admin-uuid",
+      username: "admin",
+      email: "admin@example.com",
+      thumb: "",
+      authenticationToken: "admin-token",
+    });
+    state.configuredAdmin = null;
+
+    const { load } = await import("./+page.server");
+    const { cookies } = createCookies();
+
+    await expect(
+      load({ cookies, getClientAddress: () => "127.0.0.1" } as unknown as Parameters<
+        typeof load
+      >[0]),
+    ).rejects.toMatchObject({
+      status: 500,
+    });
+
+    expect(mocks.createSession).not.toHaveBeenCalled();
+    expect(mocks.provisionUser).not.toHaveBeenCalled();
   });
 
   it("defaults to automatic mode when config says self_managed", async () => {

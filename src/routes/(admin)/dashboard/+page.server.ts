@@ -5,11 +5,16 @@ import { getCachedFriends } from "$lib/plex/friends";
 import { getHealthStatus } from "$lib/scheduler/jobs/health";
 import { scheduler } from "$lib/scheduler/runner";
 import { requireAdmin } from "$lib/server/auth";
+import {
+  excludePlexOwnerMappings,
+  tryResolveConfiguredPlexOwnerAccountId,
+} from "$lib/server/plex-owner";
 import type { PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async (event) => {
   await requireAdmin(event);
-  const mappings = getAllUserMappings();
+  const ownerPlexAccountId = await tryResolveConfiguredPlexOwnerAccountId();
+  const mappings = excludePlexOwnerMappings(getAllUserMappings(), ownerPlexAccountId);
 
   // User stats
   const total = mappings.length;
@@ -38,7 +43,9 @@ export const load: PageServerLoad = async (event) => {
   const cachedFriends = getCachedFriends();
   const mappedPlexIds = new Set(mappings.map((m) => m.plex_account_id));
   const availableFriends = cachedFriends
-    ? cachedFriends.filter((f) => f.status === "accepted" && !mappedPlexIds.has(f.id))
+    ? cachedFriends.filter(
+        (f) => f.status === "accepted" && f.id !== ownerPlexAccountId && !mappedPlexIds.has(f.id),
+      )
     : null;
 
   return {

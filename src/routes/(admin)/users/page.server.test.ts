@@ -2,15 +2,17 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ProvisioningRequest, ProvisioningResult } from "$lib/bridge/types";
+import type { UserMapping } from "$lib/db/types";
 import type { DispatcharrClient } from "$lib/dispatcharr/client";
 
 const mocks = vi.hoisted(() => ({
   requireAdmin: vi.fn(async () => ({ id: 1, username: "admin" })),
   getConfig: vi.fn(async () => null as string | null),
-  getAllUserMappings: vi.fn(() => []),
+  getAllUserMappings: vi.fn(() => [] as UserMapping[]),
   getUserMappingById: vi.fn(
     () => null as { id: number; dispatcharr_user_id: number | null } | null,
   ),
+  tryResolveConfiguredPlexOwnerAccountId: vi.fn(async () => null as number | null),
   updateUserMapping: vi.fn(),
   deleteUserMapping: vi.fn(() => true),
   deleteUserSessionsByUserRef: vi.fn(() => 0),
@@ -29,6 +31,17 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("$lib/server/auth", () => ({
   requireAdmin: mocks.requireAdmin,
+}));
+
+vi.mock("$lib/server/plex-owner", () => ({
+  tryResolveConfiguredPlexOwnerAccountId: mocks.tryResolveConfiguredPlexOwnerAccountId,
+  excludePlexOwnerMappings: <T extends { plex_account_id: number }>(
+    mappings: T[],
+    ownerPlexAccountId: number | null,
+  ) =>
+    ownerPlexAccountId == null
+      ? mappings
+      : mappings.filter((mapping) => mapping.plex_account_id !== ownerPlexAccountId),
 }));
 
 vi.mock("$lib/db/connection", () => ({
@@ -87,6 +100,8 @@ function resetMocks() {
   mocks.getConfig.mockClear();
   mocks.getAllUserMappings.mockClear();
   mocks.getUserMappingById.mockClear();
+  mocks.tryResolveConfiguredPlexOwnerAccountId.mockClear();
+  mocks.tryResolveConfiguredPlexOwnerAccountId.mockResolvedValue(null);
   mocks.updateUserMapping.mockClear();
   mocks.deleteUserMapping.mockClear();
   mocks.deleteUserMapping.mockReturnValue(true);
@@ -115,9 +130,84 @@ function createActionEvent(body: FormData) {
   };
 }
 
+function createLoadEvent(search = "") {
+  return {
+    url: new URL(`http://localhost/users${search}`),
+  };
+}
+
 describe("admin users actions", () => {
   beforeEach(() => {
     resetMocks();
+  });
+
+  describe("load", () => {
+    function makeMapping(overrides?: Record<string, unknown>) {
+      return {
+        id: 1,
+        plex_account_id: 100,
+        plex_uuid: "plex-uuid",
+        plex_username: "regular-user",
+        plex_email: "regular@example.com",
+        plex_thumb: null,
+        dispatcharr_user_id: 42,
+        dispatcharr_username: "regular-user",
+        dispatcharr_xc_password_enc: "encrypted",
+        dispatcharr_group_ids: "[]",
+        dispatcharr_profile_id: null,
+        provisioning_mode: "automatic",
+        is_active: 1,
+        created_at: "2025-01-01 00:00:00",
+        updated_at: "2025-01-01 00:00:00",
+        last_synced_at: null,
+        last_accessed_at: null,
+        ...overrides,
+      } as UserMapping;
+    }
+
+    it("excludes a duplicate Plex-owner mapping from the users table data", async () => {
+      const { load } = await import("./+page.server");
+      mocks.tryResolveConfiguredPlexOwnerAccountId.mockResolvedValueOnce(999);
+      mocks.getAllUserMappings.mockReturnValueOnce([
+        makeMapping({ id: 1, plex_account_id: 999, plex_username: "plex-owner" }),
+        makeMapping({ id: 2, plex_account_id: 100, plex_username: "regular-user" }),
+      ]);
+
+      const result = (await load(createLoadEvent() as unknown as Parameters<typeof load>[0])) as {
+        mappings: UserMapping[];
+      };
+
+      expect(result.mappings).toHaveLength(1);
+      expect(result.mappings[0]?.plex_username).toBe("regular-user");
+      expect(mocks.requireAdmin).toHaveBeenCalledOnce();
+    });
+
+    it("preserves normal filtering for regular mapped users", async () => {
+      const { load } = await import("./+page.server");
+      mocks.tryResolveConfiguredPlexOwnerAccountId.mockResolvedValueOnce(999);
+      mocks.getAllUserMappings.mockReturnValueOnce([
+        makeMapping({ id: 1, plex_account_id: 999, plex_username: "plex-owner" }),
+        makeMapping({ id: 2, plex_account_id: 100, plex_username: "active-user" }),
+        makeMapping({
+          id: 3,
+          plex_account_id: 101,
+          plex_username: "inactive-user",
+          dispatcharr_user_id: null,
+          is_active: 0,
+        }),
+      ]);
+
+      const result = (await load(
+        createLoadEvent("?status=active&search=active") as unknown as Parameters<typeof load>[0],
+      )) as {
+        mappings: UserMapping[];
+        filters: { status: string; mode: string; search: string };
+      };
+
+      expect(result.mappings).toHaveLength(1);
+      expect(result.mappings[0]?.plex_username).toBe("active-user");
+      expect(result.filters).toEqual({ status: "active", mode: "all", search: "active" });
+    });
   });
 
   it("saves group IDs locally on changeGroup without calling Dispatcharr", async () => {

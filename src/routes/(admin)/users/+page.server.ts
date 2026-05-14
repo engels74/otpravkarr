@@ -17,6 +17,10 @@ import { listGroups } from "$lib/dispatcharr/endpoints/groups";
 import { listProfiles } from "$lib/dispatcharr/endpoints/profiles";
 import { updateUser } from "$lib/dispatcharr/endpoints/users";
 import { requireAdmin } from "$lib/server/auth";
+import {
+  excludePlexOwnerMappings,
+  tryResolveConfiguredPlexOwnerAccountId,
+} from "$lib/server/plex-owner";
 import type { Actions, PageServerLoad } from "./$types";
 
 function parseStoredGroupIds(rawGroupIds: string): number[] {
@@ -49,7 +53,8 @@ export const load: PageServerLoad = async (event) => {
   const mode = url.searchParams.get("mode") ?? "all";
   const search = url.searchParams.get("search") ?? "";
 
-  let mappings = getAllUserMappings();
+  const ownerPlexAccountId = await tryResolveConfiguredPlexOwnerAccountId();
+  let mappings = excludePlexOwnerMappings(getAllUserMappings(), ownerPlexAccountId);
 
   // Apply filters in-memory
   if (status !== "all") {

@@ -9,6 +9,9 @@ import { fetchFriends } from "$lib/plex/friends";
 import { completeOAuth } from "$lib/plex/oauth";
 import { PlexAuthError, type PlexIdentity } from "$lib/plex/types";
 import {
+  ADMIN_COOKIE_OPTIONS,
+  ADMIN_SESSION_TTL,
+  getConfiguredAdminAccount,
   isSecure,
   SESSION_COOKIE_NAME,
   USER_COOKIE_OPTIONS,
@@ -64,16 +67,30 @@ export const load: PageServerLoad = async ({ cookies, getClientAddress }) => {
   const account = await getAccount(plexAdminToken);
   const isServerOwner = account.id === identity.id;
 
-  if (!isServerOwner) {
-    const friends = await fetchFriends(account);
-
-    const hasAcceptedAccess = friends.some(
-      (friend) => friend.id === identity.id && friend.status.trim().toLowerCase() === "accepted",
-    );
-
-    if (!hasAcceptedAccess) {
-      throw error(403, "Your Plex account does not have access to this server");
+  if (isServerOwner) {
+    const admin = await getConfiguredAdminAccount();
+    if (!admin) {
+      throw error(500, "Server configuration incomplete: missing admin account");
     }
+
+    const priorSessionId = cookies.get(SESSION_COOKIE_NAME);
+    if (priorSessionId) {
+      deleteSession(priorSessionId);
+    }
+    const sessionId = createSession(admin.username, "admin", ADMIN_SESSION_TTL);
+    cookies.set(SESSION_COOKIE_NAME, sessionId, ADMIN_COOKIE_OPTIONS);
+
+    throw redirect(303, "/dashboard");
+  }
+
+  const friends = await fetchFriends(account);
+
+  const hasAcceptedAccess = friends.some(
+    (friend) => friend.id === identity.id && friend.status.trim().toLowerCase() === "accepted",
+  );
+
+  if (!hasAcceptedAccess) {
+    throw error(403, "Your Plex account does not have access to this server");
   }
 
   const existingMapping = getUserMappingByPlexId(identity.id);
@@ -145,6 +162,6 @@ export const load: PageServerLoad = async ({ cookies, getClientAddress }) => {
   // Update last accessed timestamp
   updateLastAccessed(mapping.id);
 
-  // 6. Redirect — server owner goes to /welcome unless the root page needs to display a one-time password
-  throw redirect(303, isServerOwner && !initialPassword ? "/welcome" : "/");
+  // 6. Redirect
+  throw redirect(303, "/");
 };

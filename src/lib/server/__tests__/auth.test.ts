@@ -11,6 +11,7 @@ let mockAdmin: AdminAccount | null = null;
 let mockUser: UserMapping | null = null;
 let mockSetupCompleted: string | null = null;
 let mockAdminExists = false;
+let mockConfigValues: Record<string, string | null> = {};
 
 // ---------------------------------------------------------------------------
 // Mock SvelteKit — redirect and error throw objects we can catch
@@ -39,7 +40,12 @@ vi.mock("$lib/db/repositories/admin", () => ({
 }));
 
 vi.mock("$lib/db/repositories/config", () => ({
-  getConfig: async (key: string) => (key === "setup_completed" ? mockSetupCompleted : null),
+  getConfig: async (key: string) =>
+    Object.hasOwn(mockConfigValues, key)
+      ? (mockConfigValues[key] ?? null)
+      : key === "setup_completed"
+        ? mockSetupCompleted
+        : null,
 }));
 
 vi.mock("$lib/db/repositories/users", () => ({
@@ -59,6 +65,7 @@ const {
   requireAdmin,
   requireAdminApi,
   requireUser,
+  getConfiguredAdminAccount,
   requireSetupIncomplete,
   isSetupComplete,
   SESSION_COOKIE_NAME,
@@ -144,6 +151,7 @@ describe("auth guards", () => {
     mockUser = null;
     mockSetupCompleted = null;
     mockAdminExists = false;
+    mockConfigValues = {};
   });
 
   afterEach(() => {
@@ -152,6 +160,7 @@ describe("auth guards", () => {
     mockUser = null;
     mockSetupCompleted = null;
     mockAdminExists = false;
+    mockConfigValues = {};
   });
 
   // -----------------------------------------------------------------------
@@ -283,6 +292,29 @@ describe("auth guards", () => {
       }
 
       expect(deleteSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("getConfiguredAdminAccount", () => {
+    it("returns the admin account named by admin_username config", async () => {
+      mockConfigValues.admin_username = "admin-user";
+      mockAdmin = validAdmin;
+
+      await expect(getConfiguredAdminAccount()).resolves.toEqual(validAdmin);
+    });
+
+    it("returns null when admin_username config is missing", async () => {
+      mockConfigValues.admin_username = null;
+      mockAdmin = validAdmin;
+
+      await expect(getConfiguredAdminAccount()).resolves.toBeNull();
+    });
+
+    it("returns null when configured admin no longer exists", async () => {
+      mockConfigValues.admin_username = "admin-user";
+      mockAdmin = null;
+
+      await expect(getConfiguredAdminAccount()).resolves.toBeNull();
     });
   });
 

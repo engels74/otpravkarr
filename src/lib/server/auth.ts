@@ -31,6 +31,15 @@ export const USER_COOKIE_OPTIONS = {
   maxAge: USER_SESSION_TTL,
 };
 
+export async function getConfiguredAdminAccount(): Promise<AdminAccount | null> {
+  const username = await getConfig("admin_username");
+  if (!username) {
+    return null;
+  }
+
+  return getAdminByUsername(username);
+}
+
 export async function requireAdmin(event: RequestEvent): Promise<AdminAccount> {
   const sessionId = event.cookies.get(SESSION_COOKIE_NAME);
   if (!sessionId) {

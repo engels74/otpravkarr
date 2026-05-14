@@ -67,6 +67,19 @@ vi.mock("$lib/plex/friends", () => ({
   fetchFriends: (...args: unknown[]) => mockFetchFriends(...args),
 }));
 
+vi.mock("$lib/server/plex-owner", () => ({
+  getPlexOwnerAccountIdFromAccount: (account: { id?: unknown }) =>
+    typeof account.id === "number" ? account.id : null,
+  rememberPlexOwnerAccountId: vi.fn(),
+  excludePlexOwnerMappings: <T extends { plex_account_id: number }>(
+    mappings: T[],
+    ownerPlexAccountId: number | null,
+  ) =>
+    ownerPlexAccountId == null
+      ? mappings
+      : mappings.filter((mapping) => mapping.plex_account_id !== ownerPlexAccountId),
+}));
+
 // Import after mocks
 const { rotateCredentials, rotateCredentialsForMappingId, disableUser, enableUser, reconcileSync } =
   await import("../lifecycle");
@@ -483,7 +496,7 @@ describe("enableUser", () => {
 // ---------------------------------------------------------------------------
 
 describe("reconcileSync", () => {
-  const mockAccount = { query: vi.fn() } as any;
+  const mockAccount = { id: 999, query: vi.fn() } as any;
 
   beforeEach(() => {
     mockGetAccount.mockResolvedValue(mockAccount);
@@ -502,6 +515,53 @@ describe("reconcileSync", () => {
 
     expect(report.disabled).toBe(1);
     expect(mockDeleteUser).toHaveBeenCalledWith(mockClient, 10);
+  });
+
+  it("does not disable an existing duplicate owner mapping when the owner is absent from friends", async () => {
+    const ownerMapping = makeMapping({
+      plex_account_id: 999,
+      plex_username: "plex-owner",
+      dispatcharr_user_id: 10,
+      is_active: 1,
+    });
+    mockFetchFriends.mockResolvedValueOnce([
+      { id: 200, email: "regular@example.com", status: "accepted" },
+    ]);
+    mockGetAllUserMappings.mockReturnValueOnce([ownerMapping]);
+
+    const report = await reconcileSync(mockClient, "admin-token");
+
+    expect(report.disabled).toBe(0);
+    expect(report.errors).toHaveLength(0);
+    expect(mockDeleteUser).not.toHaveBeenCalled();
+    expect(mockUpdateUserMapping).not.toHaveBeenCalled();
+    expect(mockUpdateLastSynced).not.toHaveBeenCalled();
+  });
+
+  it("still disables regular mappings removed from friends while skipping a duplicate owner mapping", async () => {
+    const ownerMapping = makeMapping({
+      id: 1,
+      plex_account_id: 999,
+      plex_username: "plex-owner",
+      dispatcharr_user_id: 10,
+      is_active: 1,
+    });
+    const removedFriendMapping = makeMapping({
+      id: 2,
+      plex_account_id: 100,
+      plex_username: "removed-user",
+      dispatcharr_user_id: 20,
+      is_active: 1,
+    });
+    mockFetchFriends.mockResolvedValueOnce([]);
+    mockGetAllUserMappings.mockReturnValueOnce([ownerMapping, removedFriendMapping]);
+    mockDeleteUser.mockResolvedValueOnce({ ok: true });
+
+    const report = await reconcileSync(mockClient, "admin-token");
+
+    expect(report.disabled).toBe(1);
+    expect(mockDeleteUser).toHaveBeenCalledOnce();
+    expect(mockDeleteUser).toHaveBeenCalledWith(mockClient, 20);
   });
 
   it("deactivates locally without Dispatcharr call when dispatcharr_user_id is null and friend removed", async () => {

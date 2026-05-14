@@ -18,6 +18,11 @@ import { getAccount } from "$lib/plex/client";
 import { fetchFriends } from "$lib/plex/friends";
 import type { PlexFriend } from "$lib/plex/types";
 import {
+  excludePlexOwnerMappings,
+  getPlexOwnerAccountIdFromAccount,
+  rememberPlexOwnerAccountId,
+} from "$lib/server/plex-owner";
+import {
   isTransientPlexError,
   isTransientResultError,
   retryAsync,
@@ -302,8 +307,13 @@ export async function reconcileSync(
   };
 
   let friends: PlexFriend[];
+  let plexOwnerAccountId: number | null = null;
   try {
     const account = await retryAsync(() => getAccount(plexAdminToken), isTransientPlexError);
+    plexOwnerAccountId = getPlexOwnerAccountIdFromAccount(account);
+    if (plexOwnerAccountId != null) {
+      rememberPlexOwnerAccountId(plexAdminToken, plexOwnerAccountId);
+    }
     friends = await retryAsync(() => fetchFriends(account), isTransientPlexError);
   } catch (error) {
     report.errors.push(
@@ -337,11 +347,14 @@ export async function reconcileSync(
   }
 
   // Only treat accepted friends as active — pending invites should not grant access
-  const acceptedFriends = friends.filter((f) => f.status === "accepted");
+  const acceptedFriends = friends.filter(
+    (f) => f.status === "accepted" && f.id !== plexOwnerAccountId,
+  );
   const friendIds = new Set(acceptedFriends.map((f) => f.id));
   const friendMap = new Map(acceptedFriends.map((f) => [f.id, f]));
+  const regularMappings = excludePlexOwnerMappings(allMappings, plexOwnerAccountId);
 
-  for (const mapping of allMappings) {
+  for (const mapping of regularMappings) {
     if (!friendIds.has(mapping.plex_account_id)) {
       // User removed from Plex friends — ensure disabled
       if (mapping.dispatcharr_user_id != null) {
@@ -473,7 +486,7 @@ export async function reconcileSync(
   }
 
   // Count new accepted friends not yet mapped
-  const mappedPlexIds = new Set(allMappings.map((m) => m.plex_account_id));
+  const mappedPlexIds = new Set(regularMappings.map((m) => m.plex_account_id));
   for (const friend of acceptedFriends) {
     if (!mappedPlexIds.has(friend.id)) {
       report.unmappedFriends++;

@@ -1,11 +1,13 @@
 // @vitest-environment node
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { UserMapping } from "$lib/db/types";
+import type { Session, UserMapping } from "$lib/db/types";
 import type { DispatcharrChannel, DispatcharrResult } from "$lib/dispatcharr/types";
 
 const state = vi.hoisted(() => ({
   configValues: {} as Record<string, string | null>,
+  session: null as Session | null,
+  user: null as UserMapping | null,
 }));
 
 const mocks = vi.hoisted(() => ({
@@ -13,6 +15,8 @@ const mocks = vi.hoisted(() => ({
   getConfig: vi.fn(async (key: string) => state.configValues[key] ?? null),
   getDispatcharrPublicUrl: vi.fn(async () => state.configValues.dispatcharr_url ?? null),
   DispatcharrClient: vi.fn(),
+  getSession: vi.fn((_id: string) => state.session),
+  getUserMappingById: vi.fn((_id: number) => state.user),
   createChannelEndpoints: vi.fn(() => ({
     getAllChannels: vi.fn(
       async (): Promise<DispatcharrResult<DispatcharrChannel[]>> => ({
@@ -37,6 +41,22 @@ vi.mock("$lib/db/repositories/config", () => ({
   getConfig: mocks.getConfig,
 }));
 
+vi.mock("$lib/db/repositories/sessions", () => ({
+  getSession: mocks.getSession,
+}));
+
+vi.mock("$lib/db/repositories/users", () => ({
+  getUserMappingById: mocks.getUserMappingById,
+}));
+
+vi.mock("$lib/db/repositories/admin", () => ({
+  getAdminByUsername: vi.fn(() => null),
+}));
+
+vi.mock("$app/environment", () => ({
+  dev: false,
+}));
+
 vi.mock("$lib/dispatcharr/client", () => ({
   DispatcharrClient: mocks.DispatcharrClient,
 }));
@@ -52,6 +72,14 @@ vi.mock("$lib/url/m3u", () => ({
 vi.mock("$lib/url/resolve.server", () => ({
   getDispatcharrPublicUrl: mocks.getDispatcharrPublicUrl,
 }));
+
+const userSession: Session = {
+  id: "sess-user-1",
+  user_ref: "7",
+  session_type: "user",
+  expires_at: "2099-01-01 00:00:00",
+  created_at: "2024-01-01 00:00:00",
+};
 
 function createUser(overrides: Partial<UserMapping> = {}): UserMapping {
   return {
@@ -76,77 +104,79 @@ function createUser(overrides: Partial<UserMapping> = {}): UserMapping {
   };
 }
 
+function createEvent(sessionId: string | undefined = "sess-user-1") {
+  return {
+    cookies: {
+      get: (name: string) => (name === "otpravkarr_session" ? sessionId : undefined),
+      delete: vi.fn(),
+    },
+  } as unknown as Parameters<typeof import("./+server").GET>[0];
+}
+
 describe("portal /m3u GET endpoint", () => {
   beforeEach(() => {
     state.configValues = {
       dispatcharr_url: "https://dispatcharr.example",
       dispatcharr_api_key: "key",
     };
+    state.session = { ...userSession };
+    state.user = createUser();
     mocks.decrypt.mockClear();
     mocks.getConfig.mockClear();
     mocks.getDispatcharrPublicUrl.mockClear();
     mocks.createChannelEndpoints.mockClear();
     mocks.generateM3U.mockClear();
+    mocks.getSession.mockClear();
+    mocks.getUserMappingById.mockClear();
   });
 
   it("redirects unauthenticated requests to /", async () => {
+    state.session = null;
     const { GET } = await import("./+server");
 
-    await expect(GET({ locals: {} } as unknown as Parameters<typeof GET>[0])).rejects.toMatchObject(
-      { status: 303, location: "/" },
-    );
+    await expect(
+      GET({
+        cookies: { get: () => undefined, delete: vi.fn() },
+      } as unknown as Parameters<typeof GET>[0]),
+    ).rejects.toMatchObject({
+      status: 303,
+      location: "/",
+    });
+  });
+
+  it("redirects inactive users to /", async () => {
+    state.user = createUser({ is_active: 0 });
+    const { GET } = await import("./+server");
+
+    await expect(GET(createEvent())).rejects.toMatchObject({ status: 303, location: "/" });
   });
 
   it("403s for non-automatic mode", async () => {
+    state.user = createUser({ provisioning_mode: "self_managed" });
     const { GET } = await import("./+server");
 
-    await expect(
-      GET({
-        locals: { user: createUser({ provisioning_mode: "self_managed" }) },
-      } as unknown as Parameters<typeof GET>[0]),
-    ).rejects.toMatchObject({ status: 403 });
-  });
-
-  it("403s for inactive users", async () => {
-    const { GET } = await import("./+server");
-
-    await expect(
-      GET({
-        locals: { user: createUser({ is_active: 0 }) },
-      } as unknown as Parameters<typeof GET>[0]),
-    ).rejects.toMatchObject({ status: 403 });
+    await expect(GET(createEvent())).rejects.toMatchObject({ status: 403 });
   });
 
   it("400s when no credentials are provisioned", async () => {
+    state.user = createUser({ dispatcharr_xc_password_enc: null });
     const { GET } = await import("./+server");
 
-    await expect(
-      GET({
-        locals: { user: createUser({ dispatcharr_xc_password_enc: null }) },
-      } as unknown as Parameters<typeof GET>[0]),
-    ).rejects.toMatchObject({ status: 400 });
+    await expect(GET(createEvent())).rejects.toMatchObject({ status: 400 });
   });
 
   it("500s when Dispatcharr config is missing", async () => {
     state.configValues = {};
     const { GET } = await import("./+server");
 
-    await expect(
-      GET({
-        locals: { user: createUser() },
-      } as unknown as Parameters<typeof GET>[0]),
-    ).rejects.toMatchObject({ status: 500 });
+    await expect(GET(createEvent())).rejects.toMatchObject({ status: 500 });
   });
 
   it("500s when no safe public URL is available without fetching channels or decrypting", async () => {
     mocks.getDispatcharrPublicUrl.mockResolvedValueOnce(null);
     const { GET } = await import("./+server");
 
-    await expect(
-      GET({
-        locals: { user: createUser() },
-      } as unknown as Parameters<typeof GET>[0]),
-    ).rejects.toMatchObject({ status: 500 });
+    await expect(GET(createEvent())).rejects.toMatchObject({ status: 500 });
     expect(mocks.generateM3U).not.toHaveBeenCalled();
     expect(mocks.createChannelEndpoints).not.toHaveBeenCalled();
     expect(mocks.decrypt).not.toHaveBeenCalled();
@@ -165,19 +195,13 @@ describe("portal /m3u GET endpoint", () => {
 
     const { GET } = await import("./+server");
 
-    await expect(
-      GET({
-        locals: { user: createUser() },
-      } as unknown as Parameters<typeof GET>[0]),
-    ).rejects.toMatchObject({ status: 502 });
+    await expect(GET(createEvent())).rejects.toMatchObject({ status: 502 });
   });
 
   it("returns the M3U body with attachment headers on success", async () => {
     const { GET } = await import("./+server");
 
-    const response = (await GET({
-      locals: { user: createUser() },
-    } as unknown as Parameters<typeof GET>[0])) as Response;
+    const response = (await GET(createEvent())) as Response;
 
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toBe("audio/mpegurl; charset=utf-8");
@@ -192,11 +216,10 @@ describe("portal /m3u GET endpoint", () => {
   });
 
   it("sanitizes a hostile username for the filename", async () => {
+    state.user = createUser({ dispatcharr_username: 'a"; rm -rf /; "' });
     const { GET } = await import("./+server");
 
-    const response = (await GET({
-      locals: { user: createUser({ dispatcharr_username: 'a"; rm -rf /; "' }) },
-    } as unknown as Parameters<typeof GET>[0])) as Response;
+    const response = (await GET(createEvent())) as Response;
 
     const disposition = response.headers.get("content-disposition") ?? "";
     expect(disposition.startsWith('attachment; filename="')).toBe(true);

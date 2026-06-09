@@ -1,22 +1,23 @@
-import { error, redirect } from "@sveltejs/kit";
+import { error } from "@sveltejs/kit";
 import { decrypt } from "$lib/crypto/encryption";
 import { getConfig } from "$lib/db/repositories/config";
 import { DispatcharrClient } from "$lib/dispatcharr/client";
 import { createChannelEndpoints } from "$lib/dispatcharr/endpoints/channels";
+import { requireUser } from "$lib/server/auth";
 import { generateM3U } from "$lib/url/m3u";
 import { getDispatcharrPublicUrl } from "$lib/url/resolve.server";
 import type { RequestHandler } from "./$types";
 
-export const GET: RequestHandler = async ({ locals }) => {
-  if (!locals.user) {
-    throw redirect(303, "/");
-  }
+export const GET: RequestHandler = async (event) => {
+  // requireUser handles anon/non-user/inactive (303 → "/" + cookie cleanup)
+  // and guarantees an active mapping for the credential-serving path below.
+  const user = await requireUser(event);
 
-  if (locals.user.provisioning_mode !== "automatic" || locals.user.is_active !== 1) {
+  if (user.provisioning_mode !== "automatic") {
     throw error(403, "Not allowed");
   }
 
-  if (!locals.user.dispatcharr_xc_password_enc) {
+  if (!user.dispatcharr_xc_password_enc) {
     throw error(400, "No credentials provisioned");
   }
 
@@ -38,8 +39,8 @@ export const GET: RequestHandler = async ({ locals }) => {
     throw error(502, "Failed to fetch channel list");
   }
 
-  const password = await decrypt(locals.user.dispatcharr_xc_password_enc, "credential-encryption");
-  const username = locals.user.dispatcharr_username ?? "";
+  const password = await decrypt(user.dispatcharr_xc_password_enc, "credential-encryption");
+  const username = user.dispatcharr_username ?? "";
 
   const m3uContent = generateM3U({
     channels: channelsResult.data,

@@ -9,6 +9,9 @@ const state = vi.hoisted(() => ({
   configValues: {} as Record<string, string | null>,
   user: null as UserMapping | null,
   initialPasswordCookie: undefined as string | undefined,
+  // requireUser-mock control: the active mapping it should resolve to, or null
+  // to model anon/inactive (which redirects to "/").
+  requireUserResult: null as UserMapping | null,
 }));
 
 const mocks = vi.hoisted(() => ({
@@ -132,9 +135,18 @@ vi.mock("$lib/dispatcharr/endpoints/channels", () => ({
   createChannelEndpoints: mocks.createChannelEndpoints,
 }));
 
-vi.mock("$lib/server/auth", () => ({
-  isSecure: false,
-}));
+vi.mock("$lib/server/auth", async () => {
+  const { redirect } = await import("@sveltejs/kit");
+  return {
+    isSecure: false,
+    requireUser: vi.fn(async (_event: unknown) => {
+      if (!state.requireUserResult) {
+        throw redirect(303, "/");
+      }
+      return state.requireUserResult;
+    }),
+  };
+});
 
 vi.mock("$lib/server/initial-password-flash", () => ({
   INITIAL_PASSWORD_COOKIE_NAME: "otpravkarr_initial_password",
@@ -194,6 +206,7 @@ function resetAll() {
   };
   state.user = null;
   state.initialPasswordCookie = undefined;
+  state.requireUserResult = null;
   envState.ORIGIN = "";
 
   for (const fn of Object.values(mocks)) {
@@ -223,13 +236,13 @@ describe("portal page server", () => {
       expect(result).toEqual({ authenticated: false });
     });
 
-    it("returns revoked status for inactive user", async () => {
+    it("returns revoked status when revokedUser is present", async () => {
       const { load } = await import("./+page.server");
-      const user = createUser({ is_active: 0 });
+      const revokedUser = createUser({ is_active: 0 });
       const { cookies } = createCookies();
 
       const result = await load({
-        locals: { user },
+        locals: { user: null, revokedUser },
         cookies,
       } as unknown as Parameters<typeof load>[0]);
 
@@ -593,28 +606,29 @@ describe("portal page server", () => {
   // ── refreshCredentials ──
 
   describe("refreshCredentials action", () => {
-    it("returns 401 when unauthenticated", async () => {
+    it("redirects to / when requireUser rejects (anon/inactive)", async () => {
+      // requireUserResult left null → requireUser throws redirect(303, "/").
       const { actions } = await import("./+page.server");
       const action = actions.refreshCredentials;
       if (!action) throw new Error("refreshCredentials action is undefined");
 
-      const result = await action({
-        locals: {},
-      } as unknown as Parameters<typeof action>[0]);
+      await expect(
+        action({
+          getClientAddress: () => "127.0.0.1",
+        } as unknown as Parameters<typeof action>[0]),
+      ).rejects.toMatchObject({ status: 303, location: "/" });
 
-      expect(result).toMatchObject({
-        status: 401,
-        data: { error: "not_authenticated" },
-      });
+      expect(mocks.rotateCredentialsForMappingId).not.toHaveBeenCalled();
     });
 
     it("returns 400 for non-automatic mode", async () => {
+      state.requireUserResult = createUser({ provisioning_mode: "self_managed" });
       const { actions } = await import("./+page.server");
       const action = actions.refreshCredentials;
       if (!action) throw new Error("refreshCredentials action is undefined");
 
       const result = await action({
-        locals: { user: createUser({ provisioning_mode: "self_managed" }) },
+        getClientAddress: () => "127.0.0.1",
       } as unknown as Parameters<typeof action>[0]);
 
       expect(result).toMatchObject({
@@ -623,30 +637,15 @@ describe("portal page server", () => {
       });
     });
 
-    it("returns 400 for inactive user", async () => {
-      const { actions } = await import("./+page.server");
-      const action = actions.refreshCredentials;
-      if (!action) throw new Error("refreshCredentials action is undefined");
-
-      const result = await action({
-        locals: { user: createUser({ is_active: 0 }) },
-      } as unknown as Parameters<typeof action>[0]);
-
-      expect(result).toMatchObject({
-        status: 400,
-        data: { error: "not_allowed" },
-      });
-      expect(mocks.rotateCredentialsForMappingId).not.toHaveBeenCalled();
-    });
-
     it("returns 500 when config is missing", async () => {
       state.configValues = {};
+      state.requireUserResult = createUser();
       const { actions } = await import("./+page.server");
       const action = actions.refreshCredentials;
       if (!action) throw new Error("refreshCredentials action is undefined");
 
       const result = await action({
-        locals: { user: createUser() },
+        getClientAddress: () => "127.0.0.1",
       } as unknown as Parameters<typeof action>[0]);
 
       expect(result).toMatchObject({
@@ -656,13 +655,13 @@ describe("portal page server", () => {
     });
 
     it("redirects on successful rotation", async () => {
+      state.requireUserResult = createUser();
       const { actions } = await import("./+page.server");
       const action = actions.refreshCredentials;
       if (!action) throw new Error("refreshCredentials action is undefined");
 
       await expect(
         action({
-          locals: { user: createUser() },
           getClientAddress: () => "127.0.0.1",
         } as unknown as Parameters<typeof action>[0]),
       ).rejects.toMatchObject({
@@ -676,7 +675,8 @@ describe("portal page server", () => {
       });
     });
 
-    it("returns 500 on rotation failure", async () => {
+    it("returns 500 (refresh_failed) on rotation failure", async () => {
+      state.requireUserResult = createUser();
       mocks.rotateCredentialsForMappingId.mockRejectedValueOnce(new Error("Rotation failed"));
 
       const { actions } = await import("./+page.server");
@@ -684,7 +684,6 @@ describe("portal page server", () => {
       if (!action) throw new Error("refreshCredentials action is undefined");
 
       const result = await action({
-        locals: { user: createUser() },
         getClientAddress: () => "127.0.0.1",
       } as unknown as Parameters<typeof action>[0]);
 

@@ -124,6 +124,7 @@ const localsInit: Handle = async ({ event, resolve }) => {
   event.locals.session = null;
   event.locals.admin = null;
   event.locals.user = null;
+  event.locals.revokedUser = null;
   return resolve(event);
 };
 
@@ -182,13 +183,27 @@ const sessionResolver: Handle = async ({ event, resolve }) => {
     const admin = getAdminByUsername(session.user_ref);
     event.locals.admin = admin ? { id: admin.id, username: admin.username } : null;
     event.locals.user = null;
+    event.locals.revokedUser = null;
     refreshSession(session.id, ADMIN_SESSION_TTL);
     event.cookies.set(SESSION_COOKIE_NAME, sessionId, ADMIN_COOKIE_OPTIONS);
   } else if (session.session_type === "user") {
     const userId = /^\d+$/.test(session.user_ref)
       ? Number.parseInt(session.user_ref, 10)
       : Number.NaN;
-    event.locals.user = Number.isNaN(userId) ? null : getUserMappingById(userId);
+    const mapping = Number.isNaN(userId) ? null : getUserMappingById(userId);
+    if (mapping?.is_active === 1) {
+      event.locals.user = mapping;
+      event.locals.revokedUser = null;
+    } else if (mapping) {
+      // Inactive mapping: keep it out of locals.user so credential-serving
+      // sinks (requireUser) never see a revoked user, but expose it via
+      // locals.revokedUser so the portal can still render the revoked view.
+      event.locals.user = null;
+      event.locals.revokedUser = mapping;
+    } else {
+      event.locals.user = null;
+      event.locals.revokedUser = null;
+    }
     event.locals.admin = null;
     refreshSession(session.id, USER_SESSION_TTL);
     event.cookies.set(SESSION_COOKIE_NAME, sessionId, USER_COOKIE_OPTIONS);
@@ -196,6 +211,7 @@ const sessionResolver: Handle = async ({ event, resolve }) => {
     event.locals.session = null;
     event.locals.admin = null;
     event.locals.user = null;
+    event.locals.revokedUser = null;
   }
 
   return resolve(event);

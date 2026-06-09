@@ -96,9 +96,23 @@ describe("welcome page load", () => {
     });
   });
 
-  it("redirects revoked (is_active=0) users to /", async () => {
+  it("redirects an admin (no user mapping) to /dashboard", async () => {
     const { load } = await import("./+page.server");
-    await expect(load(createEvent({ ...ownerMapping, is_active: 0 }))).rejects.toMatchObject({
+    await expect(
+      load({ locals: { user: null, admin: { id: 1, username: "admin" } } } as unknown as Parameters<
+        typeof load
+      >[0]),
+    ).rejects.toMatchObject({
+      status: 303,
+      location: "/dashboard",
+    });
+  });
+
+  it("redirects revoked users (modeled as user:null) to /", async () => {
+    // Inactive mappings never reach locals.user (sessionResolver routes them to
+    // locals.revokedUser), so welcome treats them like the unauthenticated case.
+    const { load } = await import("./+page.server");
+    await expect(load(createEvent(null))).rejects.toMatchObject({
       status: 303,
       location: "/",
     });

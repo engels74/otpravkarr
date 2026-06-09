@@ -75,6 +75,7 @@ vi.mock("$lib/db/repositories/config", () => ({
 vi.mock("$lib/db/repositories/sessions", () => ({
   getSession: () => mockSession,
   refreshSession: vi.fn(),
+  deleteSession: vi.fn(),
 }));
 
 vi.mock("$lib/db/repositories/users", () => ({
@@ -153,8 +154,11 @@ vi.mock("$lib/server/logging", () => ({
 const { handle } = await import("../hooks.server");
 const { validateOrigin } = await import("$lib/server/csrf");
 const { getConfig } = await import("$lib/db/repositories/config");
+const { deleteSession, refreshSession } = await import("$lib/db/repositories/sessions");
 const mockValidateOrigin = vi.mocked(validateOrigin);
 const mockGetConfig = vi.mocked(getConfig);
+const mockDeleteSession = vi.mocked(deleteSession);
+const mockRefreshSession = vi.mocked(refreshSession);
 
 const validAdminSession: Session = {
   id: "sess-admin-1",
@@ -220,6 +224,7 @@ function createMockEvent({
     cookies: {
       get: (name: string) => (name === "otpravkarr_session" ? sessionId : undefined),
       set: vi.fn(),
+      delete: vi.fn(),
     },
     setHeaders: vi.fn(),
     locals: {} as App.Locals,
@@ -245,6 +250,8 @@ describe("hooks sessionResolver", () => {
     mockValidateOrigin.mockReset();
     mockGetConfig.mockReset();
     mockGetConfig.mockResolvedValue(null);
+    mockDeleteSession.mockReset();
+    mockRefreshSession.mockReset();
   });
 
   it("populates locals for a valid admin session", async () => {
@@ -297,7 +304,7 @@ describe("hooks sessionResolver", () => {
     expect(event.locals.admin).toBeNull();
   });
 
-  it("leaves both user and revokedUser null when the mapping is missing", async () => {
+  it("invalidates the session when the mapping is missing", async () => {
     mockSession = { ...validUserSession };
     mockUser = null;
     const event = createMockEvent({ sessionId: "sess-user-1" });
@@ -307,8 +314,13 @@ describe("hooks sessionResolver", () => {
       resolve: async () => new Response(null, { status: 200 }),
     });
 
+    expect(event.locals.session).toBeNull();
     expect(event.locals.user).toBeNull();
     expect(event.locals.revokedUser).toBeNull();
+    expect(mockDeleteSession).toHaveBeenCalledWith("sess-user-1");
+    expect(event.cookies.delete).toHaveBeenCalledWith("otpravkarr_session", { path: "/" });
+    expect(mockRefreshSession).not.toHaveBeenCalled();
+    expect(event.cookies.set).not.toHaveBeenCalled();
   });
 
   it("clears locals.session when session_type is invalid", async () => {

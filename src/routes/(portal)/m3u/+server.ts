@@ -9,8 +9,9 @@ import { getDispatcharrPublicUrl } from "$lib/url/resolve.server";
 import type { RequestHandler } from "./$types";
 
 export const GET: RequestHandler = async (event) => {
-  // requireUser handles anon/non-user/inactive (303 → "/" + cookie cleanup)
-  // and guarantees an active mapping for the credential-serving path below.
+  // requireUser redirects anon/non-user/inactive sessions to "/" (clearing the
+  // cookie for bad sessions, but preserving it for inactive users) and
+  // guarantees an active mapping for the credential-serving path below.
   const user = await requireUser(event);
 
   if (user.provisioning_mode !== "automatic") {

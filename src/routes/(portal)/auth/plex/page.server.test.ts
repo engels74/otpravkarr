@@ -54,6 +54,7 @@ const mocks = vi.hoisted(() => ({
     thumb: "https://plex.tv/thumb",
     authenticationToken: "plex-token",
   })),
+  removePendingOAuth: vi.fn((_id: string) => {}),
   getAccount: vi.fn(async (_token: string) => ({
     id: 99999,
     uuid: "admin-uuid",
@@ -77,6 +78,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("$lib/plex/oauth", () => ({
   completeOAuth: mocks.completeOAuth,
+  removePendingOAuth: mocks.removePendingOAuth,
 }));
 
 vi.mock("$lib/plex/types", async () => {
@@ -751,5 +753,75 @@ describe("plex OAuth callback", () => {
         actor: "testuser",
       }),
     );
+  });
+
+  it("calls removePendingOAuth immediately after completeOAuth succeeds", async () => {
+    const { load } = await import("./+page.server");
+    const { cookies } = createCookies();
+
+    try {
+      await load({ cookies, getClientAddress: () => "127.0.0.1" } as unknown as Parameters<
+        typeof load
+      >[0]);
+    } catch {
+      // redirect expected
+    }
+
+    expect(mocks.removePendingOAuth).toHaveBeenCalledOnce();
+    expect(mocks.removePendingOAuth).toHaveBeenCalledWith("oauth-pin-id");
+    // Eviction must happen before provisioning (replay protection before side-effects).
+    const evictOrder = mocks.removePendingOAuth.mock.invocationCallOrder[0] ?? Infinity;
+    const provisionOrder = mocks.provisionUser.mock.invocationCallOrder[0] ?? -Infinity;
+    expect(evictOrder).toBeLessThan(provisionOrder);
+  });
+
+  it("calls removePendingOAuth even when completeOAuth succeeds but provisioning fails", async () => {
+    state.provisionResult = { status: "failed", error: "DB error" };
+
+    const { load } = await import("./+page.server");
+    const { cookies } = createCookies();
+
+    await expect(
+      load({ cookies, getClientAddress: () => "127.0.0.1" } as unknown as Parameters<
+        typeof load
+      >[0]),
+    ).rejects.toMatchObject({ status: 502 });
+
+    expect(mocks.removePendingOAuth).toHaveBeenCalledOnce();
+    expect(mocks.removePendingOAuth).toHaveBeenCalledWith("oauth-pin-id");
+  });
+
+  it("replaying the same oauth_id after a successful flow hits the 400 error path", async () => {
+    const { PlexAuthError } = await import("$lib/plex/types");
+
+    // First call succeeds normally; second call simulates a consumed/evicted id.
+    mocks.completeOAuth
+      .mockResolvedValueOnce({
+        id: 12345,
+        uuid: "abc-uuid",
+        username: "testuser",
+        email: "test@example.com",
+        thumb: "https://plex.tv/thumb",
+        authenticationToken: "plex-token",
+      })
+      .mockRejectedValueOnce(new PlexAuthError("OAuth session not found or expired"));
+
+    const { load } = await import("./+page.server");
+
+    // First request — succeeds (redirect 303).
+    const { cookies: cookies1 } = createCookies();
+    await expect(
+      load({ cookies: cookies1, getClientAddress: () => "127.0.0.1" } as unknown as Parameters<
+        typeof load
+      >[0]),
+    ).rejects.toMatchObject({ status: 303 });
+
+    // Replay — same oauth_id but the server-side cache is now gone.
+    const { cookies: cookies2 } = createCookies();
+    await expect(
+      load({ cookies: cookies2, getClientAddress: () => "127.0.0.1" } as unknown as Parameters<
+        typeof load
+      >[0]),
+    ).rejects.toMatchObject({ status: 400 });
   });
 });

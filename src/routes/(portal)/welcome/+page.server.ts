@@ -7,11 +7,9 @@ import type { PageServerLoad } from "./$types";
 export const load: PageServerLoad = async ({ locals }) => {
   const fallback = locals.admin ? "/dashboard" : "/";
 
+  // Inactive mappings never reach locals.user (sessionResolver routes them to
+  // locals.revokedUser), so the !locals.user redirect covers the revoked case.
   if (!locals.user) {
-    throw redirect(303, fallback);
-  }
-
-  if (locals.user.is_active === 0) {
     throw redirect(303, fallback);
   }
 

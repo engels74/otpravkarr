@@ -1,16 +1,19 @@
 import type { LayoutServerLoad } from "./$types";
 
 export const load: LayoutServerLoad = async ({ locals }) => {
-  if (!locals.user) {
+  // Revoked users still get portal chrome and an "Inactive" badge, so fall
+  // back to the inactive mapping when locals.user is absent.
+  const mapping = locals.user ?? locals.revokedUser;
+  if (!mapping) {
     return { user: null };
   }
 
   return {
     user: {
-      plexUsername: locals.user.plex_username,
-      plexThumb: locals.user.plex_thumb,
-      provisioningMode: locals.user.provisioning_mode,
-      isActive: locals.user.is_active === 1,
+      plexUsername: mapping.plex_username,
+      plexThumb: mapping.plex_thumb,
+      provisioningMode: mapping.provisioning_mode,
+      isActive: mapping.is_active === 1,
     },
   };
 };

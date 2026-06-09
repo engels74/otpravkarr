@@ -27,14 +27,32 @@ function createUser(overrides?: Partial<UserMapping>): UserMapping {
 }
 
 describe("portal layout server load", () => {
-  it("returns null user when not authenticated", async () => {
+  it("returns null user when neither user nor revokedUser is present", async () => {
     const { load } = await import("./+layout.server");
 
     const result = await load({
-      locals: { user: undefined },
+      locals: { user: null, revokedUser: null },
     } as unknown as Parameters<typeof load>[0]);
 
     expect(result).toEqual({ user: null });
+  });
+
+  it("falls back to revokedUser so chrome + Inactive badge survive", async () => {
+    const { load } = await import("./+layout.server");
+    const revokedUser = createUser({ is_active: 0 });
+
+    const result = await load({
+      locals: { user: null, revokedUser },
+    } as unknown as Parameters<typeof load>[0]);
+
+    expect(result).toEqual({
+      user: {
+        plexUsername: "testuser",
+        plexThumb: "https://plex.tv/users/abc/avatar",
+        provisioningMode: "automatic",
+        isActive: false,
+      },
+    });
   });
 
   it("returns user data when authenticated", async () => {

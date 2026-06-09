@@ -6,7 +6,7 @@ import { getUserMappingByPlexId, updateLastAccessed } from "$lib/db/repositories
 import { DispatcharrClient } from "$lib/dispatcharr/client";
 import { getAccount } from "$lib/plex/client";
 import { fetchFriends } from "$lib/plex/friends";
-import { completeOAuth } from "$lib/plex/oauth";
+import { completeOAuth, removePendingOAuth } from "$lib/plex/oauth";
 import { PlexAuthError, type PlexIdentity } from "$lib/plex/types";
 import {
   ADMIN_COOKIE_OPTIONS,
@@ -57,6 +57,13 @@ export const load: PageServerLoad = async ({ cookies, getClientAddress }) => {
     }
     throw err;
   }
+  // Evict server-side cache immediately after resolving identity so the same
+  // oauth_id cannot be replayed even if a later step (provisioning etc.) fails.
+  // Residual risk (follow-up, not in scope): planted-cookie login-CSRF — attacker
+  // who can set the victim's otpravkarr_oauth_id cookie could log the victim into
+  // the attacker's Plex identity; httpOnly+secure+sameSite=lax mitigates;
+  // __Host- prefix is a recorded follow-up.
+  removePendingOAuth(oauthId);
 
   // 3. Verify friend status
   const plexAdminToken = await getConfig("plex_admin_token");

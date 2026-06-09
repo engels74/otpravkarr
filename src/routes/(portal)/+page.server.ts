@@ -8,7 +8,7 @@ import { updateLastAccessed } from "$lib/db/repositories/users";
 import { DispatcharrClient } from "$lib/dispatcharr/client";
 import { initiateOAuth } from "$lib/plex/oauth";
 import { PlexAuthError } from "$lib/plex/types";
-import { isSecure } from "$lib/server/auth";
+import { isSecure, requireUser } from "$lib/server/auth";
 import {
   INITIAL_PASSWORD_COOKIE_NAME,
   openInitialPasswordFlash,
@@ -58,16 +58,17 @@ interface PlatformEntry {
 }
 
 export const load = async ({ locals, cookies }: RequestEvent) => {
+  // Revoked (inactive) users see a different view. sessionResolver routes
+  // inactive mappings to locals.revokedUser, keeping locals.user active-only.
+  if (locals.revokedUser) {
+    return { authenticated: true as const, revoked: true as const };
+  }
+
   if (!locals.user) {
     return { authenticated: false as const };
   }
 
   const user = locals.user;
-
-  // Revoked users see a different view
-  if (user.is_active === 0) {
-    return { authenticated: true as const, revoked: true as const };
-  }
 
   updateLastAccessed(user.id);
 
@@ -173,16 +174,13 @@ export const actions: Actions = {
     }
   },
 
-  refreshCredentials: async ({ locals, getClientAddress }) => {
-    if (!locals.user) {
-      return fail(401, { error: "not_authenticated" });
-    }
+  refreshCredentials: async (event) => {
+    // requireUser redirects anon/non-user/inactive sessions to "/" (clearing the
+    // cookie for bad sessions, but preserving it for inactive users) and
+    // guarantees an active mapping for the rotation below.
+    const user = await requireUser(event);
 
-    if (locals.user.is_active !== 1) {
-      return fail(400, { error: "not_allowed" });
-    }
-
-    if (locals.user.provisioning_mode !== "automatic") {
+    if (user.provisioning_mode !== "automatic") {
       return fail(400, { error: "not_automatic_mode" });
     }
 
@@ -195,9 +193,9 @@ export const actions: Actions = {
       }
 
       const client = new DispatcharrClient(dispatcharrUrl, dispatcharrApiKey);
-      await rotateCredentialsForMappingId(client, locals.user.id, {
-        actor: locals.user.plex_username,
-        ipAddress: getClientAddress(),
+      await rotateCredentialsForMappingId(client, user.id, {
+        actor: user.plex_username,
+        ipAddress: event.getClientAddress(),
       });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Failed to refresh credentials";

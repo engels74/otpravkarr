@@ -1,4 +1,5 @@
 import { env } from "$env/dynamic/private";
+import { assessSecretStrength } from "$lib/crypto/secret";
 
 export function validateEnv(): void {
   const secret = env.OTPRAVKARR_SECRET?.trim();
@@ -7,11 +8,10 @@ export function validateEnv(): void {
     console.error("Generate one with: openssl rand -base64 32");
     process.exit(1);
   }
-  if (secret.length < 32) {
-    console.error(
-      "FATAL: OTPRAVKARR_SECRET is too short (got %d chars, need ≥ 32).",
-      secret.length,
-    );
+  const strength = assessSecretStrength(secret);
+  if (!strength.ok) {
+    console.error("FATAL: OTPRAVKARR_SECRET does not meet minimum strength requirements.");
+    console.error(strength.reason);
     console.error("Generate one with: openssl rand -base64 32");
     process.exit(1);
   }

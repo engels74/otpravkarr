@@ -7,7 +7,7 @@ import { createBootstrapToken } from "$lib/crypto/bootstrap";
 import { initializeDatabase } from "$lib/db/connection";
 import { getAdminByUsername } from "$lib/db/repositories/admin";
 import { getConfig } from "$lib/db/repositories/config";
-import { getSession, refreshSession } from "$lib/db/repositories/sessions";
+import { deleteSession, getSession, refreshSession } from "$lib/db/repositories/sessions";
 import { getUserMappingById } from "$lib/db/repositories/users";
 import { createAuditRotationJob } from "$lib/scheduler/jobs/audit-rotation";
 import { createCleanupJob } from "$lib/scheduler/jobs/cleanup";
@@ -124,6 +124,7 @@ const localsInit: Handle = async ({ event, resolve }) => {
   event.locals.session = null;
   event.locals.admin = null;
   event.locals.user = null;
+  event.locals.revokedUser = null;
   return resolve(event);
 };
 
@@ -182,20 +183,46 @@ const sessionResolver: Handle = async ({ event, resolve }) => {
     const admin = getAdminByUsername(session.user_ref);
     event.locals.admin = admin ? { id: admin.id, username: admin.username } : null;
     event.locals.user = null;
+    event.locals.revokedUser = null;
     refreshSession(session.id, ADMIN_SESSION_TTL);
     event.cookies.set(SESSION_COOKIE_NAME, sessionId, ADMIN_COOKIE_OPTIONS);
   } else if (session.session_type === "user") {
     const userId = /^\d+$/.test(session.user_ref)
       ? Number.parseInt(session.user_ref, 10)
       : Number.NaN;
-    event.locals.user = Number.isNaN(userId) ? null : getUserMappingById(userId);
-    event.locals.admin = null;
-    refreshSession(session.id, USER_SESSION_TTL);
-    event.cookies.set(SESSION_COOKIE_NAME, sessionId, USER_COOKIE_OPTIONS);
+    const mapping = Number.isNaN(userId) ? null : getUserMappingById(userId);
+    if (mapping?.is_active === 1) {
+      event.locals.user = mapping;
+      event.locals.revokedUser = null;
+      event.locals.admin = null;
+      refreshSession(session.id, USER_SESSION_TTL);
+      event.cookies.set(SESSION_COOKIE_NAME, sessionId, USER_COOKIE_OPTIONS);
+    } else if (mapping) {
+      // Inactive mapping: keep it out of locals.user so credential-serving
+      // sinks (requireUser) never see a revoked user, but expose it via
+      // locals.revokedUser so the portal can still render the revoked view.
+      event.locals.user = null;
+      event.locals.revokedUser = mapping;
+      event.locals.admin = null;
+      refreshSession(session.id, USER_SESSION_TTL);
+      event.cookies.set(SESSION_COOKIE_NAME, sessionId, USER_COOKIE_OPTIONS);
+    } else {
+      // Missing mapping: the underlying user no longer exists, so there is no
+      // valid identity to maintain. Invalidate the orphaned ("ghost") session
+      // instead of sliding its expiry, which would otherwise keep it alive
+      // indefinitely and risk identity confusion if the mapping ID is reused.
+      deleteSession(session.id);
+      event.cookies.delete(SESSION_COOKIE_NAME, { path: "/" });
+      event.locals.session = null;
+      event.locals.user = null;
+      event.locals.revokedUser = null;
+      event.locals.admin = null;
+    }
   } else {
     event.locals.session = null;
     event.locals.admin = null;
     event.locals.user = null;
+    event.locals.revokedUser = null;
   }
 
   return resolve(event);

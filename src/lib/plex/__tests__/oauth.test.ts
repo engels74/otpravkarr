@@ -178,6 +178,53 @@ describe("oauth", () => {
       removePendingOAuth(id);
       expect(getPendingOAuth(id)).toBe(false);
     });
+
+    it("evicts completed cache so a subsequent completeOAuth call fails after eviction", async () => {
+      const fakeWebLogin = { id: 1, code: "abc", uri: "https://plex.tv/auth#abc" };
+      mockGetWebLogin.mockResolvedValue(fakeWebLogin);
+      mockWebLoginCheck.mockResolvedValue({
+        id: 42,
+        uuid: "uuid-123",
+        username: "testuser",
+        email: "test@example.com",
+        thumb: "https://plex.tv/thumb.png",
+        authenticationToken: "tok-abc",
+      });
+
+      const { id } = await initiateOAuth("https://example.com/callback");
+      const identity = await completeOAuth(id);
+      expect(identity.id).toBe(42);
+
+      // Evict — simulates portal single-use enforcement.
+      removePendingOAuth(id);
+
+      // Second completeOAuth must fail: both pending and completed are gone.
+      await expect(completeOAuth(id)).rejects.toThrow("OAuth session not found or expired");
+    });
+
+    it("setup two-step semantics: completeOAuth twice without eviction returns same identity", async () => {
+      const fakeWebLogin = { id: 1, code: "abc", uri: "https://plex.tv/auth#abc" };
+      mockGetWebLogin.mockResolvedValue(fakeWebLogin);
+      mockWebLoginCheck.mockResolvedValue({
+        id: 42,
+        uuid: "uuid-123",
+        username: "testuser",
+        email: "test@example.com",
+        thumb: "https://plex.tv/thumb.png",
+        authenticationToken: "tok-abc",
+      });
+
+      const { id } = await initiateOAuth("https://example.com/callback");
+
+      // First call (oauth_discover): resolves and caches.
+      const first = await completeOAuth(id);
+      // Second call (oauth_complete): returns cached identity without re-checking.
+      const second = await completeOAuth(id);
+
+      expect(first).toEqual(second);
+      // webLoginCheck must only have been called once (cache hit on second call).
+      expect(mockWebLoginCheck).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe("cleanExpiredOAuth", () => {

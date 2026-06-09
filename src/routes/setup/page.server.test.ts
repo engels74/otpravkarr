@@ -124,6 +124,7 @@ vi.mock("$lib/plex/oauth", () => ({
     authenticationToken: "plex-auth-token",
   })),
   initiateOAuth: vi.fn(),
+  removePendingOAuth: vi.fn(),
 }));
 
 vi.mock("$lib/plex/types", () => ({

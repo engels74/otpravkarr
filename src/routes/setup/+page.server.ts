@@ -16,7 +16,7 @@ import { listGroups } from "$lib/dispatcharr/endpoints/groups";
 import { createHealthEndpoints } from "$lib/dispatcharr/endpoints/health";
 import { listProfiles } from "$lib/dispatcharr/endpoints/profiles";
 import { discoverServers, validateServerToken } from "$lib/plex/client";
-import { completeOAuth, initiateOAuth } from "$lib/plex/oauth";
+import { completeOAuth, initiateOAuth, removePendingOAuth } from "$lib/plex/oauth";
 import { PlexAuthError, PlexConnectionError } from "$lib/plex/types";
 import { seedInitialHealth } from "$lib/scheduler/jobs/health";
 import {
@@ -543,6 +543,10 @@ export const actions: Actions = {
           setConfig("plex_admin_token", identity.authenticationToken, true),
           setConfig("plex_machine_id", serverInfo.machineIdentifier),
         ]);
+        // Evict after config is persisted so the id cannot be replayed on a
+        // subsequent setup step. The oauth_discover branch intentionally omits
+        // eviction because setup calls completeOAuth twice (discover, then complete).
+        removePendingOAuth(oauthId);
         safeAuditSetupStep(
           adminUsername,
           "plex_configured",

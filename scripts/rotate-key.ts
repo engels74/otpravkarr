@@ -11,6 +11,7 @@
  */
 
 import { Database } from "bun:sqlite";
+import { assessSecretStrength } from "../src/lib/crypto/secret";
 
 // ── Constants (must match src/lib/crypto/keys.ts and encryption.ts) ─────────
 
@@ -84,8 +85,10 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  if (newSecret.length < 32) {
-    console.error("Error: NEW_SECRET is too short (got %d chars, need >= 32).", newSecret.length);
+  const strength = assessSecretStrength(newSecret);
+  if (!strength.ok) {
+    console.error("Error: NEW_SECRET does not meet minimum strength requirements.");
+    console.error(strength.reason);
     console.error("Generate one with: openssl rand -base64 32");
     process.exit(1);
   }

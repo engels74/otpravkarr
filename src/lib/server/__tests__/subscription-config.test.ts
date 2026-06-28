@@ -15,6 +15,7 @@ const {
   getQuarantineGroupState,
   getQuarantineGroupNames,
   setQuarantineGroupNames,
+  applyPersistedQuarantineGroupState,
 } = await import("../subscription-config");
 
 function group(id: number, name: string): DispatcharrChannelGroup {
@@ -87,6 +88,34 @@ describe("setQuarantineGroupNames / getQuarantineGroupNames", () => {
       source: "plugin",
       refreshedAt: "2026-06-28T13:20:00.000Z",
     });
+  });
+});
+
+describe("applyPersistedQuarantineGroupState", () => {
+  afterEach(() => {
+    setQuarantineGroupNames([]);
+  });
+
+  it("hydrates from valid pluginNames even when resolvedNames is missing", () => {
+    // `resolvedNames` is rebuilt from `pluginNames`, so a partial payload that
+    // omits it must still restore the matcher rather than silently fall back.
+    const ok = applyPersistedQuarantineGroupState({
+      version: 1,
+      pluginNames: ["Dead Channels"],
+      source: "plugin",
+      refreshedAt: "2026-06-28T13:20:00.000Z",
+    });
+    expect(ok).toBe(true);
+    expect(isQuarantineGroup("Dead Channels")).toBe(true);
+    expect(getQuarantineGroupState()).toMatchObject({
+      pluginNames: ["Dead Channels"],
+      resolvedNames: ["Graveyard", "Slow", "Black Screens", "Dead Channels"],
+      source: "plugin",
+    });
+  });
+
+  it("rejects a v1 payload whose pluginNames is malformed", () => {
+    expect(applyPersistedQuarantineGroupState({ version: 1, pluginNames: [1, 2] })).toBe(false);
   });
 });
 

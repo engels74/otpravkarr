@@ -210,10 +210,14 @@ export async function reconcileGroupProfile(
     if (got.ok && got.data.name.startsWith(ownedPrefix)) {
       if (profileNameNeedsCsvRepair(got.data.name)) {
         // Legacy profile names may contain commas from before profileNameForGroup
-        // normalized them. ECM stores scope as CSV, so keep the old remote
-        // profile untouched and move the local mapping to an exact canonical
-        // comma-free profile instead of re-adopting the unsafe prefix match.
-        const repaired = await adoptOrCreateProfile(client, expectedName);
+        // normalized them. ECM stores scope as CSV, so keep the old comma-bearing
+        // remote profile untouched and move the local mapping onto a comma-free
+        // one. Passing ownedPrefix reuses an existing comma-free prefix-owned
+        // profile if one already exists (the scan filters comma-bearing names
+        // out, so the unsafe match is still skipped) — without it a comma-free
+        // profile under a different suffix, e.g. after a rename, would be
+        // orphaned and a duplicate created.
+        const repaired = await adoptOrCreateProfile(client, expectedName, ownedPrefix);
         if (!repaired.ok) return repaired;
         const saved = upsertGroupProfileSafe(groupId, repaired.data.id, repaired.data.name);
         if (!saved.ok) return saved;

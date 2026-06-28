@@ -174,9 +174,13 @@ export function applyPersistedQuarantineGroupState(parsed: unknown): boolean {
   const payload = parsed as Record<string, unknown>;
   if (payload.version !== 1) return false;
 
+  // `resolvedNames` is intentionally not consulted: hydration rebuilds the
+  // resolved set from `pluginNames` unioned with the built-in defaults (via
+  // setQuarantineGroupNames → buildQuarantineState), so valid `pluginNames`
+  // alone is sufficient to restore the matcher. Gating on a persisted
+  // `resolvedNames` would silently fall back to defaults for partial payloads.
   const pluginNames = strictStringArray(payload.pluginNames);
-  const resolvedNames = strictStringArray(payload.resolvedNames);
-  if (!pluginNames || !resolvedNames) return false;
+  if (!pluginNames) return false;
 
   setQuarantineGroupNames(pluginNames, {
     source: isStateSource(payload.source) ? payload.source : "plugin",

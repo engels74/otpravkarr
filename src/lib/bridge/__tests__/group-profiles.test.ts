@@ -226,6 +226,11 @@ describe("reconcileGroupProfile", () => {
     vi.mocked(getProfile).mockResolvedValue(
       ok(profile(100, "otpravkarr:g1:Sports, News", [1, 2, 3])),
     );
+    // Only the comma-bearing profile exists, so the prefix scan filters it out
+    // (unsafe) and falls through to create the canonical comma-free name.
+    vi.mocked(listProfiles).mockResolvedValue(
+      ok([{ id: 100, name: "otpravkarr:g1:Sports, News" }]),
+    );
     vi.mocked(createProfile).mockResolvedValue(
       ok(profile(200, "otpravkarr:g1:Sports News", [1, 2, 3])),
     );
@@ -239,6 +244,36 @@ describe("reconcileGroupProfile", () => {
     expect(bulkUpdateProfileMembership).toHaveBeenCalledWith(client, 200, [
       { channel_id: 1, enabled: false },
     ]);
+  });
+
+  it("reuses an existing comma-free prefix profile during repair instead of creating a duplicate", async () => {
+    // The active mapping still points at a comma-bearing profile, but a comma-free
+    // prefix-owned profile already exists under a different suffix (e.g. a prior
+    // repair landed, then the group was renamed). Repair must adopt that profile
+    // rather than create a third one and leave it orphaned.
+    vi.mocked(getGroupProfile).mockReturnValue({
+      group_id: 1,
+      profile_id: 100,
+      profile_name: "otpravkarr:g1:Sports, News",
+      created_at: "",
+      updated_at: "",
+    });
+    vi.mocked(getProfile)
+      .mockResolvedValueOnce(ok(profile(100, "otpravkarr:g1:Sports, News", [1, 2, 3])))
+      .mockResolvedValueOnce(ok(profile(150, "otpravkarr:g1:Old News", [1, 2])));
+    vi.mocked(listProfiles).mockResolvedValue(
+      ok([
+        { id: 100, name: "otpravkarr:g1:Sports, News" },
+        { id: 150, name: "otpravkarr:g1:Old News" },
+      ]),
+    );
+
+    const result = await reconcileGroupProfile(client, 1, "Fresh News", new Set([2]));
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.data).toBe(150);
+    expect(createProfile).not.toHaveBeenCalled();
+    expect(upsertGroupProfile).toHaveBeenCalledWith(1, 150, "otpravkarr:g1:Old News");
   });
 
   it("does not adopt a comma-bearing prefix profile when rebuilding a lost mapping", async () => {

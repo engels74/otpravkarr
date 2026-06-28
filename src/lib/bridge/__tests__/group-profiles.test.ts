@@ -29,6 +29,7 @@ const { getProfile, createProfile, bulkUpdateProfileMembership, listProfiles } =
 const {
   buildGroupChannelMap,
   profileNameForGroup,
+  profileNameNeedsCsvRepair,
   reconcileGroupProfile,
   ensureEmptyProfile,
   EMPTY_PROFILE_NAME,
@@ -84,6 +85,11 @@ describe("profileNameForGroup", () => {
     expect(profileNameForGroup(42, "Sports, News")).toBe("otpravkarr:g42:Sports News");
     expect(profileNameForGroup(7, "A,,B")).toBe("otpravkarr:g7:A B");
     expect(profileNameForGroup(7, "Sports, News")).not.toContain(",");
+  });
+
+  it("detects legacy comma-bearing profile names that need repair", () => {
+    expect(profileNameNeedsCsvRepair("otpravkarr:g1:Sports, News")).toBe(true);
+    expect(profileNameNeedsCsvRepair("otpravkarr:g1:Sports News")).toBe(false);
   });
 });
 
@@ -207,6 +213,48 @@ describe("reconcileGroupProfile", () => {
     if (result.ok) expect(result.data).toBe(55);
     expect(createProfile).not.toHaveBeenCalled();
     expect(upsertGroupProfile).toHaveBeenCalledWith(1, 55, "otpravkarr:g1:OldName");
+  });
+
+  it("repairs an actively mapped comma-bearing owned profile to the canonical name", async () => {
+    vi.mocked(getGroupProfile).mockReturnValue({
+      group_id: 1,
+      profile_id: 100,
+      profile_name: "otpravkarr:g1:Sports, News",
+      created_at: "",
+      updated_at: "",
+    });
+    vi.mocked(getProfile).mockResolvedValue(
+      ok(profile(100, "otpravkarr:g1:Sports, News", [1, 2, 3])),
+    );
+    vi.mocked(createProfile).mockResolvedValue(
+      ok(profile(200, "otpravkarr:g1:Sports News", [1, 2, 3])),
+    );
+
+    const result = await reconcileGroupProfile(client, 1, "Sports, News", new Set([2, 3]));
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.data).toBe(200);
+    expect(createProfile).toHaveBeenCalledWith(client, "otpravkarr:g1:Sports News");
+    expect(upsertGroupProfile).toHaveBeenCalledWith(1, 200, "otpravkarr:g1:Sports News");
+    expect(bulkUpdateProfileMembership).toHaveBeenCalledWith(client, 200, [
+      { channel_id: 1, enabled: false },
+    ]);
+  });
+
+  it("does not adopt a comma-bearing prefix profile when rebuilding a lost mapping", async () => {
+    vi.mocked(getGroupProfile).mockReturnValue(null);
+    vi.mocked(listProfiles).mockResolvedValue(ok([{ id: 55, name: "otpravkarr:g1:Sports, News" }]));
+    vi.mocked(createProfile).mockResolvedValue(
+      ok(profile(201, "otpravkarr:g1:Sports News", [1, 2])),
+    );
+
+    const result = await reconcileGroupProfile(client, 1, "Sports, News", new Set([2]));
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.data).toBe(201);
+    expect(createProfile).toHaveBeenCalledWith(client, "otpravkarr:g1:Sports News");
+    expect(getProfile).not.toHaveBeenCalledWith(client, 55);
+    expect(upsertGroupProfile).toHaveBeenCalledWith(1, 201, "otpravkarr:g1:Sports News");
   });
 });
 

@@ -69,8 +69,42 @@ describe("reconcileQuarantineGroups", () => {
     // Persisted for restart hydration.
     expect(mocks.setConfig).toHaveBeenCalledWith(
       QUARANTINE_GROUP_NAMES_KEY,
-      JSON.stringify(result.names),
+      expect.stringContaining('"version":1'),
     );
+    const persisted = JSON.parse(mocks.setConfig.mock.calls[0]?.[1] as string) as Record<
+      string,
+      unknown
+    >;
+    expect(persisted).toMatchObject({
+      version: 1,
+      pluginNames: ["Dead Channels", "Blank", "Laggy"],
+      resolvedNames: ["Graveyard", "Slow", "Black Screens", "Dead Channels", "Blank", "Laggy"],
+      source: "plugin",
+    });
+    expect(persisted.refreshedAt).toEqual(expect.any(String));
+  });
+
+  it("replaces plugin-derived names wholesale after a successful plugin read", async () => {
+    setQuarantineGroupNames(["Old Dead"]);
+    mocks.listPlugins.mockResolvedValue(
+      pluginsOk([
+        {
+          key: "iptv_checker",
+          name: "IPTV Checker",
+          enabled: true,
+          settings: {
+            move_to_group_name: "New Dead",
+          },
+        },
+      ]),
+    );
+
+    const result = await reconcileQuarantineGroups(client);
+
+    expect(result.source).toBe("plugin");
+    expect(isQuarantineGroup("Old Dead")).toBe(false);
+    expect(isQuarantineGroup("New Dead")).toBe(true);
+    expect(isQuarantineGroup("Graveyard")).toBe(true);
   });
 
   it("falls back to defaults when IPTV Checker is absent", async () => {
@@ -167,6 +201,23 @@ describe("hydrateQuarantineGroupsFromConfig", () => {
     expect(isQuarantineGroup("Graveyard")).toBe(true); // defaults always present
   });
 
+  it("hydrates structured quarantine state", async () => {
+    mocks.getConfig.mockResolvedValue(
+      JSON.stringify({
+        version: 1,
+        pluginNames: ["Dead Channels"],
+        resolvedNames: ["Graveyard", "Slow", "Black Screens", "Dead Channels"],
+        source: "plugin",
+        refreshedAt: "2026-06-28T13:20:00.000Z",
+      }),
+    );
+
+    await hydrateQuarantineGroupsFromConfig();
+
+    expect(isQuarantineGroup("Dead Channels")).toBe(true);
+    expect(isQuarantineGroup("Graveyard")).toBe(true);
+  });
+
   it("keeps defaults when nothing is persisted", async () => {
     mocks.getConfig.mockResolvedValue(null);
     await hydrateQuarantineGroupsFromConfig();
@@ -177,5 +228,11 @@ describe("hydrateQuarantineGroupsFromConfig", () => {
     mocks.getConfig.mockResolvedValue("{not json");
     await expect(hydrateQuarantineGroupsFromConfig()).resolves.toBeUndefined();
     expect(isQuarantineGroup("Graveyard")).toBe(true);
+  });
+
+  it("ignores malformed structured quarantine state", async () => {
+    mocks.getConfig.mockResolvedValue(JSON.stringify({ version: 1, pluginNames: "bad" }));
+    await hydrateQuarantineGroupsFromConfig();
+    expect(getQuarantineGroupNames()).toEqual(["Graveyard", "Slow", "Black Screens"]);
   });
 });

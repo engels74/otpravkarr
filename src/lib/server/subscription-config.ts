@@ -23,23 +23,97 @@ export const ALLOW_USER_SELF_SELECT_KEY = "allow_user_self_select";
  * These names are the BUILT-IN DEFAULTS. They are the IPTV Checker plugin's
  * own factory defaults (`move_to_group_name`/`move_low_framerate_group`/
  * `move_black_screen_group`), but the plugin lets admins rename them. The live
- * names are reconciled from the plugin each sync cycle and merged on top of
- * these defaults (see bridge/quarantine-sync.ts), so a plugin rename can never
- * silently leak quarantine channels into the offered list, and the defaults
- * remain a permanent floor even if the plugin is unreachable.
+ * names are reconciled from the plugin each sync cycle and unioned with these
+ * defaults (see bridge/quarantine-sync.ts), so a plugin rename can never
+ * silently leak quarantine channels into the offered list. The plugin-derived
+ * portion can be replaced after successful reads, but the defaults remain a
+ * permanent floor even if the plugin is unreachable.
  */
 export const QUARANTINE_GROUP_NAMES: readonly string[] = ["Graveyard", "Slow", "Black Screens"];
 
+export type QuarantineGroupStateSource = "defaults" | "legacy" | "plugin";
+
+export interface QuarantineGroupState {
+  version: 1;
+  defaultNames: string[];
+  pluginNames: string[];
+  resolvedNames: string[];
+  source: QuarantineGroupStateSource;
+  refreshedAt: string | null;
+}
+
+export interface SetQuarantineGroupNamesOptions {
+  source?: QuarantineGroupStateSource;
+  refreshedAt?: string | null;
+}
+
 /**
- * Live quarantine-name lookup (lowercased). Seeded with the built-in defaults
- * and widened — never narrowed — at runtime by setQuarantineGroupNames once the
- * plugin's configured names are resolved. Mutable module state is acceptable
- * here: it is a single-process advisory cache that converges via the sync job
- * and is hydrated from config at startup.
+ * Live quarantine-name lookup (lowercased). Seeded with the built-in defaults;
+ * successful plugin reads replace the plugin-derived portion while always
+ * retaining those defaults. Mutable module state is acceptable here: it is a
+ * single-process advisory cache that converges via the sync job and is hydrated
+ * from config at startup.
  */
 let quarantineLower = new Set(QUARANTINE_GROUP_NAMES.map((n) => n.toLowerCase()));
 /** Resolved quarantine names in original case (defaults ∪ plugin-configured). */
 let quarantineNames: string[] = [...QUARANTINE_GROUP_NAMES];
+/** Source-aware state behind the runtime matcher. */
+let quarantineState: QuarantineGroupState = {
+  version: 1,
+  defaultNames: [...QUARANTINE_GROUP_NAMES],
+  pluginNames: [],
+  resolvedNames: [...QUARANTINE_GROUP_NAMES],
+  source: "defaults",
+  refreshedAt: null,
+};
+
+function normalizeNames(names: Iterable<string>): string[] {
+  const byLower = new Map<string, string>();
+  for (const raw of names) {
+    const trimmed = raw.trim();
+    if (trimmed === "") continue;
+    const lower = trimmed.toLowerCase();
+    if (!byLower.has(lower)) byLower.set(lower, trimmed);
+  }
+  return [...byLower.values()];
+}
+
+function withoutBuiltInDefaults(names: Iterable<string>): string[] {
+  const defaultLower = new Set(QUARANTINE_GROUP_NAMES.map((name) => name.toLowerCase()));
+  return normalizeNames(names).filter((name) => !defaultLower.has(name.toLowerCase()));
+}
+
+function buildQuarantineState(
+  pluginNames: Iterable<string>,
+  options: SetQuarantineGroupNamesOptions = {},
+): QuarantineGroupState {
+  const normalizedPluginNames = normalizeNames(pluginNames);
+  const resolvedNames = normalizeNames([...QUARANTINE_GROUP_NAMES, ...normalizedPluginNames]);
+  return {
+    version: 1,
+    defaultNames: [...QUARANTINE_GROUP_NAMES],
+    pluginNames: normalizedPluginNames,
+    resolvedNames,
+    source:
+      options.source ??
+      (normalizedPluginNames.length === 0 ? ("defaults" as const) : ("plugin" as const)),
+    refreshedAt: options.refreshedAt ?? null,
+  };
+}
+
+function lenientStringArray(value: unknown): string[] | null {
+  if (!Array.isArray(value)) return null;
+  return value.filter((item): item is string => typeof item === "string");
+}
+
+function strictStringArray(value: unknown): string[] | null {
+  if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) return null;
+  return value;
+}
+
+function isStateSource(value: unknown): value is QuarantineGroupStateSource {
+  return value === "defaults" || value === "legacy" || value === "plugin";
+}
 
 export function isQuarantineGroup(name: string): boolean {
   return quarantineLower.has(name.trim().toLowerCase());
@@ -53,22 +127,62 @@ export function getQuarantineGroupNames(): string[] {
   return [...quarantineNames];
 }
 
+/** Source-aware quarantine state for logs/tests/future read-only UI. */
+export function getQuarantineGroupState(): QuarantineGroupState {
+  return {
+    version: 1,
+    defaultNames: [...quarantineState.defaultNames],
+    pluginNames: [...quarantineState.pluginNames],
+    resolvedNames: [...quarantineState.resolvedNames],
+    source: quarantineState.source,
+    refreshedAt: quarantineState.refreshedAt,
+  };
+}
+
 /**
- * Replace the live quarantine set. The built-in defaults are ALWAYS unioned in
- * so the policy can only ever widen, never drop a known junk-group name (e.g. a
+ * Replace the plugin-derived quarantine set. The built-in defaults are ALWAYS
+ * unioned in, so the matcher never drops a factory junk-group name (e.g. a
  * transient empty/garbage plugin read can't expose "Graveyard"). Names are
  * trimmed, empty entries dropped, and deduplicated case-insensitively.
  */
-export function setQuarantineGroupNames(names: Iterable<string>): void {
-  const byLower = new Map<string, string>();
-  for (const raw of [...QUARANTINE_GROUP_NAMES, ...names]) {
-    const trimmed = raw.trim();
-    if (trimmed === "") continue;
-    const lower = trimmed.toLowerCase();
-    if (!byLower.has(lower)) byLower.set(lower, trimmed);
+export function setQuarantineGroupNames(
+  names: Iterable<string>,
+  options: SetQuarantineGroupNamesOptions = {},
+): void {
+  quarantineState = buildQuarantineState(names, options);
+  quarantineNames = [...quarantineState.resolvedNames];
+  quarantineLower = new Set(quarantineNames.map((name) => name.toLowerCase()));
+}
+
+/**
+ * Apply persisted quarantine state. Accepts the legacy flat resolved-name array
+ * and the structured v1 object. Returns false for malformed payloads.
+ */
+export function applyPersistedQuarantineGroupState(parsed: unknown): boolean {
+  if (Array.isArray(parsed)) {
+    const legacyNames = lenientStringArray(parsed);
+    if (!legacyNames) return false;
+    setQuarantineGroupNames(withoutBuiltInDefaults(legacyNames), {
+      source: "legacy",
+      refreshedAt: null,
+    });
+    return true;
   }
-  quarantineNames = [...byLower.values()];
-  quarantineLower = new Set(byLower.keys());
+
+  if (typeof parsed !== "object" || parsed === null) return false;
+
+  const payload = parsed as Record<string, unknown>;
+  if (payload.version !== 1) return false;
+
+  const pluginNames = strictStringArray(payload.pluginNames);
+  const resolvedNames = strictStringArray(payload.resolvedNames);
+  if (!pluginNames || !resolvedNames) return false;
+
+  setQuarantineGroupNames(pluginNames, {
+    source: isStateSource(payload.source) ? payload.source : "plugin",
+    refreshedAt: typeof payload.refreshedAt === "string" ? payload.refreshedAt : null,
+  });
+  return true;
 }
 
 export interface SubscriptionDefaults {

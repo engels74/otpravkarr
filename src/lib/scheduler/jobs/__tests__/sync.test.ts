@@ -190,6 +190,38 @@ describe("sync job fn", () => {
     });
   });
 
+  it("logs ECM settings drift as a non-aborting sync result", async () => {
+    mockConfigWith(FULL_CONFIG);
+    const report = {
+      unmappedFriends: 0,
+      disabled: 0,
+      orphaned: 0,
+      refreshed: 0,
+      errors: [],
+    };
+    const ecmResult = {
+      ok: true as const,
+      data: { updated: false, added: [] as string[], reason: "settings_drift" as const },
+    };
+    mockReconcileSync.mockResolvedValueOnce(report);
+    mockReconcileEcmScope.mockResolvedValueOnce(ecmResult);
+
+    const job = await createSyncJob();
+    await job.fn();
+
+    expect(mockReconcileQuarantineGroups).toHaveBeenCalledTimes(1);
+    expect(mockReconcileSubscriptions).toHaveBeenCalledTimes(1);
+    expect(mockReconcileEcmScope).toHaveBeenCalledTimes(1);
+
+    const logs = getLogEntries();
+    const completedLog = logs.find((l) => l.event === "sync.completed");
+    expect(completedLog?.ecmScope).toEqual(ecmResult);
+    expect(mockAppendAuditLog).toHaveBeenCalledWith({
+      action: "sync.completed",
+      detail: { report },
+    });
+  });
+
   it("missing config: logs warning and returns early without calling reconcileSync", async () => {
     mockConfigWith({
       dispatcharr_url: "http://dispatcharr.local",

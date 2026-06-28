@@ -1,7 +1,12 @@
 import { getConfig, setConfig } from "$lib/db/repositories/config";
 import type { DispatcharrClient } from "$lib/dispatcharr/client";
 import { listPlugins } from "$lib/dispatcharr/endpoints/plugins";
-import { getQuarantineGroupNames, setQuarantineGroupNames } from "$lib/server/subscription-config";
+import {
+  applyPersistedQuarantineGroupState,
+  getQuarantineGroupNames,
+  getQuarantineGroupState,
+  setQuarantineGroupNames,
+} from "$lib/server/subscription-config";
 import { isTransientResultError, retryResult } from "$lib/utils/retry";
 
 /**
@@ -15,9 +20,10 @@ import { isTransientResultError, retryResult } from "$lib/utils/retry";
  * channels would leak into what users are offered.
  *
  * This module removes that footgun: it reads the live quarantine-group names
- * straight from the IPTV Checker plugin config and folds them into the matcher
- * (always unioned with the built-in defaults, so the policy can only widen).
- * Renames now propagate automatically — no human has to update a constant.
+ * straight from the IPTV Checker plugin config and folds them into the matcher.
+ * Successful reads replace the plugin-derived set wholesale (so stale plugin
+ * names can be pruned) while always unioning the built-in defaults. Failed,
+ * absent, or empty reads leave the existing matcher untouched.
  */
 
 /** Dispatcharr plugin key for the IPTV Checker plugin. */
@@ -34,7 +40,7 @@ const QUARANTINE_NAME_FIELDS = [
   "move_low_framerate_group",
 ] as const;
 
-/** Config key persisting the last resolved quarantine names (JSON string array). */
+/** Config key persisting the source-aware quarantine state (legacy: JSON array). */
 export const QUARANTINE_GROUP_NAMES_KEY = "quarantine_group_names";
 
 function extractQuarantineNames(settings: Record<string, unknown> | undefined): string[] {
@@ -97,20 +103,22 @@ export async function reconcileQuarantineGroups(
     return { names: getQuarantineGroupNames(), source: "plugin_empty" };
   }
 
-  // setQuarantineGroupNames always re-unions the built-in defaults, so passing
-  // only the plugin names still yields defaults ∪ plugin names.
-  setQuarantineGroupNames(pluginNames);
-  const names = getQuarantineGroupNames();
+  const refreshedAt = new Date().toISOString();
+  // Replaces plugin-derived names wholesale while always re-unioning built-in
+  // defaults, so successful reads prune stale plugin names without exposing the
+  // factory default quarantine groups.
+  setQuarantineGroupNames(pluginNames, { source: "plugin", refreshedAt });
+  const state = getQuarantineGroupState();
 
   try {
-    await setConfig(QUARANTINE_GROUP_NAMES_KEY, JSON.stringify(names));
+    await setConfig(QUARANTINE_GROUP_NAMES_KEY, JSON.stringify(state));
   } catch {
     // Persistence is best-effort: the in-memory matcher is already updated for
     // this process. A failed write only means a restart re-derives from the
     // plugin on the next sync instead of from config.
   }
 
-  return { names, source: "plugin" };
+  return { names: state.resolvedNames, source: "plugin" };
 }
 
 /**
@@ -128,9 +136,7 @@ export async function hydrateQuarantineGroupsFromConfig(): Promise<void> {
   if (!raw) return;
   try {
     const parsed: unknown = JSON.parse(raw);
-    if (Array.isArray(parsed)) {
-      setQuarantineGroupNames(parsed.filter((v): v is string => typeof v === "string"));
-    }
+    applyPersistedQuarantineGroupState(parsed);
   } catch {
     // Malformed persisted value — keep the built-in defaults already in effect.
   }

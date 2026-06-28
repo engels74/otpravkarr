@@ -12,6 +12,7 @@ const {
   computeOfferedGroups,
   defaultSelectedGroupIds,
   isQuarantineGroup,
+  getQuarantineGroupState,
   getQuarantineGroupNames,
   setQuarantineGroupNames,
 } = await import("../subscription-config");
@@ -61,6 +62,31 @@ describe("setQuarantineGroupNames / getQuarantineGroupNames", () => {
     const names = getQuarantineGroupNames();
     // "Dead" added once; "GRAVEYARD" folds into the existing "Graveyard".
     expect(names).toEqual(["Graveyard", "Slow", "Black Screens", "Dead"]);
+  });
+
+  it("exposes source-aware quarantine state for diagnostics", () => {
+    const initial = getQuarantineGroupState();
+    expect(initial).toMatchObject({
+      version: 1,
+      defaultNames: ["Graveyard", "Slow", "Black Screens"],
+      pluginNames: [],
+      resolvedNames: ["Graveyard", "Slow", "Black Screens"],
+      source: "defaults",
+      refreshedAt: null,
+    });
+
+    setQuarantineGroupNames(["Dead Channels"], {
+      source: "plugin",
+      refreshedAt: "2026-06-28T13:20:00.000Z",
+    });
+
+    expect(getQuarantineGroupState()).toMatchObject({
+      version: 1,
+      pluginNames: ["Dead Channels"],
+      resolvedNames: ["Graveyard", "Slow", "Black Screens", "Dead Channels"],
+      source: "plugin",
+      refreshedAt: "2026-06-28T13:20:00.000Z",
+    });
   });
 });
 

@@ -77,6 +77,11 @@ export function profileNameForGroup(groupId: number, groupName: string): string 
   return `${base}${cleaned.slice(0, Math.max(0, remaining))}`;
 }
 
+/** Whether an existing otpravkarr profile name is unsafe for ECM's CSV scope. */
+export function profileNameNeedsCsvRepair(name: string): boolean {
+  return name.includes(",");
+}
+
 /**
  * Create a profile by name, or adopt an existing one. The adopt path covers a
  * reset local DB whose Dispatcharr profiles survived (otherwise the unique-name
@@ -102,7 +107,9 @@ async function adoptOrCreateProfile(
       return { ok: false, error: list.error, message: list.message };
     }
     if (list.ok) {
-      const match = list.data.find((p) => p.name.startsWith(adoptPrefix));
+      const match = list.data.find(
+        (p) => p.name.startsWith(adoptPrefix) && !profileNameNeedsCsvRepair(p.name),
+      );
       if (match) {
         return retryResult(() => getProfile(client, match.id), isTransientResultError);
       }
@@ -201,8 +208,28 @@ export async function reconcileGroupProfile(
       isTransientResultError,
     );
     if (got.ok && got.data.name.startsWith(ownedPrefix)) {
-      profileId = got.data.id;
-      currentEnabled = new Set(got.data.channels);
+      if (profileNameNeedsCsvRepair(got.data.name)) {
+        // Legacy profile names may contain commas from before profileNameForGroup
+        // normalized them. ECM stores scope as CSV, so keep the old remote
+        // profile untouched and move the local mapping to an exact canonical
+        // comma-free profile instead of re-adopting the unsafe prefix match.
+        const repaired = await adoptOrCreateProfile(client, expectedName);
+        if (!repaired.ok) return repaired;
+        const saved = upsertGroupProfileSafe(groupId, repaired.data.id, repaired.data.name);
+        if (!saved.ok) return saved;
+        profileId = repaired.data.id;
+        currentEnabled = new Set(repaired.data.channels);
+      } else {
+        if (
+          profileNameNeedsCsvRepair(existing.profile_name) &&
+          existing.profile_name !== got.data.name
+        ) {
+          const saved = upsertGroupProfileSafe(groupId, got.data.id, got.data.name);
+          if (!saved.ok) return saved;
+        }
+        profileId = got.data.id;
+        currentEnabled = new Set(got.data.channels);
+      }
     } else if (got.ok || got.error === "not_found") {
       // Stale mapping: the profile was deleted (404) or its numeric id was
       // reused by an unrelated profile (name lacks our prefix). Re-adopt/create

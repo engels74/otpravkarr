@@ -173,8 +173,11 @@ export async function provisionUser(
 
         // Enforce the channel-group subscription on Dispatcharr. A reactivated
         // user must not be left with an empty channel_profiles set (= full
-        // catalog, brief 3.5). On failure, disable again rather than leave an
-        // over-exposed active account.
+        // catalog, brief 3.5). On failure, delete the remote Dispatcharr user
+        // and null dispatcharr_user_id — mirroring the new-user enforce-failure
+        // path below — rather than only flipping is_active locally, which would
+        // leave an over-exposed active account whose freshly re-asserted
+        // xc_password could still be used.
         const reEnforce = await applyGroupSubscription(
           client,
           updatedMapping.id,
@@ -182,8 +185,22 @@ export async function provisionUser(
           actorContext,
         );
         if (!reEnforce.ok) {
+          await retryResult(() => deleteUser(client, dispatcharrUserId), isTransientResultError);
           try {
-            updateUserMapping(updatedMapping.id, { is_active: 0 });
+            updateUserMapping(updatedMapping.id, { is_active: 0, dispatcharr_user_id: null });
+            // Compensating audit entry: the USER_PROVISIONED (reactivated) write
+            // above recorded a reactivation that enforcement then rolled back, so
+            // log the teardown to keep the trail truthful.
+            appendAuditLog({
+              actor: actorContext?.actor ?? request.plexIdentity.username,
+              ipAddress: actorContext?.ipAddress,
+              action: AuditAction.USER_DISABLED,
+              detail: {
+                mapping_id: updatedMapping.id,
+                dispatcharr_username: result.data.username,
+                reason: "reactivation_enforcement_failed",
+              },
+            });
           } catch {
             // best-effort neutralization
           }

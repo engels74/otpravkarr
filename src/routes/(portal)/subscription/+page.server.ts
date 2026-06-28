@@ -96,6 +96,20 @@ export const actions: Actions = {
       });
     }
 
+    // Re-derive the offered set server-side and reject anything outside it. The
+    // intersection in `load` is display-only; the form must not trust the client
+    // to post only offered IDs (quarantine groups and admin-excluded groups
+    // exist in the live list and would otherwise pass downstream existence-only
+    // filtering). Fail closed if the live group list is unavailable.
+    const groupsResult = await listChannelGroups(client);
+    if (!groupsResult.ok) {
+      return fail(502, { error: groupsResult.message });
+    }
+    const offeredIds = new Set(computeOfferedGroups(groupsResult.data, defaults).map((g) => g.id));
+    if (!groupIds.every((id) => offeredIds.has(id))) {
+      return fail(400, { error: "Invalid selection." });
+    }
+
     // applyGroupSubscription enforces on Dispatcharr (a zero-group selection
     // resolves to the empty profile — no channels, never the full catalog),
     // persists the selection, and writes the audit entry.

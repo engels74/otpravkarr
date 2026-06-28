@@ -133,21 +133,34 @@ export async function applyGroupSubscription(
   // for a zero-group subscription (single profile), otherwise null — assigned
   // profiles are derivable from dispatcharr_group_ids + channel_group_profiles.
   const sortedGroupIds = [...requestedGroupIds].sort((a, b) => a - b);
-  updateUserMapping(mappingId, {
-    dispatcharr_group_ids: JSON.stringify(sortedGroupIds),
-    dispatcharr_profile_id: requestedGroupIds.length === 0 ? (resolvedProfileIds[0] ?? null) : null,
-  });
 
-  appendAuditLog({
-    actor: actorContext?.actor ?? "system",
-    ipAddress: actorContext?.ipAddress,
-    action: AuditAction.USER_GROUP_CHANGED,
-    detail: {
-      mapping_id: mappingId,
-      group_ids: sortedGroupIds,
-      profile_ids: resolvedProfileIds,
-    },
-  });
+  // The Dispatcharr patch already landed. If the local mirror/audit write throws
+  // (constraint/schema/DB error) report a structured failure rather than let it
+  // escape this function's no-throw DispatcharrResult contract.
+  try {
+    updateUserMapping(mappingId, {
+      dispatcharr_group_ids: JSON.stringify(sortedGroupIds),
+      dispatcharr_profile_id:
+        requestedGroupIds.length === 0 ? (resolvedProfileIds[0] ?? null) : null,
+    });
+
+    appendAuditLog({
+      actor: actorContext?.actor ?? "system",
+      ipAddress: actorContext?.ipAddress,
+      action: AuditAction.USER_GROUP_CHANGED,
+      detail: {
+        mapping_id: mappingId,
+        group_ids: sortedGroupIds,
+        profile_ids: resolvedProfileIds,
+      },
+    });
+  } catch (err) {
+    return {
+      ok: false,
+      error: "server_error",
+      message: `Dispatcharr user ${dispatcharrUserId} patched but local DB write failed (state may be inconsistent): ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
 
   return { ok: true, data: { profileIds: resolvedProfileIds, groupIds: sortedGroupIds } };
 }

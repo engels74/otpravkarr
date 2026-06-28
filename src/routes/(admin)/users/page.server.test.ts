@@ -18,7 +18,7 @@ const mocks = vi.hoisted(() => ({
   deleteUserSessionsByUserRef: vi.fn(() => 0),
   transaction: vi.fn((fn: () => unknown) => fn),
   listGroups: vi.fn(async () => ({ ok: true, data: [] })),
-  listChannelGroups: vi.fn(async () => ({ ok: true, data: [] })),
+  listChannelGroups: vi.fn(async () => ({ ok: true, data: [] as { id: number; name: string }[] })),
   applyGroupSubscription: vi.fn(async () => ({
     ok: true,
     data: { profileIds: [10], groupIds: [5, 7] },
@@ -264,6 +264,16 @@ describe("admin users actions", () => {
       dispatcharr_group_ids: JSON.stringify([2]),
       plex_username: "alice",
     } as unknown as { id: number; dispatcharr_user_id: number | null });
+
+    // changeGroup validates submitted ids against the live, non-quarantine group
+    // list before enforcing, so 5 and 7 must exist as offerable groups.
+    mocks.listChannelGroups.mockResolvedValueOnce({
+      ok: true,
+      data: [
+        { id: 5, name: "Sports" },
+        { id: 7, name: "News" },
+      ],
+    });
 
     const body = new FormData();
     body.set("id", "1");

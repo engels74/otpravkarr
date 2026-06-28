@@ -38,6 +38,7 @@ import {
   getSubscriptionDefaults,
   isQuarantineGroup,
 } from "$lib/server/subscription-config";
+import { isTransientResultError, retryResult } from "$lib/utils/retry";
 import type { Actions, PageServerLoad } from "./$types";
 
 function parseStoredGroupIds(rawGroupIds: string): number[] {
@@ -335,6 +336,22 @@ export const actions: Actions = {
       });
     }
 
+    // applyGroupSubscription filters submitted ids by LIVE EXISTENCE only, so a
+    // crafted request could assign a quarantine group (Graveyard/Slow/Black
+    // Screens) the admin UI hides everywhere. Reject any id that isn't a live,
+    // non-quarantine group. Fail closed if the live list is unavailable. An empty
+    // selection still passes ([].every is true) and resolves to the empty profile.
+    const groupsResult = await retryResult(() => listChannelGroups(client), isTransientResultError);
+    if (!groupsResult.ok) {
+      return fail(502, { error: "Unable to fetch channel groups. Please try again." });
+    }
+    const liveNonQuarantineIds = new Set(
+      groupsResult.data.filter((g) => !isQuarantineGroup(g.name)).map((g) => g.id),
+    );
+    if (!groupIds.every((id) => liveNonQuarantineIds.has(id))) {
+      return fail(400, { error: "Invalid group IDs" });
+    }
+
     // applyGroupSubscription is the single path that enforces the subscription
     // on Dispatcharr (Model A), persists the group set, and writes the audit
     // entry. An empty selection resolves to the empty profile (zero channels),
@@ -424,13 +441,15 @@ export const actions: Actions = {
       });
     }
 
-    // Default the owner to every admin-offered group.
+    // Default the owner to every admin-offered group. Fail closed if the live
+    // group list is unavailable: a silent empty result would provision the owner
+    // to the empty profile (zero channels) and report success.
     const defaults = await getSubscriptionDefaults();
-    let groupIds: number[] = [];
-    const groupsResult = await listChannelGroups(client);
-    if (groupsResult.ok) {
-      groupIds = defaultSelectedGroupIds(computeOfferedGroups(groupsResult.data, defaults));
+    const groupsResult = await retryResult(() => listChannelGroups(client), isTransientResultError);
+    if (!groupsResult.ok) {
+      return fail(502, { error: "Unable to fetch channel groups. Please try again." });
     }
+    const groupIds = defaultSelectedGroupIds(computeOfferedGroups(groupsResult.data, defaults));
 
     const result = await provisionUser(
       client,

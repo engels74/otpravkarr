@@ -66,6 +66,15 @@ vi.mock("$lib/server/plex-owner", () => ({
     ownerPlexAccountId == null
       ? mappings
       : mappings.filter((mapping) => mapping.plex_account_id !== ownerPlexAccountId),
+  excludePlexOwnerNonSubscriberMappings: <T extends { plex_account_id: number; is_owner: number }>(
+    mappings: T[],
+    ownerPlexAccountId: number | null,
+  ) =>
+    ownerPlexAccountId == null
+      ? mappings
+      : mappings.filter(
+          (mapping) => mapping.plex_account_id !== ownerPlexAccountId || mapping.is_owner === 1,
+        ),
 }));
 
 vi.mock("$lib/db/connection", () => ({

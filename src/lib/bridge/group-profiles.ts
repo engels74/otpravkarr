@@ -120,6 +120,29 @@ async function applyMembershipDiff(
 }
 
 /**
+ * Persist a group→profile mapping, converting a thrown DB error (constraint/IO)
+ * into a structured failure. The local `upsertGroupProfile` runs a raw
+ * `bun:sqlite` statement that throws, so wrapping it here keeps callers within
+ * this module's no-throw `DispatcharrResult` contract instead of crashing them.
+ */
+function upsertGroupProfileSafe(
+  groupId: number,
+  profileId: number,
+  profileName: string,
+): DispatcharrResult<void> {
+  try {
+    upsertGroupProfile(groupId, profileId, profileName);
+    return { ok: true, data: undefined };
+  } catch (err) {
+    return {
+      ok: false,
+      error: "server_error",
+      message: `Failed to persist group ${groupId} → profile ${profileId} mapping: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+}
+
+/**
  * Ensure the otpravkarr-owned profile for `groupId` exists and contains exactly
  * `desiredEnabled` (the group's current channels). Creates/adopts the profile
  * if missing and records the group→profile mapping locally. Returns the
@@ -158,7 +181,8 @@ export async function reconcileGroupProfile(
       // rather than mutating a foreign profile.
       const created = await adoptOrCreateProfile(client, expectedName);
       if (!created.ok) return created;
-      upsertGroupProfile(groupId, created.data.id, created.data.name);
+      const saved = upsertGroupProfileSafe(groupId, created.data.id, created.data.name);
+      if (!saved.ok) return saved;
       profileId = created.data.id;
       currentEnabled = new Set(created.data.channels);
     } else {
@@ -167,7 +191,8 @@ export async function reconcileGroupProfile(
   } else {
     const created = await adoptOrCreateProfile(client, expectedName);
     if (!created.ok) return created;
-    upsertGroupProfile(groupId, created.data.id, created.data.name);
+    const saved = upsertGroupProfileSafe(groupId, created.data.id, created.data.name);
+    if (!saved.ok) return saved;
     profileId = created.data.id;
     currentEnabled = new Set(created.data.channels);
   }
@@ -213,7 +238,8 @@ export async function ensureEmptyProfile(
 
   const created = await adoptOrCreateProfile(client, EMPTY_PROFILE_NAME);
   if (!created.ok) return { ok: false, error: created.error, message: created.message };
-  upsertGroupProfile(EMPTY_PROFILE_GROUP_ID, created.data.id, created.data.name);
+  const saved = upsertGroupProfileSafe(EMPTY_PROFILE_GROUP_ID, created.data.id, created.data.name);
+  if (!saved.ok) return saved;
   const diff = await applyMembershipDiff(
     client,
     created.data.id,

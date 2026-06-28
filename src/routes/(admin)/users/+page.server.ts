@@ -29,7 +29,7 @@ import { getAccount } from "$lib/plex/client";
 import type { PlexIdentity } from "$lib/plex/types";
 import { requireAdmin } from "$lib/server/auth";
 import {
-  excludePlexOwnerMappings,
+  excludePlexOwnerNonSubscriberMappings,
   tryResolveConfiguredPlexOwnerAccountId,
 } from "$lib/server/plex-owner";
 import {
@@ -72,7 +72,7 @@ export const load: PageServerLoad = async (event) => {
   const search = url.searchParams.get("search") ?? "";
 
   const ownerPlexAccountId = await tryResolveConfiguredPlexOwnerAccountId();
-  let mappings = excludePlexOwnerMappings(getAllUserMappings(), ownerPlexAccountId);
+  let mappings = excludePlexOwnerNonSubscriberMappings(getAllUserMappings(), ownerPlexAccountId);
 
   // Apply filters in-memory
   if (status !== "all") {

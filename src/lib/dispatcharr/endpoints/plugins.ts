@@ -30,9 +30,12 @@ export async function listPlugins(
  * (`PluginConfig.settings = settings`), it does NOT merge. Callers MUST pass the
  * full desired settings object (read-modify-write) or unrelated keys are wiped.
  *
- * Returns the persisted settings on success. The endpoint answers 400 with
- * `{ success: false, error }` on failure (mapped to `validation_error` by the
- * client); a 200 body with `success: false` is also treated as a failure.
+ * Returns the persisted settings on success. The two failure shapes surface
+ * differently: a 400 maps to error code `validation_error`, but its body's
+ * `error` string is only logged server-side (redacted) — the result `message`
+ * carries the HTTP status line, not the body error. A 200 body with
+ * `success: false` is also treated as a failure, and there its `error` string
+ * IS surfaced as the result `message`.
  */
 export async function updatePluginSettings(
   client: DispatcharrClient,

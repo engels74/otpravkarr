@@ -183,6 +183,9 @@ export const load: PageServerLoad = async ({ cookies, getClientAddress }) => {
           selected: defaultSelectedGroupIds(groups),
         } satisfies PickerData;
       }
+      // Stale/tampered onboarding cookie: clear it so the user isn't stuck on a
+      // 400 until it naturally expires; a fresh sign-in then starts clean.
+      cookies.delete(ONBOARDING_COOKIE_NAME, OAUTH_COOKIE_DELETE_OPTIONS);
     }
     throw error(400, "Missing OAuth session. Please try signing in again.");
   }
@@ -277,6 +280,10 @@ export const actions: Actions = {
       ? await openOnboardingIdentity(onboardingCookie)
       : null;
     if (!identity) {
+      // Clear a stale/tampered cookie so the user isn't stuck re-submitting against it.
+      if (onboardingCookie) {
+        cookies.delete(ONBOARDING_COOKIE_NAME, OAUTH_COOKIE_DELETE_OPTIONS);
+      }
       return fail(400, { error: "Your sign-in session expired. Please sign in again." });
     }
 

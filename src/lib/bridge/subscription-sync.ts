@@ -7,6 +7,7 @@ import { listAllChannels } from "$lib/dispatcharr/endpoints/channels";
 import { updateUser } from "$lib/dispatcharr/endpoints/users";
 import { fetchAllPages } from "$lib/dispatcharr/pagination";
 import { DispatcharrUserSchema } from "$lib/dispatcharr/schemas";
+import { isQuarantineGroup } from "$lib/server/subscription-config";
 
 import { isTransientResultError, retryResult } from "$lib/utils/retry";
 import { buildGroupChannelMap, ensureEmptyProfile, reconcileGroupProfile } from "./group-profiles";
@@ -96,17 +97,21 @@ export async function reconcileSubscriptions(
     ),
   );
 
-  // Per-mapping intended group ids (deduped; existing groups only), mirroring
-  // applyGroupSubscription so duplicate stored ids never produce duplicate
-  // resolved profile ids in the channel_profiles PATCH below.
+  // Per-mapping intended group ids (deduped; existing, non-quarantine groups
+  // only), mirroring applyGroupSubscription so duplicate stored ids never
+  // produce duplicate resolved profile ids in the channel_profiles PATCH below.
   const intendedByMapping = new Map<number, number[]>();
+  const sanitizedByMapping = new Map<number, boolean>();
   const subscribedGroupIds = new Set<number>();
   let anyZeroGroup = false;
   for (const m of active) {
-    const ids = [...new Set(parseGroupIds(m.dispatcharr_group_ids))].filter((id) =>
-      groupNameById.has(id),
-    );
+    const storedIds = [...new Set(parseGroupIds(m.dispatcharr_group_ids))];
+    const ids = storedIds.filter((id) => {
+      const groupName = groupNameById.get(id);
+      return groupName != null && !isQuarantineGroup(groupName);
+    });
     intendedByMapping.set(m.id, ids);
+    sanitizedByMapping.set(m.id, ids.length !== storedIds.length);
     if (ids.length === 0) {
       anyZeroGroup = true;
     } else {
@@ -149,23 +154,24 @@ export async function reconcileSubscriptions(
     }
   }
 
-  // Re-patch only users whose resolved profile set may have changed (a profile
-  // they reference was recreated this cycle).
+  // Re-patch only users whose resolved profile set changed because a referenced
+  // profile was recreated, or whose stored group ids were sanitized.
   for (const m of active) {
     const ids = intendedByMapping.get(m.id) ?? [];
+    const sanitized = sanitizedByMapping.get(m.id) ?? false;
     let needsRepatch: boolean;
     let resolvedProfileIds: number[];
 
     if (ids.length === 0) {
       if (emptyProfileId == null) continue; // empty profile unavailable; skip
       resolvedProfileIds = [emptyProfileId];
-      needsRepatch = emptyRecreated;
+      needsRepatch = emptyRecreated || sanitized;
     } else {
       // Skip if any of the user's groups failed to resolve this cycle.
       const profiles = ids.map((id) => profileIdByGroup.get(id));
       if (profiles.some((p) => p == null)) continue;
       resolvedProfileIds = profiles as number[];
-      needsRepatch = ids.some((id) => recreatedGroupIds.has(id));
+      needsRepatch = sanitized || ids.some((id) => recreatedGroupIds.has(id));
     }
 
     if (!needsRepatch) continue;
@@ -194,7 +200,9 @@ export async function reconcileSubscriptions(
     }
     report.usersRepatched++;
     try {
+      const sortedGroupIds = [...ids].sort((a, b) => a - b);
       updateUserMapping(m.id, {
+        dispatcharr_group_ids: JSON.stringify(sortedGroupIds),
         dispatcharr_profile_id: ids.length === 0 ? emptyProfileId : null,
       });
     } catch {

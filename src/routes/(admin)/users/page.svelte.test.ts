@@ -197,4 +197,30 @@ describe("admin users page", () => {
       ),
     ).toBeTruthy();
   });
+
+  it("requires a concrete profile before saving a null-profile mapping", async () => {
+    render(UsersPage, {
+      props: {
+        data: {
+          ...defaultData,
+          profiles: [{ id: 7, name: "Sports profile" }],
+        },
+      },
+    });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Open actions for testuser" }));
+    await fireEvent.click(await screen.findByText("Change Profile"));
+
+    expect(screen.queryByText("All channels (no profile)")).toBeNull();
+    expect(
+      screen.getByText("Choose a channel profile to enable saving.", { exact: false }),
+    ).toBeTruthy();
+
+    const saveButton = screen.getByRole("button", { name: "Save" }) as HTMLButtonElement;
+    expect(saveButton.disabled).toBe(true);
+
+    await fireEvent.click(screen.getByLabelText("Sports profile"));
+
+    expect(saveButton.disabled).toBe(false);
+  });
 });

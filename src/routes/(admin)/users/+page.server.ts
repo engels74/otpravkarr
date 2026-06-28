@@ -508,11 +508,12 @@ export const actions: Actions = {
     const fd = await event.request.formData();
     const id = Number(fd.get("id"));
     const profileIdRaw = fd.get("profile_id");
-    const profileId = profileIdRaw === "" || profileIdRaw == null ? null : Number(profileIdRaw);
     if (!id) return fail(400, { error: "Missing user mapping ID" });
-    if (profileId !== null && (!Number.isInteger(profileId) || profileId <= 0)) {
+    if (typeof profileIdRaw !== "string" || !/^[1-9]\d*$/.test(profileIdRaw)) {
       return fail(400, { error: "Invalid profile ID" });
     }
+    const profileId = Number(profileIdRaw);
+    if (!Number.isSafeInteger(profileId)) return fail(400, { error: "Invalid profile ID" });
 
     const mapping = getUserMappingById(id);
     if (!mapping) return fail(400, { error: "User mapping not found" });
@@ -525,7 +526,7 @@ export const actions: Actions = {
     try {
       const client = await getClient();
       const updateRes = await updateUser(client, mapping.dispatcharr_user_id, {
-        channel_profiles: profileId == null ? [] : [profileId],
+        channel_profiles: [profileId],
       });
       if (!updateRes.ok) return fail(500, { error: updateRes.message });
       updateUserMapping(id, { dispatcharr_profile_id: profileId });

@@ -19,6 +19,13 @@ vi.mock("$lib/dispatcharr/endpoints/channels", () => ({ listAllChannels: vi.fn()
 vi.mock("$lib/dispatcharr/endpoints/users", () => ({ updateUser: vi.fn() }));
 vi.mock("$lib/dispatcharr/pagination", () => ({ fetchAllPages: vi.fn() }));
 
+vi.mock("$lib/server/subscription-config", () => {
+  const quarantineNames = new Set(["graveyard", "slow", "black screens"]);
+  return {
+    isQuarantineGroup: (name: string) => quarantineNames.has(name.trim().toLowerCase()),
+  };
+});
+
 vi.mock("../group-profiles", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../group-profiles")>();
   return { ...actual, reconcileGroupProfile: vi.fn(), ensureEmptyProfile: vi.fn() };
@@ -133,6 +140,81 @@ describe("reconcileSubscriptions", () => {
     expect(updateUser).toHaveBeenCalledWith(client, 42, {
       channel_profiles: [200],
       user_level: 1,
+    });
+  });
+
+  it("removes live quarantine groups before reconciliation and persists sanitized groups", async () => {
+    vi.mocked(getAllUserMappings).mockReturnValue([
+      makeMapping({ id: 1, dispatcharr_user_id: 42, dispatcharr_group_ids: "[1,2]" }),
+    ]);
+    vi.mocked(listAllChannels).mockResolvedValue(ok([ch(1, 1), ch(2, 2)]));
+    vi.mocked(listChannelGroups).mockResolvedValue(
+      ok([
+        { id: 1, name: "Sports" },
+        { id: 2, name: "Graveyard" },
+      ]),
+    );
+    vi.mocked(getGroupProfile).mockImplementation((groupId) =>
+      groupId === 1
+        ? {
+            group_id: 1,
+            profile_id: 101,
+            profile_name: "otpravkarr:g1:Sports",
+            created_at: "",
+            updated_at: "",
+          }
+        : null,
+    );
+    vi.mocked(reconcileGroupProfile).mockResolvedValue(ok(101));
+
+    const report = await reconcileSubscriptions(client);
+
+    expect(report.profilesRecreated).toBe(0);
+    expect(report.usersRepatched).toBe(1);
+    expect(reconcileGroupProfile).toHaveBeenCalledOnce();
+    expect(reconcileGroupProfile).toHaveBeenCalledWith(client, 1, "Sports", new Set([1]));
+    expect(updateUser).toHaveBeenCalledWith(client, 42, {
+      channel_profiles: [101],
+      user_level: 1,
+    });
+    expect(updateUserMapping).toHaveBeenCalledWith(1, {
+      dispatcharr_group_ids: "[1]",
+      dispatcharr_profile_id: null,
+    });
+  });
+
+  it("moves quarantine-only subscriptions to the empty profile and persists zero groups", async () => {
+    vi.mocked(getAllUserMappings).mockReturnValue([
+      makeMapping({ id: 1, dispatcharr_user_id: 42, dispatcharr_group_ids: "[2]" }),
+    ]);
+    vi.mocked(listAllChannels).mockResolvedValue(ok([ch(2, 2)]));
+    vi.mocked(listChannelGroups).mockResolvedValue(ok([{ id: 2, name: "Slow" }]));
+    vi.mocked(getGroupProfile).mockImplementation((groupId) =>
+      groupId === -1
+        ? {
+            group_id: -1,
+            profile_id: 900,
+            profile_name: "otpravkarr:empty",
+            created_at: "",
+            updated_at: "",
+          }
+        : null,
+    );
+    vi.mocked(ensureEmptyProfile).mockResolvedValue(ok(900));
+
+    const report = await reconcileSubscriptions(client);
+
+    expect(report.profilesRecreated).toBe(0);
+    expect(report.usersRepatched).toBe(1);
+    expect(reconcileGroupProfile).not.toHaveBeenCalled();
+    expect(ensureEmptyProfile).toHaveBeenCalledOnce();
+    expect(updateUser).toHaveBeenCalledWith(client, 42, {
+      channel_profiles: [900],
+      user_level: 1,
+    });
+    expect(updateUserMapping).toHaveBeenCalledWith(1, {
+      dispatcharr_group_ids: "[]",
+      dispatcharr_profile_id: 900,
     });
   });
 

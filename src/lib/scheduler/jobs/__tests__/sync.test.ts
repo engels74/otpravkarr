@@ -16,6 +16,16 @@ vi.mock("$lib/bridge/lifecycle", () => ({
   reconcileSync: (...args: unknown[]) => mockReconcileSync(...args),
 }));
 
+const mockReconcileSubscriptions = vi.fn(async () => ({
+  groupsReconciled: 0,
+  profilesRecreated: 0,
+  usersRepatched: 0,
+  errors: [] as string[],
+}));
+vi.mock("$lib/bridge/subscription-sync", () => ({
+  reconcileSubscriptions: (...args: unknown[]) => mockReconcileSubscriptions(...args),
+}));
+
 const mockAppendAuditLog = vi.fn();
 vi.mock("$lib/db/repositories/audit", () => ({
   appendAuditLog: (entry: unknown) => mockAppendAuditLog(entry),

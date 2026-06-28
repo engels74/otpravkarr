@@ -1,4 +1,5 @@
 import { reconcileSync } from "$lib/bridge/lifecycle";
+import { reconcileSubscriptions } from "$lib/bridge/subscription-sync";
 import { appendAuditLog } from "$lib/db/repositories/audit";
 import { getConfig } from "$lib/db/repositories/config";
 import { AuditAction } from "$lib/db/types";
@@ -84,7 +85,18 @@ export async function createSyncJob(defaultIntervalMs = DEFAULT_INTERVAL_MS): Pr
       try {
         const client = new DispatcharrClient(dispatcharrUrl, apiKey);
         const report = await reconcileSync(client, plexAdminToken);
-        log("sync.completed", { report });
+        // Converge channel-group subscriptions against live Dispatcharr state
+        // (channels moved between groups, plugins created channels, etc.). Kept
+        // separate so a subscription error never masks the friend-sync result.
+        let subscriptions: Awaited<ReturnType<typeof reconcileSubscriptions>> | { error: string };
+        try {
+          subscriptions = await reconcileSubscriptions(client);
+        } catch (subError) {
+          subscriptions = {
+            error: subError instanceof Error ? subError.message : String(subError),
+          };
+        }
+        log("sync.completed", { report, subscriptions });
         try {
           appendAuditLog({
             action: AuditAction.SYNC_COMPLETED,

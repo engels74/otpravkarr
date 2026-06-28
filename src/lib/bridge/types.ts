@@ -9,6 +9,8 @@ export interface ProvisioningRequest {
   groupIds: number[];
   profileId?: number | undefined;
   exposeInitialPassword?: boolean | undefined;
+  /** Marks this provision as the Plex owner's own (non-admin) self-subscription. */
+  isOwner?: boolean | undefined;
 }
 
 export type ProvisioningResult =

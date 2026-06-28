@@ -37,6 +37,8 @@ const state = vi.hoisted(() => ({
       dispatcharr_profile_id: null,
       provisioning_mode: "automatic" as const,
       is_active: 1,
+      group_selection_locked: 0,
+      is_owner: 0,
       created_at: "2024-01-01 00:00:00",
       updated_at: "2024-01-01 00:00:00",
       last_synced_at: null,
@@ -74,6 +76,13 @@ const mocks = vi.hoisted(() => ({
   getConfiguredAdminAccount: vi.fn(async () => state.configuredAdmin),
   DispatcharrClient: vi.fn(),
   sealInitialPasswordFlash: vi.fn(async (_password: string) => "sealed-initial-password"),
+  listChannelGroups: vi.fn(async () => ({
+    ok: true as const,
+    data: [
+      { id: 1, name: "Sports", channel_count: 3 },
+      { id: 2, name: "News", channel_count: 2 },
+    ],
+  })),
 }));
 
 vi.mock("$lib/plex/oauth", () => ({
@@ -117,6 +126,10 @@ vi.mock("$lib/db/repositories/users", () => ({
 
 vi.mock("$lib/dispatcharr/client", () => ({
   DispatcharrClient: mocks.DispatcharrClient,
+}));
+
+vi.mock("$lib/dispatcharr/endpoints/channel-groups", () => ({
+  listChannelGroups: mocks.listChannelGroups,
 }));
 
 vi.mock("$lib/server/auth", () => ({
@@ -199,6 +212,8 @@ function resetAll() {
       dispatcharr_profile_id: 2,
       provisioning_mode: "automatic",
       is_active: 1,
+      group_selection_locked: 0,
+      is_owner: 0,
       created_at: "2024-01-01 00:00:00",
       updated_at: "2024-01-01 00:00:00",
       last_synced_at: null,
@@ -339,6 +354,8 @@ describe("plex OAuth callback", () => {
       dispatcharr_profile_id: 2,
       provisioning_mode: "automatic",
       is_active: 0,
+      group_selection_locked: 0,
+      is_owner: 0,
       created_at: "2024-01-01 00:00:00",
       updated_at: "2024-01-01 00:00:00",
       last_synced_at: null,
@@ -592,8 +609,7 @@ describe("plex OAuth callback", () => {
           username: "testuser",
         }),
         mode: "automatic",
-        groupIds: [1],
-        profileId: 2,
+        groupIds: [1, 2],
       }),
       expect.objectContaining({
         actor: "testuser",
@@ -682,6 +698,8 @@ describe("plex OAuth callback", () => {
       dispatcharr_profile_id: 2,
       provisioning_mode: "automatic",
       is_active: 0,
+      group_selection_locked: 0,
+      is_owner: 0,
       created_at: "2024-01-01 00:00:00",
       updated_at: "2024-01-01 00:00:00",
       last_synced_at: null,

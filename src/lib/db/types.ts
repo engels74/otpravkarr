@@ -21,6 +21,11 @@ export interface UserMapping {
   dispatcharr_profile_id: number | null;
   provisioning_mode: ProvisioningMode;
   is_active: number; // 0 or 1
+  // Admin override of the user's self-select ability. 0 = user may self-select,
+  // 1 = locked (admin assigns groups). See migration 002.
+  group_selection_locked: number; // 0 or 1
+  // Marks the Plex-server owner's self-subscription mapping. See migration 002.
+  is_owner: number; // 0 or 1
   created_at: string;
   updated_at: string;
   last_synced_at: string | null;
@@ -59,6 +64,16 @@ export interface ConfigEntry {
   updated_at: string;
 }
 
+export interface ChannelGroupProfile {
+  // Dispatcharr channel group id. Sentinel -1 = the shared "empty" profile.
+  group_id: number;
+  // Dispatcharr channel profile id that scopes this group (Model A).
+  profile_id: number;
+  profile_name: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export const AuditAction = {
   SETUP_COMPLETED: "setup.completed",
   SETUP_RECOVERY_LOGIN: "setup.recovery_login",
@@ -70,6 +85,8 @@ export const AuditAction = {
   USER_CREDENTIALS_ROTATED: "user.credentials_rotated",
   USER_GROUP_CHANGED: "user.group_changed",
   USER_PROFILE_CHANGED: "user.profile_changed",
+  USER_LOCK_CHANGED: "user.lock_changed",
+  USER_OWNER_SUBSCRIBED: "user.owner_subscribed",
   SYNC_STARTED: "sync.started",
   SYNC_COMPLETED: "sync.completed",
   SYNC_FAILED: "sync.failed",

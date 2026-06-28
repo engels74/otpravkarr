@@ -17,6 +17,12 @@ let { plexUsername, plexThumb, class: className }: Props = $props();
   <AppLogo />
 
   <nav aria-label="Account" class="flex items-center gap-3">
+    <a
+      href="/subscription"
+      class="text-sm text-muted-foreground no-underline transition hover:text-foreground"
+    >
+      My channels
+    </a>
     <PlexAvatar thumbUrl={plexThumb} username={plexUsername} size="sm" />
     <span class="text-sm text-muted-foreground">{plexUsername}</span>
 

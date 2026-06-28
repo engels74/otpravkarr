@@ -12,7 +12,9 @@ import { toast } from "svelte-sonner";
 import { applyAction, enhance } from "$app/forms";
 import { goto, invalidateAll } from "$app/navigation";
 import { page } from "$app/state";
+
 import ConfirmDialog from "$lib/components/ConfirmDialog.svelte";
+import GroupPicker from "$lib/components/GroupPicker.svelte";
 import StatusBadge from "$lib/components/StatusBadge.svelte";
 import * as Avatar from "$lib/components/ui/avatar";
 import { Button } from "$lib/components/ui/button";
@@ -23,15 +25,16 @@ import * as Select from "$lib/components/ui/select";
 import { Separator } from "$lib/components/ui/separator";
 import * as Table from "$lib/components/ui/table";
 import type { ProvisioningMode, UserMapping } from "$lib/db/types";
-import type { DispatcharrGroup } from "$lib/dispatcharr/types";
+
 import { normalizeSqliteDatetime } from "$lib/utils/datetime";
 import { copyOtpToClipboard } from "./otp-clipboard";
 
 interface Props {
   data: {
     mappings: UserMapping[];
-    groups: DispatcharrGroup[];
+    groups: { id: number; name: string; channelCount: number | null }[];
     profiles: { id: number; name: string }[];
+    driftByMappingId: Record<number, boolean>;
     filters: { status: string; mode: string; search: string };
   };
 }
@@ -48,7 +51,8 @@ let passwordDialogOpen = $state(false);
 let disableDialogOpen = $state(false);
 let deleteDialogOpen = $state(false);
 let selectedMapping = $state<UserMapping | null>(null);
-let selectedGroupIds = $state<number[]>([]);
+let selectedGroupSet = $state(new Set<number>());
+let lockEnabled = $state(false);
 let selectedProfileId = $state<number | null>(null);
 let disablingMapping = $state<UserMapping | null>(null);
 let deletingMapping = $state<UserMapping | null>(null);
@@ -115,11 +119,17 @@ function modeLabelText(mode: ProvisioningMode): string {
 
 function openGroupDialog(m: UserMapping) {
   selectedMapping = m;
+  let ids: number[] = [];
   try {
-    selectedGroupIds = JSON.parse(m.dispatcharr_group_ids) as number[];
+    const parsed: unknown = JSON.parse(m.dispatcharr_group_ids);
+    if (Array.isArray(parsed)) {
+      ids = parsed.filter((v): v is number => typeof v === "number");
+    }
   } catch {
-    selectedGroupIds = [];
+    ids = [];
   }
+  selectedGroupSet = new Set(ids);
+  lockEnabled = m.group_selection_locked === 1;
   groupDialogOpen = true;
 }
 
@@ -132,14 +142,6 @@ function openProfileDialog(m: UserMapping) {
 function openDetailDialog(m: UserMapping) {
   selectedMapping = m;
   detailDialogOpen = true;
-}
-
-function toggleGroupId(gid: number) {
-  if (selectedGroupIds.includes(gid)) {
-    selectedGroupIds = selectedGroupIds.filter((id) => id !== gid);
-  } else {
-    selectedGroupIds = [...selectedGroupIds, gid];
-  }
 }
 
 function makeEnhanceHandler() {
@@ -185,6 +187,37 @@ function makeProfileEnhanceHandler() {
       } finally {
         submitting = false;
         profileDialogOpen = false;
+      }
+    };
+  };
+}
+
+function makeOwnerEnhance() {
+  return () => {
+    submitting = true;
+    return async ({ result, update }: { result: ActionResult; update: () => Promise<void> }) => {
+      try {
+        if (result.type === "success") {
+          const d = result.data as { initialPassword?: string | null } | undefined;
+          if (d?.initialPassword) {
+            oneTimePassword = d.initialPassword;
+            passwordCopyStatus = "idle";
+            passwordDialogOpen = true;
+          } else {
+            toast.success("Subscriber account created.");
+          }
+          await update();
+        } else if (result.type === "failure") {
+          toast.error(
+            (result.data as { error?: string } | undefined)?.error ??
+              "Failed to create subscriber account.",
+          );
+          await update();
+        } else {
+          await applyAction(result);
+        }
+      } finally {
+        submitting = false;
       }
     };
   };
@@ -317,9 +350,19 @@ async function copyOneTimePassword() {
 </svelte:head>
 
 <div class="space-y-4">
-  <div class="flex items-center justify-between">
+  <div class="flex items-center justify-between gap-3">
     <h1 class="text-lg font-semibold text-foreground">Users</h1>
-    <span class="text-sm text-muted-foreground">{data.mappings.length} {data.mappings.length === 1 ? "user" : "users"}</span>
+    <div class="flex items-center gap-3">
+      <span class="text-sm text-muted-foreground">
+        {data.mappings.length}
+        {data.mappings.length === 1 ? "user" : "users"}
+      </span>
+      <form method="POST" action="?/subscribeOwner" use:enhance={makeOwnerEnhance()}>
+        <Button type="submit" variant="outline" size="sm" disabled={submitting}>
+          Subscribe myself
+        </Button>
+      </form>
+    </div>
   </div>
 
   <!-- Filters bar -->
@@ -411,7 +454,17 @@ async function copyOneTimePassword() {
                 <StatusBadge mode={m.provisioning_mode} />
               </Table.Cell>
               <Table.Cell>
-                <StatusBadge {status} />
+                <div class="flex items-center gap-1.5">
+                  <StatusBadge {status} />
+                  {#if data.driftByMappingId[m.id]}
+                    <span
+                      class="rounded-md border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[11px] font-medium text-amber-600 dark:text-amber-400"
+                      title="Dispatcharr's channel_profiles differ from the stored group selection. The next sync will reconcile it, or re-save the groups."
+                    >
+                      Drift
+                    </span>
+                  {/if}
+                </div>
               </Table.Cell>
               <Table.Cell class="hidden text-xs text-muted-foreground whitespace-nowrap lg:table-cell">
                 {formatRelativeTime(m.last_accessed_at)}
@@ -500,7 +553,7 @@ async function copyOneTimePassword() {
 
 <!-- Change Group Dialog -->
 <Dialog.Root bind:open={groupDialogOpen}>
-  <Dialog.Content class="sm:max-w-md">
+  <Dialog.Content class="sm:max-w-lg">
     <Dialog.Header>
       <Dialog.Title>
         {data.groups.length === 0 ? "Add groups in Dispatcharr first" : "Change Group"}
@@ -524,21 +577,43 @@ async function copyOneTimePassword() {
           </Button>
         </Dialog.Footer>
       {:else}
+        <!-- Per-user lock toggle -->
+        <form
+          method="POST"
+          action="?/setGroupLock"
+          use:enhance={makeEnhanceHandler()}
+          class="mb-3 rounded-md border border-border p-3"
+        >
+          <input type="hidden" name="id" value={selectedMapping.id} />
+          <input type="hidden" name="locked" value={String(lockEnabled)} />
+          <label class="flex items-start gap-2">
+            <input type="checkbox" class="mt-0.5 rounded" bind:checked={lockEnabled} />
+            <span class="grid gap-0.5">
+              <span class="text-sm font-medium">Lock selection</span>
+              <span class="text-xs text-muted-foreground">
+                When locked, the user can't change these groups themselves.
+              </span>
+            </span>
+          </label>
+          <div class="mt-2 flex justify-end">
+            <Button type="submit" variant="outline" size="sm" disabled={submitting}>
+              {submitting ? "Saving..." : "Save lock"}
+            </Button>
+          </div>
+        </form>
+
         <form method="POST" action="?/changeGroup" use:enhance={makeEnhanceHandler()}>
           <input type="hidden" name="id" value={selectedMapping.id} />
-          <input type="hidden" name="group_ids" value={JSON.stringify(selectedGroupIds)} />
-          <div class="grid gap-2 py-2">
-            {#each data.groups as group (group.id)}
-              <label class="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted cursor-pointer">
-                <input
-                  type="checkbox"
-                  class="rounded"
-                  checked={selectedGroupIds.includes(group.id)}
-                  onchange={() => toggleGroupId(group.id)}
-                />
-                {group.name}
-              </label>
-            {/each}
+          <input type="hidden" name="group_ids" value={JSON.stringify([...selectedGroupSet])} />
+          {#if selectedGroupSet.size === 0}
+            <p
+              class="mb-2 rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-xs text-destructive"
+            >
+              Zero groups means this user will see no channels.
+            </p>
+          {/if}
+          <div class="py-2">
+            <GroupPicker groups={data.groups} bind:selected={selectedGroupSet} />
           </div>
           <Dialog.Footer>
             <Button type="submit" disabled={submitting} size="sm">

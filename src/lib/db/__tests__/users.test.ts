@@ -96,10 +96,12 @@ function insertUserMapping(params: unknown[]): { changes: number; lastInsertRowi
     dispatcharr_profile_id: params[9],
     provisioning_mode: params[10],
     is_active: params[11],
+    group_selection_locked: params[12],
+    is_owner: params[13],
     created_at: now,
     updated_at: now,
-    last_synced_at: params[12],
-    last_accessed_at: params[13],
+    last_synced_at: params[14],
+    last_accessed_at: params[15],
   };
 
   tables.user_mappings?.push(row);

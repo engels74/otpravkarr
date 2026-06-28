@@ -10,11 +10,12 @@ import {
 import type { UserMapping } from "$lib/db/types";
 import { AuditAction } from "$lib/db/types";
 import type { DispatcharrClient } from "$lib/dispatcharr/client";
-import { createUser, getUser, updateUser } from "$lib/dispatcharr/endpoints/users";
+import { createUser, deleteUser, getUser, updateUser } from "$lib/dispatcharr/endpoints/users";
 import { fetchAllPages } from "$lib/dispatcharr/pagination";
 import { DispatcharrUserSchema } from "$lib/dispatcharr/schemas";
 import { isTransientResultError, retryResult } from "$lib/utils/retry";
 import type { ActorContext } from "./lifecycle";
+import { applyGroupSubscription } from "./subscriptions";
 import type { ProvisioningRequest, ProvisioningResult } from "./types";
 
 const CREDENTIAL_PURPOSE = "credential-encryption";
@@ -169,7 +170,31 @@ export async function provisionUser(
         if (!updatedMapping) {
           return { status: "failed", error: "Failed to retrieve reactivated mapping" };
         }
-        return { status: "reactivated", mapping: updatedMapping };
+
+        // Enforce the channel-group subscription on Dispatcharr. A reactivated
+        // user must not be left with an empty channel_profiles set (= full
+        // catalog, brief 3.5). On failure, disable again rather than leave an
+        // over-exposed active account.
+        const reEnforce = await applyGroupSubscription(
+          client,
+          updatedMapping.id,
+          request.groupIds,
+          actorContext,
+        );
+        if (!reEnforce.ok) {
+          try {
+            updateUserMapping(updatedMapping.id, { is_active: 0 });
+          } catch {
+            // best-effort neutralization
+          }
+          return {
+            status: "failed",
+            error: `Reactivated but failed to enforce channel access: ${reEnforce.message}`,
+          };
+        }
+
+        const enforcedMapping = getUserMappingByPlexId(request.plexIdentity.id) ?? updatedMapping;
+        return { status: "reactivated", mapping: enforcedMapping };
       } catch (err) {
         return {
           status: "failed",
@@ -263,6 +288,7 @@ export async function provisionUser(
         ...(request.profileId !== undefined && { dispatcharr_profile_id: request.profileId }),
         provisioning_mode: request.mode,
         is_active: 1,
+        ...(request.isOwner !== undefined && { is_owner: request.isOwner ? 1 : 0 }),
       });
 
       const updated = getUserMappingByPlexId(request.plexIdentity.id);
@@ -284,6 +310,7 @@ export async function provisionUser(
         dispatcharr_profile_id: request.profileId ?? null,
         provisioning_mode: request.mode,
         is_active: 1,
+        is_owner: request.isOwner ? 1 : 0,
         last_synced_at: null,
         last_accessed_at: null,
       });
@@ -306,6 +333,34 @@ export async function provisionUser(
       error: `Dispatcharr user created but local mapping write failed: ${err instanceof Error ? err.message : String(err)}`,
     };
   }
+
+  // Enforce the channel-group subscription on Dispatcharr. The freshly created
+  // user currently has an empty channel_profiles set, which Dispatcharr treats
+  // as "see everything" (brief 3.5). applyGroupSubscription scopes it to the
+  // selected groups (or the empty profile for a zero-group selection) and forces
+  // a non-admin user_level. If it fails, delete the remote user and neutralize
+  // the mapping rather than leave an unrestricted account whose stored
+  // credentials could later be retrieved through the portal.
+  const enforce = await applyGroupSubscription(
+    client,
+    finalMapping.id,
+    request.groupIds,
+    actorContext,
+  );
+  if (!enforce.ok) {
+    await retryResult(() => deleteUser(client, dispatcharrUser.id), isTransientResultError);
+    try {
+      updateUserMapping(finalMapping.id, { is_active: 0, dispatcharr_user_id: null });
+    } catch {
+      // best-effort neutralization
+    }
+    return {
+      status: "failed",
+      error: `Provisioned but failed to enforce channel access: ${enforce.message}`,
+    };
+  }
+  const enforcedMapping = getUserMappingByPlexId(request.plexIdentity.id) ?? finalMapping;
+  finalMapping = enforcedMapping;
 
   // Automatic mode normally persists the encrypted password and rotates on
   // demand, so the initial value is not surfaced. Admin re-provisioning can

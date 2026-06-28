@@ -640,7 +640,7 @@ describe("admin settings actions", () => {
     expect(mocks.invalidateConfigCache).not.toHaveBeenCalled();
   });
 
-  it("disables updateDefaultProvisioning to prevent no-op config writes", async () => {
+  it("persists subscription defaults (self-select toggle + selectable groups)", async () => {
     const { actions } = await import("./+page.server");
     const updateDefaultProvisioning = actions.updateDefaultProvisioning;
     if (!updateDefaultProvisioning) {
@@ -648,22 +648,54 @@ describe("admin settings actions", () => {
     }
 
     const body = new FormData();
-    body.set("default_provisioning_mode", "automatic");
-    body.set("default_group_id", "1");
-    body.set("default_profile_id", "2");
+    body.set("allow_user_self_select", "true");
+    body.set("default_selectable_groups", "[2, 1, 2]");
 
     const result = await updateDefaultProvisioning(
       createActionEvent(body) as unknown as Parameters<typeof updateDefaultProvisioning>[0],
     );
 
-    expect(result).toMatchObject({
-      status: 400,
-      data: {
-        error:
-          "Default provisioning overrides are currently unavailable because runtime provisioning does not consume these settings.",
-      },
-    });
+    expect(result).toMatchObject({ success: true });
+    expect(mocks.setConfig).toHaveBeenCalledWith("allow_user_self_select", "true");
+    // Deduped + sorted JSON array.
+    expect(mocks.setConfig).toHaveBeenCalledWith("default_selectable_groups", "[1,2]");
+    expect(mocks.invalidateConfigCache).toHaveBeenCalled();
+    expect(mocks.appendAuditLog).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "config.changed" }),
+    );
+  });
+
+  it("stores allow_user_self_select=false when the toggle is off", async () => {
+    const { actions } = await import("./+page.server");
+    const updateDefaultProvisioning = actions.updateDefaultProvisioning;
+    if (!updateDefaultProvisioning) throw new Error("missing action");
+
+    const body = new FormData();
+    body.set("allow_user_self_select", "false");
+    body.set("default_selectable_groups", "[]");
+
+    await updateDefaultProvisioning(
+      createActionEvent(body) as unknown as Parameters<typeof updateDefaultProvisioning>[0],
+    );
+
+    expect(mocks.setConfig).toHaveBeenCalledWith("allow_user_self_select", "false");
+    expect(mocks.setConfig).toHaveBeenCalledWith("default_selectable_groups", "[]");
+  });
+
+  it("rejects a malformed selectable group payload without writing config", async () => {
+    const { actions } = await import("./+page.server");
+    const updateDefaultProvisioning = actions.updateDefaultProvisioning;
+    if (!updateDefaultProvisioning) throw new Error("missing action");
+
+    const body = new FormData();
+    body.set("allow_user_self_select", "true");
+    body.set("default_selectable_groups", '["nope"]');
+
+    const result = await updateDefaultProvisioning(
+      createActionEvent(body) as unknown as Parameters<typeof updateDefaultProvisioning>[0],
+    );
+
+    expect(result).toMatchObject({ status: 400 });
     expect(mocks.setConfig).not.toHaveBeenCalled();
-    expect(mocks.invalidateConfigCache).not.toHaveBeenCalled();
   });
 });

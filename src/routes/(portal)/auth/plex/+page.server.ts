@@ -4,6 +4,7 @@ import { getConfig } from "$lib/db/repositories/config";
 import { createSession, deleteSession } from "$lib/db/repositories/sessions";
 import { getUserMappingByPlexId, updateLastAccessed } from "$lib/db/repositories/users";
 import { DispatcharrClient } from "$lib/dispatcharr/client";
+import { listChannelGroups } from "$lib/dispatcharr/endpoints/channel-groups";
 import { getAccount } from "$lib/plex/client";
 import { fetchFriends } from "$lib/plex/friends";
 import { completeOAuth, removePendingOAuth } from "$lib/plex/oauth";
@@ -22,6 +23,11 @@ import {
   INITIAL_PASSWORD_COOKIE_NAME,
   sealInitialPasswordFlash,
 } from "$lib/server/initial-password-flash";
+import {
+  computeOfferedGroups,
+  defaultSelectedGroupIds,
+  getSubscriptionDefaults,
+} from "$lib/server/subscription-config";
 import type { PageServerLoad } from "./$types";
 
 const OAUTH_COOKIE_NAME = "otpravkarr_oauth_id";
@@ -106,17 +112,9 @@ export const load: PageServerLoad = async ({ cookies, getClientAddress }) => {
   }
 
   // 4. Provision user
-  const [
-    dispatcharrUrl,
-    dispatcharrApiKey,
-    defaultGroupId,
-    defaultProfileId,
-    defaultProvisioningMode,
-  ] = await Promise.all([
+  const [dispatcharrUrl, dispatcharrApiKey, defaultProvisioningMode] = await Promise.all([
     getConfig("dispatcharr_url"),
     getConfig("dispatcharr_api_key"),
-    getConfig("default_group_id"),
-    getConfig("default_profile_id"),
     getConfig("default_provisioning_mode"),
   ]);
 
@@ -126,8 +124,19 @@ export const load: PageServerLoad = async ({ cookies, getClientAddress }) => {
 
   const client = new DispatcharrClient(dispatcharrUrl, dispatcharrApiKey);
   const mode = defaultProvisioningMode === "self_managed" ? "self_managed" : "automatic";
-  const groupIds = defaultGroupId ? [Number(defaultGroupId)] : [];
-  const profileId = defaultProfileId ? Number(defaultProfileId) : undefined;
+
+  // Default subscription = every admin-offered channel group (opt-out), so a
+  // new friend is scoped to the offered catalog — never the whole lineup (an
+  // empty channel_profiles set) and never nothing unless the admin offers no
+  // groups. The portal lets them adjust afterward.
+  let groupIds: number[] = [];
+  const subscriptionDefaults = await getSubscriptionDefaults();
+  const groupsResult = await listChannelGroups(client);
+  if (groupsResult.ok) {
+    groupIds = defaultSelectedGroupIds(
+      computeOfferedGroups(groupsResult.data, subscriptionDefaults),
+    );
+  }
 
   const result = await provisionUser(
     client,
@@ -135,7 +144,6 @@ export const load: PageServerLoad = async ({ cookies, getClientAddress }) => {
       plexIdentity: identity,
       mode,
       groupIds,
-      profileId,
     },
     {
       actor: identity.username,

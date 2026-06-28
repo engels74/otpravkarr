@@ -138,8 +138,16 @@ export const load: PageServerLoad = async (event) => {
           groupIds.length === 0
             ? new Set(emptyProfileId == null ? [] : [emptyProfileId])
             : new Set([...getGroupProfilesByGroupIds(groupIds).values()].map((p) => p.profile_id));
+        // brief 3.5: a provisioned user must NEVER have empty channel_profiles
+        // (that exposes the entire catalog) — a zero-group subscription resolves
+        // to the empty profile, not []. So an empty effective set is always
+        // drift, even when `intended` is also empty (e.g. the empty-profile
+        // sentinel is missing), which the size/membership checks would otherwise
+        // treat as a match and silently hide the dangerous state.
         driftByMappingId[m.id] =
-          effective.size !== intended.size || [...intended].some((id) => !effective.has(id));
+          effective.size === 0 ||
+          effective.size !== intended.size ||
+          [...intended].some((id) => !effective.has(id));
       }
     }
   } catch {

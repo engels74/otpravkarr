@@ -185,9 +185,22 @@ export async function provisionUser(
           actorContext,
         );
         if (!reEnforce.ok) {
-          await retryResult(() => deleteUser(client, dispatcharrUserId), isTransientResultError);
+          const deleteResult = await retryResult(
+            () => deleteUser(client, dispatcharrUserId),
+            isTransientResultError,
+          );
+          // Mirror disableUser: only drop the local reference when the remote
+          // account is actually gone (deleted now, or already not_found). If the
+          // delete itself failed, the remote Dispatcharr user is still live with a
+          // usable xc_password — keep dispatcharr_user_id so a later retry/sync can
+          // clean it up, and surface the orphan in the returned error.
+          const orphanError =
+            !deleteResult.ok && deleteResult.error !== "not_found" ? deleteResult.message : null;
           try {
-            updateUserMapping(updatedMapping.id, { is_active: 0, dispatcharr_user_id: null });
+            updateUserMapping(updatedMapping.id, {
+              is_active: 0,
+              ...(orphanError == null && { dispatcharr_user_id: null }),
+            });
             // Compensating audit entry: the USER_PROVISIONED (reactivated) write
             // above recorded a reactivation that enforcement then rolled back, so
             // log the teardown to keep the trail truthful.
@@ -206,7 +219,10 @@ export async function provisionUser(
           }
           return {
             status: "failed",
-            error: `Reactivated but failed to enforce channel access: ${reEnforce.message}`,
+            error:
+              orphanError == null
+                ? `Reactivated but failed to enforce channel access: ${reEnforce.message}`
+                : `Reactivated but failed to enforce channel access: ${reEnforce.message}; remote Dispatcharr user ${dispatcharrUserId} could not be deleted and is still live: ${orphanError}`,
           };
         }
 
@@ -365,15 +381,31 @@ export async function provisionUser(
     actorContext,
   );
   if (!enforce.ok) {
-    await retryResult(() => deleteUser(client, dispatcharrUser.id), isTransientResultError);
+    const deleteResult = await retryResult(
+      () => deleteUser(client, dispatcharrUser.id),
+      isTransientResultError,
+    );
+    // Mirror disableUser: only drop the local reference when the remote account
+    // is actually gone (deleted now, or already not_found). If the delete itself
+    // failed, the remote Dispatcharr user is still live with a usable xc_password
+    // — keep dispatcharr_user_id so a later retry/sync can clean it up, and
+    // surface the orphan in the returned error.
+    const orphanError =
+      !deleteResult.ok && deleteResult.error !== "not_found" ? deleteResult.message : null;
     try {
-      updateUserMapping(finalMapping.id, { is_active: 0, dispatcharr_user_id: null });
+      updateUserMapping(finalMapping.id, {
+        is_active: 0,
+        ...(orphanError == null && { dispatcharr_user_id: null }),
+      });
     } catch {
       // best-effort neutralization
     }
     return {
       status: "failed",
-      error: `Provisioned but failed to enforce channel access: ${enforce.message}`,
+      error:
+        orphanError == null
+          ? `Provisioned but failed to enforce channel access: ${enforce.message}`
+          : `Provisioned but failed to enforce channel access: ${enforce.message}; remote Dispatcharr user ${dispatcharrUser.id} could not be deleted and is still live: ${orphanError}`,
     };
   }
   const enforcedMapping = getUserMappingByPlexId(request.plexIdentity.id) ?? finalMapping;

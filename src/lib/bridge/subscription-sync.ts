@@ -5,10 +5,12 @@ import type { DispatcharrClient } from "$lib/dispatcharr/client";
 import { listChannelGroups } from "$lib/dispatcharr/endpoints/channel-groups";
 import { listAllChannels } from "$lib/dispatcharr/endpoints/channels";
 import { updateUser } from "$lib/dispatcharr/endpoints/users";
+import { fetchAllPages } from "$lib/dispatcharr/pagination";
+import { DispatcharrUserSchema } from "$lib/dispatcharr/schemas";
 
 import { isTransientResultError, retryResult } from "$lib/utils/retry";
 import { buildGroupChannelMap, ensureEmptyProfile, reconcileGroupProfile } from "./group-profiles";
-import { PROVISIONED_USER_LEVEL } from "./subscriptions";
+import { ADMIN_USER_LEVEL, PROVISIONED_USER_LEVEL } from "./subscriptions";
 
 /**
  * Reconcile channel-group subscriptions against live Dispatcharr state.
@@ -74,6 +76,25 @@ export async function reconcileSubscriptions(
     return report;
   }
   const groupNameById = new Map(groupsResult.data.map((g) => [g.id, g.name] as const));
+
+  // Remote user levels: never down-scope an admin/superuser. A Dispatcharr user
+  // with user_level >= ADMIN_USER_LEVEL bypasses channel-profile filtering, so
+  // forcing PROVISIONED_USER_LEVEL on it (below) would silently strip privileges.
+  // The owner's is_owner self-subscription points at a SEPARATE non-admin account
+  // and is unaffected — the guard is on remote user_level, not on is_owner.
+  const usersResult = await retryResult(
+    () => fetchAllPages(client, "/api/accounts/users/", DispatcharrUserSchema),
+    isTransientResultError,
+  );
+  if (!usersResult.ok) {
+    report.errors.push(`Failed to list users: ${usersResult.message}`);
+    return report;
+  }
+  const userLevelById = new Map<number, number>(
+    usersResult.data.map(
+      (u) => [u.id, typeof u.user_level === "number" ? u.user_level : 0] as const,
+    ),
+  );
 
   // Per-mapping intended group ids (existing groups only).
   const intendedByMapping = new Map<number, number[]>();
@@ -144,6 +165,16 @@ export async function reconcileSubscriptions(
     }
 
     if (!needsRepatch) continue;
+
+    // Never down-scope an admin-level account: PATCHing user_level here would
+    // strip its privileges. Skip and record it so the omission is observable.
+    const remoteUserLevel = userLevelById.get(m.dispatcharr_user_id);
+    if (remoteUserLevel != null && remoteUserLevel >= ADMIN_USER_LEVEL) {
+      report.errors.push(
+        `User ${m.dispatcharr_user_id}: skipped repatch — user_level ${remoteUserLevel} (>= ${ADMIN_USER_LEVEL}) bypasses channel-profile filtering`,
+      );
+      continue;
+    }
 
     const patch = await retryResult(
       () =>

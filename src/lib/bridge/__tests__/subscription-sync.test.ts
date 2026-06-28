@@ -17,13 +17,14 @@ vi.mock("$lib/db/repositories/users", () => ({
 vi.mock("$lib/dispatcharr/endpoints/channel-groups", () => ({ listChannelGroups: vi.fn() }));
 vi.mock("$lib/dispatcharr/endpoints/channels", () => ({ listAllChannels: vi.fn() }));
 vi.mock("$lib/dispatcharr/endpoints/users", () => ({ updateUser: vi.fn() }));
+vi.mock("$lib/dispatcharr/pagination", () => ({ fetchAllPages: vi.fn() }));
 
 vi.mock("../group-profiles", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../group-profiles")>();
   return { ...actual, reconcileGroupProfile: vi.fn(), ensureEmptyProfile: vi.fn() };
 });
 
-vi.mock("../subscriptions", () => ({ PROVISIONED_USER_LEVEL: 1 }));
+vi.mock("../subscriptions", () => ({ PROVISIONED_USER_LEVEL: 1, ADMIN_USER_LEVEL: 10 }));
 
 vi.mock("$lib/utils/retry", async (importOriginal) => {
   const actual = await importOriginal<typeof import("$lib/utils/retry")>();
@@ -35,6 +36,7 @@ const { getAllUserMappings, updateUserMapping } = await import("$lib/db/reposito
 const { listChannelGroups } = await import("$lib/dispatcharr/endpoints/channel-groups");
 const { listAllChannels } = await import("$lib/dispatcharr/endpoints/channels");
 const { updateUser } = await import("$lib/dispatcharr/endpoints/users");
+const { fetchAllPages } = await import("$lib/dispatcharr/pagination");
 const { reconcileGroupProfile, ensureEmptyProfile } = await import("../group-profiles");
 const { reconcileSubscriptions } = await import("../subscription-sync");
 
@@ -88,6 +90,9 @@ beforeEach(() => {
   vi.mocked(updateUser)
     .mockReset()
     .mockResolvedValue(ok({ id: 42 }) as never);
+  vi.mocked(fetchAllPages)
+    .mockReset()
+    .mockResolvedValue(ok([{ id: 42, username: "alice", user_level: 1 }]) as never);
 });
 
 describe("reconcileSubscriptions", () => {

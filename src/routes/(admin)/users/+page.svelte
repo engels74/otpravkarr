@@ -459,7 +459,7 @@ async function copyOneTimePassword() {
                   {#if data.driftByMappingId[m.id]}
                     <span
                       class="rounded-md border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[11px] font-medium text-amber-600 dark:text-amber-400"
-                      title="Dispatcharr's channel_profiles differ from the stored group selection. The next sync will reconcile it, or re-save the groups."
+                      title="Dispatcharr's channel_profiles differ from the stored group selection. Re-save the groups to fix it. Sync only auto-corrects this when a group profile is recreated."
                     >
                       Drift
                     </span>

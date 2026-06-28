@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const mockExec = vi.fn();
 const mockQuery = vi.fn();
 const mockClose = vi.fn();
+const mockMkdirSync = vi.fn();
 
 class MockDatabase {
   pragmas: string[] = [];
@@ -44,6 +45,10 @@ vi.mock("../migrate", () => ({
   runMigrations: vi.fn(),
 }));
 
+vi.mock("node:fs", () => ({
+  mkdirSync: mockMkdirSync,
+}));
+
 const { createDatabase, getDb, initializeDatabase, _resetForTesting } = await import(
   "../connection"
 );
@@ -77,6 +82,21 @@ describe("createDatabase", () => {
     const walIdx = calls.indexOf("PRAGMA journal_mode=WAL");
     const fkIdx = calls.indexOf("PRAGMA foreign_keys=ON");
     expect(walIdx).toBeLessThan(fkIdx);
+  });
+
+  it("creates the parent directory chain for a nested file path", () => {
+    createDatabase("/tmp/nested/sub/otpravkarr.sqlite");
+    expect(mockMkdirSync).toHaveBeenCalledWith("/tmp/nested/sub", { recursive: true });
+  });
+
+  it("does not attempt mkdir for an in-memory database", () => {
+    createDatabase(":memory:");
+    expect(mockMkdirSync).not.toHaveBeenCalled();
+  });
+
+  it("does not attempt mkdir when the path has no parent directory", () => {
+    createDatabase("otpravkarr.sqlite");
+    expect(mockMkdirSync).not.toHaveBeenCalled();
   });
 });
 

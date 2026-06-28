@@ -68,7 +68,11 @@ export const load: PageServerLoad = async (event) => {
   await requireAdmin(event);
   const { url } = event;
   const status = url.searchParams.get("status") ?? "all";
-  const mode = url.searchParams.get("mode") ?? "all";
+  // Validate against the known modes; an unrecognized value (e.g. the hyphenated
+  // "self-managed") must fall back to "all" rather than silently mis-filtering.
+  const KNOWN_MODES = new Set(["all", "automatic", "self_managed", "staff"]);
+  const modeParam = url.searchParams.get("mode") ?? "all";
+  const mode = KNOWN_MODES.has(modeParam) ? modeParam : "all";
   const search = url.searchParams.get("search") ?? "";
 
   const ownerPlexAccountId = await tryResolveConfiguredPlexOwnerAccountId();

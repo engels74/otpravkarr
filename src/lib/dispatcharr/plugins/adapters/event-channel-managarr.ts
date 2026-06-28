@@ -28,13 +28,13 @@ export const eventChannelManagarrAdapter: PluginAdapter = {
     if (ownedProfileNames.length > 0 && missing.length > 0) {
       advisories.push({
         level: "warning",
-        message: `Add these otpravkarr group profiles to ECM's "channel_profile_name" so event channels reach their subscribers: ${missing.join(", ")}.`,
+        message: `These otpravkarr group profiles are not yet in ECM's "channel_profile_name"; otpravkarr adds them automatically on the next sync so event channels reach their subscribers: ${missing.join(", ")}.`,
       });
     } else if (ownedProfileNames.length > 0) {
       advisories.push({
         level: "info",
         message:
-          "All otpravkarr group profiles are within ECM's scope — event automation reaches subscribers.",
+          "All otpravkarr group profiles are within ECM's scope (kept in sync automatically) — event automation reaches subscribers.",
       });
     }
 

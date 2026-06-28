@@ -1,4 +1,6 @@
+import { reconcileEcmScope } from "$lib/bridge/ecm-scope";
 import { reconcileSync } from "$lib/bridge/lifecycle";
+import { reconcileQuarantineGroups } from "$lib/bridge/quarantine-sync";
 import { reconcileSubscriptions } from "$lib/bridge/subscription-sync";
 import { appendAuditLog } from "$lib/db/repositories/audit";
 import { getConfig } from "$lib/db/repositories/config";
@@ -85,6 +87,15 @@ export async function createSyncJob(defaultIntervalMs = DEFAULT_INTERVAL_MS): Pr
       try {
         const client = new DispatcharrClient(dispatcharrUrl, apiKey);
         const report = await reconcileSync(client, plexAdminToken);
+        // Refresh the quarantine-group name policy from the live IPTV Checker
+        // plugin BEFORE reconciling subscriptions, so renamed junk groups stay
+        // hidden this cycle. Isolated: a failure here must not abort the sync.
+        let quarantine: Awaited<ReturnType<typeof reconcileQuarantineGroups>> | { error: string };
+        try {
+          quarantine = await reconcileQuarantineGroups(client);
+        } catch (qError) {
+          quarantine = { error: qError instanceof Error ? qError.message : String(qError) };
+        }
         // Converge channel-group subscriptions against live Dispatcharr state
         // (channels moved between groups, plugins created channels, etc.). Kept
         // separate so a subscription error never masks the friend-sync result.
@@ -96,7 +107,16 @@ export async function createSyncJob(defaultIntervalMs = DEFAULT_INTERVAL_MS): Pr
             error: subError instanceof Error ? subError.message : String(subError),
           };
         }
-        log("sync.completed", { report, subscriptions });
+        // Auto-write otpravkarr's group profiles into ECM's scope so event
+        // automation reaches subscribers. Runs AFTER subscription reconciliation
+        // so freshly created group profiles are included. Isolated like the rest.
+        let ecmScope: Awaited<ReturnType<typeof reconcileEcmScope>> | { error: string };
+        try {
+          ecmScope = await reconcileEcmScope(client);
+        } catch (ecmError) {
+          ecmScope = { error: ecmError instanceof Error ? ecmError.message : String(ecmError) };
+        }
+        log("sync.completed", { report, quarantine, subscriptions, ecmScope });
         try {
           appendAuditLog({
             action: AuditAction.SYNC_COMPLETED,

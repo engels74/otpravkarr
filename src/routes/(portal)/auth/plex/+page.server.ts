@@ -1,10 +1,12 @@
-import { error, redirect } from "@sveltejs/kit";
+import { error, fail, redirect } from "@sveltejs/kit";
 import { provisionUser } from "$lib/bridge/provisioner";
 import { getConfig } from "$lib/db/repositories/config";
 import { createSession, deleteSession } from "$lib/db/repositories/sessions";
 import { getUserMappingByPlexId, updateLastAccessed } from "$lib/db/repositories/users";
+import type { ProvisioningMode } from "$lib/db/types";
 import { DispatcharrClient } from "$lib/dispatcharr/client";
 import { listChannelGroups } from "$lib/dispatcharr/endpoints/channel-groups";
+import type { DispatcharrChannelGroup } from "$lib/dispatcharr/types";
 import { getAccount } from "$lib/plex/client";
 import { fetchFriends } from "$lib/plex/friends";
 import { completeOAuth, removePendingOAuth } from "$lib/plex/oauth";
@@ -24,14 +26,27 @@ import {
   sealInitialPasswordFlash,
 } from "$lib/server/initial-password-flash";
 import {
+  ONBOARDING_COOKIE_MAX_AGE,
+  ONBOARDING_COOKIE_NAME,
+  type OnboardingIdentity,
+  openOnboardingIdentity,
+  sealOnboardingIdentity,
+} from "$lib/server/onboarding-flash";
+import {
   computeOfferedGroups,
   defaultSelectedGroupIds,
   getSubscriptionDefaults,
 } from "$lib/server/subscription-config";
 import { isTransientResultError, retryResult } from "$lib/utils/retry";
-import type { PageServerLoad } from "./$types";
+import type { Actions, PageServerLoad } from "./$types";
 
 const OAUTH_COOKIE_NAME = "otpravkarr_oauth_id";
+const OAUTH_COOKIE_DELETE_OPTIONS = {
+  path: "/",
+  httpOnly: true,
+  secure: isSecure,
+  sameSite: "lax" as const,
+};
 const INITIAL_PASSWORD_COOKIE_OPTIONS = {
   path: "/",
   httpOnly: true,
@@ -39,22 +54,154 @@ const INITIAL_PASSWORD_COOKIE_OPTIONS = {
   sameSite: "lax" as const,
   maxAge: INITIAL_PASSWORD_COOKIE_MAX_AGE,
 };
+const ONBOARDING_COOKIE_OPTIONS = {
+  path: "/",
+  httpOnly: true,
+  secure: isSecure,
+  sameSite: "lax" as const,
+  maxAge: ONBOARDING_COOKIE_MAX_AGE,
+};
+
+interface OfferedGroup {
+  id: number;
+  name: string;
+  channelCount: number | null;
+}
+
+interface PickerData {
+  picker: true;
+  plexUsername: string;
+  offered: OfferedGroup[];
+  selected: number[];
+}
+
+function toOfferedGroup(g: DispatcharrChannelGroup): OfferedGroup {
+  return { id: g.id, name: g.name, channelCount: g.channel_count ?? null };
+}
+
+/** Build a Dispatcharr client from config, or throw a 500 (load context). */
+async function buildDispatcharrClient(): Promise<DispatcharrClient> {
+  const [url, key] = await Promise.all([
+    getConfig("dispatcharr_url"),
+    getConfig("dispatcharr_api_key"),
+  ]);
+  if (!url || !key) {
+    throw error(500, "Server configuration incomplete: missing Dispatcharr settings");
+  }
+  return new DispatcharrClient(url, key);
+}
+
+async function resolveProvisioningMode(): Promise<ProvisioningMode> {
+  const mode = await getConfig("default_provisioning_mode");
+  return mode === "self_managed" ? "self_managed" : "automatic";
+}
+
+/**
+ * Fetch the offered (non-quarantine, admin-permitted) groups for onboarding.
+ * Fails closed: a transient Dispatcharr error throws 502 rather than provisioning
+ * against an empty offered set.
+ */
+async function fetchOfferedGroups(
+  client: DispatcharrClient,
+): Promise<{ groups: DispatcharrChannelGroup[]; allowSelfSelect: boolean }> {
+  const defaults = await getSubscriptionDefaults();
+  const groupsResult = await retryResult(() => listChannelGroups(client), isTransientResultError);
+  if (!groupsResult.ok) {
+    console.error("[auth/plex] Failed to list channel groups:", groupsResult.error);
+    throw error(502, "Unable to set up your account. Please contact the administrator.");
+  }
+  return {
+    groups: computeOfferedGroups(groupsResult.data, defaults),
+    allowSelfSelect: defaults.allowSelfSelect,
+  };
+}
+
+/**
+ * Provision (or reactivate / no-op) the user, establish their session, stash the
+ * one-time initial password for the landing page, and redirect to the portal.
+ * Always throws (redirect on success, HttpError on failure).
+ */
+async function provisionAndRedirect(
+  cookies: Parameters<PageServerLoad>[0]["cookies"],
+  client: DispatcharrClient,
+  identity: PlexIdentity,
+  mode: ProvisioningMode,
+  groupIds: number[],
+  clientAddress: string,
+): Promise<never> {
+  const result = await provisionUser(
+    client,
+    { plexIdentity: identity, mode, groupIds },
+    { actor: identity.username, ipAddress: clientAddress },
+  );
+
+  if (result.status === "failed") {
+    console.error("[auth/plex] Provisioning failed for Plex user:", result.error);
+    throw error(502, "Unable to set up your account. Please contact the administrator.");
+  }
+
+  const mapping = result.mapping;
+  const priorSessionId = cookies.get(SESSION_COOKIE_NAME);
+  if (priorSessionId) {
+    deleteSession(priorSessionId);
+  }
+  const sessionId = createSession(String(mapping.id), "user", USER_SESSION_TTL);
+  cookies.set(SESSION_COOKIE_NAME, sessionId, USER_COOKIE_OPTIONS);
+
+  const initialPassword = result.status === "provisioned" ? result.initialPassword : undefined;
+  if (initialPassword) {
+    cookies.set(
+      INITIAL_PASSWORD_COOKIE_NAME,
+      await sealInitialPasswordFlash(initialPassword),
+      INITIAL_PASSWORD_COOKIE_OPTIONS,
+    );
+  }
+
+  updateLastAccessed(mapping.id);
+  throw redirect(303, "/");
+}
 
 export const load: PageServerLoad = async ({ cookies, getClientAddress }) => {
-  // 1. Read OAuth ID from cookie, then delete it
   const oauthId = cookies.get(OAUTH_COOKIE_NAME);
-  cookies.delete(OAUTH_COOKIE_NAME, {
-    path: "/",
-    httpOnly: true,
-    secure: isSecure,
-    sameSite: "lax",
-  });
 
+  // Refresh-safe picker re-render. The OAuth handoff is single-use (the pending
+  // store + cookie are consumed on first load), so on a page refresh there is no
+  // oauth_id. If the verified-identity onboarding cookie is still valid, re-render
+  // the picker from it instead of erroring. This is display-only; the confirm
+  // action re-verifies friend status before provisioning.
   if (!oauthId) {
+    const onboardingCookie = cookies.get(ONBOARDING_COOKIE_NAME);
+    if (onboardingCookie) {
+      const identity = await openOnboardingIdentity(onboardingCookie);
+      if (identity) {
+        const client = await buildDispatcharrClient();
+        const { groups, allowSelfSelect } = await fetchOfferedGroups(client);
+        // Self-select may have been disabled by an admin after this onboarding
+        // cookie was issued. Mirror the fresh-path policy and skip the picker.
+        // We can't provision from here (the load path doesn't re-verify Plex
+        // friend status the way confirm does), so clear the cookie and force a
+        // fresh sign-in, which auto-provisions with admin defaults via the gate.
+        if (!allowSelfSelect) {
+          cookies.delete(ONBOARDING_COOKIE_NAME, OAUTH_COOKIE_DELETE_OPTIONS);
+          throw error(400, "Group selection is no longer available. Please sign in again.");
+        }
+        return {
+          picker: true,
+          plexUsername: identity.username,
+          offered: groups.map(toOfferedGroup),
+          selected: defaultSelectedGroupIds(groups),
+        } satisfies PickerData;
+      }
+      // Stale/tampered onboarding cookie: clear it so the user isn't stuck on a
+      // 400 until it naturally expires; a fresh sign-in then starts clean.
+      cookies.delete(ONBOARDING_COOKIE_NAME, OAUTH_COOKIE_DELETE_OPTIONS);
+    }
     throw error(400, "Missing OAuth session. Please try signing in again.");
   }
 
-  // 2. Complete OAuth — get PlexIdentity
+  // Fresh OAuth handoff — consume the cookie immediately.
+  cookies.delete(OAUTH_COOKIE_NAME, OAUTH_COOKIE_DELETE_OPTIONS);
+
   let identity: PlexIdentity;
   try {
     identity = await completeOAuth(oauthId);
@@ -65,20 +212,20 @@ export const load: PageServerLoad = async ({ cookies, getClientAddress }) => {
     throw err;
   }
   // Evict server-side cache immediately after resolving identity so the same
-  // oauth_id cannot be replayed even if a later step (provisioning etc.) fails.
-  // Residual risk (follow-up, not in scope): planted-cookie login-CSRF — attacker
-  // who can set the victim's otpravkarr_oauth_id cookie could log the victim into
-  // the attacker's Plex identity; httpOnly+secure+sameSite=lax mitigates;
-  // __Host- prefix is a recorded follow-up.
+  // oauth_id cannot be replayed even if a later step fails.
   removePendingOAuth(oauthId);
 
-  // 3. Verify friend status
   const plexAdminToken = await getConfig("plex_admin_token");
   if (!plexAdminToken) {
     throw error(500, "Server configuration incomplete: missing Plex admin token");
   }
 
-  const account = await getAccount(plexAdminToken);
+  let account: Awaited<ReturnType<typeof getAccount>>;
+  try {
+    account = await getAccount(plexAdminToken);
+  } catch {
+    throw error(502, "Couldn't reach Plex. Please try again.");
+  }
   const isServerOwner = account.id === identity.id;
 
   if (isServerOwner) {
@@ -97,12 +244,15 @@ export const load: PageServerLoad = async ({ cookies, getClientAddress }) => {
     throw redirect(303, "/dashboard");
   }
 
-  const friends = await fetchFriends(account);
-
+  let friends: Awaited<ReturnType<typeof fetchFriends>>;
+  try {
+    friends = await fetchFriends(account);
+  } catch {
+    throw error(502, "Couldn't reach Plex. Please try again.");
+  }
   const hasAcceptedAccess = friends.some(
     (friend) => friend.id === identity.id && friend.status.trim().toLowerCase() === "accepted",
   );
-
   if (!hasAcceptedAccess) {
     throw error(403, "Your Plex account does not have access to this server");
   }
@@ -112,77 +262,141 @@ export const load: PageServerLoad = async ({ cookies, getClientAddress }) => {
     throw error(403, "Your access to this server has been revoked");
   }
 
-  // 4. Provision user
-  const [dispatcharrUrl, dispatcharrApiKey, defaultProvisioningMode] = await Promise.all([
-    getConfig("dispatcharr_url"),
-    getConfig("dispatcharr_api_key"),
-    getConfig("default_provisioning_mode"),
-  ]);
+  const client = await buildDispatcharrClient();
+  const { groups: offeredGroups, allowSelfSelect } = await fetchOfferedGroups(client);
+  const defaultGroupIds = defaultSelectedGroupIds(offeredGroups);
 
-  if (!dispatcharrUrl || !dispatcharrApiKey) {
-    throw error(500, "Server configuration incomplete: missing Dispatcharr settings");
+  // Mandatory pre-credential group picker for brand-new friends who are allowed
+  // to self-select and have something to choose from. Seal the verified identity
+  // and hand off to the picker; provisioning + credentials happen on confirm.
+  const isNewUser = existingMapping == null;
+  if (isNewUser && allowSelfSelect && offeredGroups.length > 0) {
+    cookies.set(ONBOARDING_COOKIE_NAME, await sealOnboardingIdentity(identity), {
+      ...ONBOARDING_COOKIE_OPTIONS,
+    });
+    return {
+      picker: true,
+      plexUsername: identity.username,
+      offered: offeredGroups.map(toOfferedGroup),
+      selected: defaultGroupIds,
+    } satisfies PickerData;
   }
 
-  const client = new DispatcharrClient(dispatcharrUrl, dispatcharrApiKey);
-  const mode = defaultProvisioningMode === "self_managed" ? "self_managed" : "automatic";
+  // No picker (returning user re-login, self-select disabled, or nothing to
+  // offer): provision immediately with the admin defaults and reveal credentials.
+  cookies.delete(ONBOARDING_COOKIE_NAME, OAUTH_COOKIE_DELETE_OPTIONS);
+  const mode = await resolveProvisioningMode();
+  return provisionAndRedirect(cookies, client, identity, mode, defaultGroupIds, getClientAddress());
+};
 
-  // Default subscription = every admin-offered channel group (opt-out), so a
-  // new friend is scoped to the offered catalog — never the whole lineup (an
-  // empty channel_profiles set) and never nothing unless the admin offers no
-  // groups. The portal lets them adjust afterward.
-  const subscriptionDefaults = await getSubscriptionDefaults();
-  const groupsResult = await retryResult(() => listChannelGroups(client), isTransientResultError);
-  if (!groupsResult.ok) {
-    // Fail closed: a transient Dispatcharr error here would otherwise provision
-    // the new friend against an empty channel set, mark them active, and the
-    // already_exists fast-return on later logins would never self-heal it. A
-    // genuinely empty offered catalog (ok with no groups) still flows through.
-    console.error("[auth/plex] Failed to list channel groups:", groupsResult.error);
-    throw error(502, "Unable to set up your account. Please contact the administrator.");
-  }
-  const groupIds = defaultSelectedGroupIds(
-    computeOfferedGroups(groupsResult.data, subscriptionDefaults),
-  );
+export const actions: Actions = {
+  // Finalize onboarding for a new friend: validate their group selection,
+  // re-verify Plex friend status (the sealed cookie is a carrier, not a trust
+  // root), then provision and reveal credentials.
+  confirm: async ({ cookies, request, getClientAddress }) => {
+    const onboardingCookie = cookies.get(ONBOARDING_COOKIE_NAME);
+    const identity: OnboardingIdentity | null = onboardingCookie
+      ? await openOnboardingIdentity(onboardingCookie)
+      : null;
+    if (!identity) {
+      // Clear a stale/tampered cookie so the user isn't stuck re-submitting against it.
+      if (onboardingCookie) {
+        cookies.delete(ONBOARDING_COOKIE_NAME, OAUTH_COOKIE_DELETE_OPTIONS);
+      }
+      return fail(400, { error: "Your sign-in session expired. Please sign in again." });
+    }
 
-  const result = await provisionUser(
-    client,
-    {
-      plexIdentity: identity,
-      mode,
-      groupIds,
-    },
-    {
-      actor: identity.username,
-      ipAddress: getClientAddress(),
-    },
-  );
+    // Parse + validate the submitted selection (positive integers only).
+    const raw = String((await request.formData()).get("group_ids") ?? "[]");
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      return fail(400, { error: "Invalid selection." });
+    }
+    if (!Array.isArray(parsed) || !parsed.every((v): v is number => Number.isInteger(v) && v > 0)) {
+      return fail(400, { error: "Invalid selection." });
+    }
+    const requestedIds = [...new Set(parsed as number[])];
 
-  if (result.status === "failed") {
-    console.error("[auth/plex] Provisioning failed for Plex user:", result.error);
-    throw error(502, "Unable to set up your account. Please contact the administrator.");
-  }
-
-  // 5. Create session
-  const mapping = result.mapping;
-  const priorSessionId = cookies.get(SESSION_COOKIE_NAME);
-  if (priorSessionId) {
-    deleteSession(priorSessionId);
-  }
-  const sessionId = createSession(String(mapping.id), "user", USER_SESSION_TTL);
-  cookies.set(SESSION_COOKIE_NAME, sessionId, USER_COOKIE_OPTIONS);
-
-  const initialPassword = result.status === "provisioned" ? result.initialPassword : undefined;
-  if (initialPassword) {
-    cookies.set(
-      INITIAL_PASSWORD_COOKIE_NAME,
-      await sealInitialPasswordFlash(initialPassword),
-      INITIAL_PASSWORD_COOKIE_OPTIONS,
+    // Re-verify identity + friend status against Plex.
+    const plexAdminToken = await getConfig("plex_admin_token");
+    if (!plexAdminToken) {
+      return fail(500, { error: "Server configuration incomplete. Contact the administrator." });
+    }
+    let account: Awaited<ReturnType<typeof getAccount>>;
+    try {
+      account = await getAccount(plexAdminToken);
+    } catch {
+      return fail(502, { error: "Couldn't reach Plex. Please try again." });
+    }
+    if (account.id === identity.id) {
+      // The server owner is handled in load; they should never reach confirm.
+      cookies.delete(ONBOARDING_COOKIE_NAME, OAUTH_COOKIE_DELETE_OPTIONS);
+      return fail(400, { error: "Please sign in again." });
+    }
+    let friends: Awaited<ReturnType<typeof fetchFriends>>;
+    try {
+      friends = await fetchFriends(account);
+    } catch {
+      return fail(502, { error: "Couldn't reach Plex. Please try again." });
+    }
+    const hasAcceptedAccess = friends.some(
+      (friend) => friend.id === identity.id && friend.status.trim().toLowerCase() === "accepted",
     );
-  }
+    if (!hasAcceptedAccess) {
+      cookies.delete(ONBOARDING_COOKIE_NAME, OAUTH_COOKIE_DELETE_OPTIONS);
+      return fail(403, { error: "Your Plex account does not have access to this server." });
+    }
+    const existingMapping = getUserMappingByPlexId(identity.id);
+    if (existingMapping?.is_active === 0) {
+      cookies.delete(ONBOARDING_COOKIE_NAME, OAUTH_COOKIE_DELETE_OPTIONS);
+      return fail(403, { error: "Your access to this server has been revoked." });
+    }
 
-  // Update last accessed timestamp
-  updateLastAccessed(mapping.id);
+    const [url, key] = await Promise.all([
+      getConfig("dispatcharr_url"),
+      getConfig("dispatcharr_api_key"),
+    ]);
+    if (!url || !key) {
+      return fail(500, { error: "Server configuration incomplete. Contact the administrator." });
+    }
+    const client = new DispatcharrClient(url, key);
 
-  // 6. Redirect
-  throw redirect(303, "/");
+    // Re-derive the offered set server-side and reject anything outside it — the
+    // client must not be trusted to post only offered IDs. Fail closed.
+    const defaults = await getSubscriptionDefaults();
+    // Enforce the global self-select policy: if an admin disabled self-select
+    // after this cookie was issued, reject the submitted selection rather than
+    // provisioning the user's own choices. Force a fresh sign-in, which
+    // provisions with admin defaults via the correctly-gated load path.
+    if (!defaults.allowSelfSelect) {
+      cookies.delete(ONBOARDING_COOKIE_NAME, OAUTH_COOKIE_DELETE_OPTIONS);
+      return fail(400, { error: "Group selection is no longer available. Please sign in again." });
+    }
+    const groupsResult = await retryResult(() => listChannelGroups(client), isTransientResultError);
+    if (!groupsResult.ok) {
+      return fail(502, { error: "Unable to set up your account. Please try again." });
+    }
+    const offeredIds = new Set(computeOfferedGroups(groupsResult.data, defaults).map((g) => g.id));
+    if (!requestedIds.every((id) => offeredIds.has(id))) {
+      return fail(400, { error: "Invalid selection." });
+    }
+
+    const mode = await resolveProvisioningMode();
+    // Consume the onboarding cookie before provisioning so a refresh can't replay.
+    cookies.delete(ONBOARDING_COOKIE_NAME, OAUTH_COOKIE_DELETE_OPTIONS);
+
+    // provisionUser only reads identity id/uuid/username/email/thumb; the Plex
+    // auth token is intentionally absent from the sealed cookie.
+    const fullIdentity: PlexIdentity = { ...identity, authenticationToken: "" };
+    return provisionAndRedirect(
+      cookies,
+      client,
+      fullIdentity,
+      mode,
+      requestedIds,
+      getClientAddress(),
+    );
+  },
 };

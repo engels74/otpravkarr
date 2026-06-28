@@ -93,6 +93,7 @@ export const AuditAction = {
   CONFIG_CHANGED: "config.changed",
   ADMIN_LOGOUT: "admin.logout",
   HEALTH_CHECK_FAILED: "health.check_failed",
+  ECM_SCOPE_UPDATED: "ecm.scope_updated",
 } as const;
 
 export type AuditActionValue = (typeof AuditAction)[keyof typeof AuditAction];

@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DispatcharrChannelGroup } from "$lib/dispatcharr/types";
 
 vi.mock("$lib/db/repositories/config", () => ({
@@ -12,6 +12,8 @@ const {
   computeOfferedGroups,
   defaultSelectedGroupIds,
   isQuarantineGroup,
+  getQuarantineGroupNames,
+  setQuarantineGroupNames,
 } = await import("../subscription-config");
 
 function group(id: number, name: string): DispatcharrChannelGroup {
@@ -28,6 +30,37 @@ describe("isQuarantineGroup", () => {
     expect(isQuarantineGroup("slow")).toBe(true);
     expect(isQuarantineGroup("  Black Screens ")).toBe(true);
     expect(isQuarantineGroup("Sports")).toBe(false);
+  });
+});
+
+describe("setQuarantineGroupNames / getQuarantineGroupNames", () => {
+  afterEach(() => {
+    // Reset to built-in defaults only (the union always re-adds them).
+    setQuarantineGroupNames([]);
+  });
+
+  it("merges plugin-resolved names on top of the built-in defaults", () => {
+    setQuarantineGroupNames(["Dead Channels", "Frozen"]);
+    // Renamed plugin groups are now matched...
+    expect(isQuarantineGroup("Dead Channels")).toBe(true);
+    expect(isQuarantineGroup("frozen")).toBe(true);
+    // ...without dropping the built-in defaults (defense in depth).
+    expect(isQuarantineGroup("Graveyard")).toBe(true);
+    expect(isQuarantineGroup("Slow")).toBe(true);
+  });
+
+  it("never narrows below the defaults even when given an empty list", () => {
+    setQuarantineGroupNames([]);
+    expect(isQuarantineGroup("Graveyard")).toBe(true);
+    expect(isQuarantineGroup("Black Screens")).toBe(true);
+    expect(getQuarantineGroupNames()).toEqual(["Graveyard", "Slow", "Black Screens"]);
+  });
+
+  it("trims, drops blanks, and dedupes case-insensitively", () => {
+    setQuarantineGroupNames(["  Dead  ", "", "dead", "GRAVEYARD"]);
+    const names = getQuarantineGroupNames();
+    // "Dead" added once; "GRAVEYARD" folds into the existing "Graveyard".
+    expect(names).toEqual(["Graveyard", "Slow", "Black Screens", "Dead"]);
   });
 });
 

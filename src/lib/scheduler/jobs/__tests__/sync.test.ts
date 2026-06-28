@@ -26,6 +26,22 @@ vi.mock("$lib/bridge/subscription-sync", () => ({
   reconcileSubscriptions: (...args: unknown[]) => mockReconcileSubscriptions(...args),
 }));
 
+const mockReconcileQuarantineGroups = vi.fn(async () => ({
+  names: ["Graveyard", "Slow", "Black Screens"],
+  source: "plugin" as const,
+}));
+vi.mock("$lib/bridge/quarantine-sync", () => ({
+  reconcileQuarantineGroups: (...args: unknown[]) => mockReconcileQuarantineGroups(...args),
+}));
+
+const mockReconcileEcmScope = vi.fn(async () => ({
+  ok: true as const,
+  data: { updated: false, added: [] as string[], reason: "already_in_scope" as const },
+}));
+vi.mock("$lib/bridge/ecm-scope", () => ({
+  reconcileEcmScope: (...args: unknown[]) => mockReconcileEcmScope(...args),
+}));
+
 const mockAppendAuditLog = vi.fn();
 vi.mock("$lib/db/repositories/audit", () => ({
   appendAuditLog: (entry: unknown) => mockAppendAuditLog(entry),
@@ -161,6 +177,12 @@ describe("sync job fn", () => {
     expect(completedLog).toBeDefined();
     expect(completedLog?.job).toBe("plex-dispatcharr-sync");
     expect(completedLog?.report).toEqual(report);
+    // The new reconciliation steps run as part of the same cycle and surface
+    // their results in the completion log.
+    expect(mockReconcileQuarantineGroups).toHaveBeenCalledTimes(1);
+    expect(mockReconcileEcmScope).toHaveBeenCalledTimes(1);
+    expect(completedLog?.quarantine).toBeDefined();
+    expect(completedLog?.ecmScope).toBeDefined();
 
     expect(mockAppendAuditLog).toHaveBeenCalledWith({
       action: "sync.completed",

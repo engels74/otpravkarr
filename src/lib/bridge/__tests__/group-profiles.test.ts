@@ -76,6 +76,15 @@ describe("profileNameForGroup", () => {
     expect(long.length).toBeLessThanOrEqual(100);
     expect(long.startsWith("otpravkarr:g1:")).toBe(true);
   });
+
+  it("strips commas so the name round-trips through ECM's CSV scope field", () => {
+    // A group name with a comma must not survive into the profile name: ECM's
+    // channel_profile_name is comma-separated, so an embedded comma would split
+    // the name on read-back and trigger perpetual re-appends.
+    expect(profileNameForGroup(42, "Sports, News")).toBe("otpravkarr:g42:Sports News");
+    expect(profileNameForGroup(7, "A,,B")).toBe("otpravkarr:g7:A B");
+    expect(profileNameForGroup(7, "Sports, News")).not.toContain(",");
+  });
 });
 
 describe("reconcileGroupProfile", () => {

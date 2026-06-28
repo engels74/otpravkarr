@@ -3,6 +3,7 @@ import { redirect } from "@sveltejs/kit";
 import { sequence } from "@sveltejs/kit/hooks";
 import { building } from "$app/environment";
 import { env } from "$env/dynamic/private";
+import { hydrateQuarantineGroupsFromConfig } from "$lib/bridge/quarantine-sync";
 import { createBootstrapToken } from "$lib/crypto/bootstrap";
 import { initializeDatabase } from "$lib/db/connection";
 import { getAdminByUsername } from "$lib/db/repositories/admin";
@@ -58,6 +59,11 @@ function toForbiddenResponse(error: unknown): Response | null {
 }
 
 async function registerSchedulerJobs(): Promise<void> {
+  // Restore the last resolved quarantine-group names so renamed IPTV Checker
+  // junk groups stay hidden during the window before the first sync reconciles
+  // them against the live plugin. No network I/O; best-effort.
+  await hydrateQuarantineGroupsFromConfig();
+
   const syncJob = await createSyncJob();
   const healthJob = createHealthJob();
 

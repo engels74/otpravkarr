@@ -143,6 +143,27 @@ export const DispatcharrPluginsResponseSchema = z.union([
   z.array(DispatcharrPluginSchema),
 ]);
 
+/**
+ * Response from `POST /api/plugins/plugins/<key>/settings/`.
+ *
+ * The view returns `{ success: true, settings: {...} }` on success and
+ * `{ success: false, error }` (HTTP 400) on failure. `success` is the only
+ * field we rely on; everything else is passthrough. `settings` is coerced the
+ * same way as the list endpoint (null / non-object → `{}`).
+ */
+export const DispatcharrPluginSettingsResponseSchema = z
+  .object({
+    success: z.boolean(),
+    error: z.string().optional(),
+    settings: z
+      .preprocess(
+        (v) => (v !== null && typeof v === "object" && !Array.isArray(v) ? v : {}),
+        z.record(z.string(), z.unknown()),
+      )
+      .optional(),
+  })
+  .passthrough();
+
 export function paginatedSchema<T extends z.ZodType>(itemSchema: T) {
   return z.object({
     count: z.number(),

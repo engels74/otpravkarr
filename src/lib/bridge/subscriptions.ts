@@ -134,16 +134,28 @@ export async function applyGroupSubscription(
   // profiles are derivable from dispatcharr_group_ids + channel_group_profiles.
   const sortedGroupIds = [...requestedGroupIds].sort((a, b) => a - b);
 
-  // The Dispatcharr patch already landed. If the local mirror/audit write throws
+  // The Dispatcharr patch already landed. If the local mirror write throws
   // (constraint/schema/DB error) report a structured failure rather than let it
-  // escape this function's no-throw DispatcharrResult contract.
+  // escape this function's no-throw DispatcharrResult contract — a stale local
+  // mirror after a successful remote patch is a genuine inconsistency.
   try {
     updateUserMapping(mappingId, {
       dispatcharr_group_ids: JSON.stringify(sortedGroupIds),
       dispatcharr_profile_id:
         requestedGroupIds.length === 0 ? (resolvedProfileIds[0] ?? null) : null,
     });
+  } catch (err) {
+    return {
+      ok: false,
+      error: "server_error",
+      message: `Dispatcharr user ${dispatcharrUserId} patched but local DB write failed (state may be inconsistent): ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
 
+  // Best-effort audit: the subscription has fully succeeded (remote patched, local
+  // mirror written), so an audit-log failure must not mask it — nor, via the
+  // provisioner's `!ok` teardown, destroy a correctly-scoped live subscriber.
+  try {
     appendAuditLog({
       actor: actorContext?.actor ?? "system",
       ipAddress: actorContext?.ipAddress,
@@ -155,11 +167,9 @@ export async function applyGroupSubscription(
       },
     });
   } catch (err) {
-    return {
-      ok: false,
-      error: "server_error",
-      message: `Dispatcharr user ${dispatcharrUserId} patched but local DB write failed (state may be inconsistent): ${err instanceof Error ? err.message : String(err)}`,
-    };
+    console.warn(
+      `Failed to append audit log for USER_GROUP_CHANGED (subscription succeeded): ${err instanceof Error ? err.message : String(err)}`,
+    );
   }
 
   return { ok: true, data: { profileIds: resolvedProfileIds, groupIds: sortedGroupIds } };

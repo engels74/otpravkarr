@@ -4,7 +4,7 @@ const mockOfetch = vi.fn();
 vi.mock("ofetch", () => ({ ofetch: (...args: unknown[]) => mockOfetch(...args) }));
 
 const { DispatcharrClient } = await import("../client");
-const { listPlugins } = await import("../endpoints/plugins");
+const { listPlugins, updatePluginSettings } = await import("../endpoints/plugins");
 
 function createClient() {
   return new DispatcharrClient("https://dispatch.example.com", "test-key");
@@ -59,5 +59,52 @@ describe("listPlugins", () => {
     const result = await listPlugins(createClient());
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error).toBe("auth_failure");
+  });
+});
+
+describe("updatePluginSettings", () => {
+  it("POSTs the full settings object and returns the persisted settings", async () => {
+    mockOfetch.mockResolvedValueOnce({
+      success: true,
+      settings: { channel_profile_name: "otpravkarr:g1:Sports", other: 1 },
+    });
+
+    const result = await updatePluginSettings(createClient(), "event_channel_managarr", {
+      channel_profile_name: "otpravkarr:g1:Sports",
+      other: 1,
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data).toEqual({ channel_profile_name: "otpravkarr:g1:Sports", other: 1 });
+    }
+    const [url, options] = mockOfetch.mock.calls[0] as [string, { method: string; body: unknown }];
+    expect(url).toBe(
+      "https://dispatch.example.com/api/plugins/plugins/event_channel_managarr/settings/",
+    );
+    expect(options.method).toBe("POST");
+    expect(options.body).toEqual({
+      settings: { channel_profile_name: "otpravkarr:g1:Sports", other: 1 },
+    });
+  });
+
+  it("treats a 200 body with success:false as a validation failure", async () => {
+    mockOfetch.mockResolvedValueOnce({ success: false, error: "bad field" });
+    const result = await updatePluginSettings(createClient(), "event_channel_managarr", {});
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBe("validation_error");
+      expect(result.message).toBe("bad field");
+    }
+  });
+
+  it("surfaces a 400 rejection from the API", async () => {
+    const err = new Error("Bad Request") as Error & { statusCode: number; statusMessage: string };
+    err.statusCode = 400;
+    err.statusMessage = "Bad Request";
+    mockOfetch.mockRejectedValueOnce(err);
+    const result = await updatePluginSettings(createClient(), "event_channel_managarr", {});
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toBe("validation_error");
   });
 });

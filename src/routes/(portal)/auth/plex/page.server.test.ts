@@ -5,10 +5,10 @@ import type { AdminAccount, UserMapping } from "$lib/db/types";
 
 const state = vi.hoisted(() => ({
   oauthCookie: "oauth-pin-id" as string | undefined,
+  onboardingCookie: undefined as string | undefined,
   priorSessionCookie: undefined as string | undefined,
   configValues: {} as Record<string, string | null>,
   existingMappingByPlexId: null as UserMapping | null,
-  cachedFriends: null as null | Array<{ id: number; email: string; status: string }>,
   configuredAdmin: {
     id: 1,
     username: "admin",
@@ -21,6 +21,21 @@ const state = vi.hoisted(() => ({
     email: string;
     status: string;
   }>,
+  // Identity returned for both completeOAuth and the sealed onboarding cookie.
+  identity: {
+    id: 12345,
+    uuid: "abc-uuid",
+    username: "testuser",
+    email: "test@example.com",
+    thumb: "https://plex.tv/thumb",
+  },
+  // getAccount returns the SERVER OWNER's account. Default differs from the
+  // friend identity (12345) so the default path is "non-owner friend".
+  accountId: 99999,
+  channelGroups: [
+    { id: 1, name: "Sports", channel_count: 3 },
+    { id: 2, name: "News", channel_count: 2 },
+  ] as Array<{ id: number; name: string; channel_count: number }>,
   provisionResult: {
     status: "provisioned",
     mapping: {
@@ -33,8 +48,8 @@ const state = vi.hoisted(() => ({
       dispatcharr_user_id: 10,
       dispatcharr_username: "testuser",
       dispatcharr_xc_password_enc: "enc-pw",
-      dispatcharr_group_ids: "[]",
-      dispatcharr_profile_id: null,
+      dispatcharr_group_ids: "[1,2]",
+      dispatcharr_profile_id: 2,
       provisioning_mode: "automatic" as const,
       is_active: 1,
       group_selection_locked: 0,
@@ -48,24 +63,9 @@ const state = vi.hoisted(() => ({
 }));
 
 const mocks = vi.hoisted(() => ({
-  completeOAuth: vi.fn(async (_id: string) => ({
-    id: 12345,
-    uuid: "abc-uuid",
-    username: "testuser",
-    email: "test@example.com",
-    thumb: "https://plex.tv/thumb",
-    authenticationToken: "plex-token",
-  })),
+  completeOAuth: vi.fn(async (_id: string) => ({ ...state.identity, authenticationToken: "tok" })),
   removePendingOAuth: vi.fn((_id: string) => {}),
-  getAccount: vi.fn(async (_token: string) => ({
-    id: 99999,
-    uuid: "admin-uuid",
-    username: "admin",
-    email: "admin@example.com",
-    thumb: "",
-    authenticationToken: "admin-token",
-  })),
-  getCachedFriends: vi.fn(() => state.cachedFriends),
+  getAccount: vi.fn(async (_token: string) => ({ id: state.accountId })),
   fetchFriends: vi.fn(async () => [...state.friends]),
   provisionUser: vi.fn(async () => state.provisionResult),
   getConfig: vi.fn(async (key: string) => state.configValues[key] ?? null),
@@ -76,13 +76,11 @@ const mocks = vi.hoisted(() => ({
   getConfiguredAdminAccount: vi.fn(async () => state.configuredAdmin),
   DispatcharrClient: vi.fn(),
   sealInitialPasswordFlash: vi.fn(async (_password: string) => "sealed-initial-password"),
-  listChannelGroups: vi.fn(async () => ({
-    ok: true as const,
-    data: [
-      { id: 1, name: "Sports", channel_count: 3 },
-      { id: 2, name: "News", channel_count: 2 },
-    ],
-  })),
+  sealOnboardingIdentity: vi.fn(async (_identity: unknown) => "sealed-onboarding"),
+  openOnboardingIdentity: vi.fn(async (_sealed: string) =>
+    state.onboardingCookie ? state.identity : null,
+  ),
+  listChannelGroups: vi.fn(async () => ({ ok: true as const, data: [...state.channelGroups] })),
 }));
 
 vi.mock("$lib/plex/oauth", () => ({
@@ -97,37 +95,19 @@ vi.mock("$lib/plex/types", async () => {
   return { PlexAuthError };
 });
 
-vi.mock("$lib/plex/client", () => ({
-  getAccount: mocks.getAccount,
-}));
-
-vi.mock("$lib/plex/friends", () => ({
-  getCachedFriends: mocks.getCachedFriends,
-  fetchFriends: mocks.fetchFriends,
-}));
-
-vi.mock("$lib/bridge/provisioner", () => ({
-  provisionUser: mocks.provisionUser,
-}));
-
-vi.mock("$lib/db/repositories/config", () => ({
-  getConfig: mocks.getConfig,
-}));
-
+vi.mock("$lib/plex/client", () => ({ getAccount: mocks.getAccount }));
+vi.mock("$lib/plex/friends", () => ({ fetchFriends: mocks.fetchFriends }));
+vi.mock("$lib/bridge/provisioner", () => ({ provisionUser: mocks.provisionUser }));
+vi.mock("$lib/db/repositories/config", () => ({ getConfig: mocks.getConfig }));
 vi.mock("$lib/db/repositories/sessions", () => ({
   createSession: mocks.createSession,
   deleteSession: mocks.deleteSession,
 }));
-
 vi.mock("$lib/db/repositories/users", () => ({
   getUserMappingByPlexId: mocks.getUserMappingByPlexId,
   updateLastAccessed: mocks.updateLastAccessed,
 }));
-
-vi.mock("$lib/dispatcharr/client", () => ({
-  DispatcharrClient: mocks.DispatcharrClient,
-}));
-
+vi.mock("$lib/dispatcharr/client", () => ({ DispatcharrClient: mocks.DispatcharrClient }));
 vi.mock("$lib/dispatcharr/endpoints/channel-groups", () => ({
   listChannelGroups: mocks.listChannelGroups,
 }));
@@ -143,13 +123,7 @@ vi.mock("$lib/server/auth", () => ({
   ADMIN_SESSION_TTL: 3600,
   getConfiguredAdminAccount: mocks.getConfiguredAdminAccount,
   SESSION_COOKIE_NAME: "otpravkarr_session",
-  USER_COOKIE_OPTIONS: {
-    path: "/",
-    httpOnly: true,
-    secure: false,
-    sameSite: "lax",
-    maxAge: 14400,
-  },
+  USER_COOKIE_OPTIONS: { path: "/", httpOnly: true, secure: false, sameSite: "lax", maxAge: 14400 },
   USER_SESSION_TTL: 14400,
   isSecure: false,
 }));
@@ -160,34 +134,64 @@ vi.mock("$lib/server/initial-password-flash", () => ({
   sealInitialPasswordFlash: mocks.sealInitialPasswordFlash,
 }));
 
+vi.mock("$lib/server/onboarding-flash", () => ({
+  ONBOARDING_COOKIE_NAME: "otpravkarr_onboarding",
+  ONBOARDING_COOKIE_MAX_AGE: 600,
+  sealOnboardingIdentity: mocks.sealOnboardingIdentity,
+  openOnboardingIdentity: mocks.openOnboardingIdentity,
+}));
+
 function createCookies() {
   const set = vi.fn();
   const deleteFn = vi.fn();
   const get = vi.fn((name: string) => {
     if (name === "otpravkarr_oauth_id") return state.oauthCookie;
+    if (name === "otpravkarr_onboarding") return state.onboardingCookie;
     if (name === "otpravkarr_session") return state.priorSessionCookie;
     return undefined;
   });
+  return { cookies: { get, set, delete: deleteFn }, set, deleteFn, get };
+}
+
+function loadEvent() {
+  const c = createCookies();
   return {
-    cookies: { get, set, delete: deleteFn },
-    set,
-    deleteFn,
+    event: { cookies: c.cookies, getClientAddress: () => "127.0.0.1" } as unknown as Parameters<
+      Awaited<ReturnType<typeof importServer>>["load"]
+    >[0],
+    ...c,
   };
+}
+
+function confirmEvent(groupIds: unknown = [1]) {
+  const c = createCookies();
+  const body = new FormData();
+  body.set("group_ids", JSON.stringify(groupIds));
+  return {
+    event: {
+      cookies: c.cookies,
+      request: { formData: async () => body },
+      getClientAddress: () => "127.0.0.1",
+    } as never,
+    ...c,
+  };
+}
+
+async function importServer() {
+  return import("./+page.server");
 }
 
 function resetAll() {
   state.oauthCookie = "oauth-pin-id";
+  state.onboardingCookie = undefined;
   state.priorSessionCookie = undefined;
   state.configValues = {
     plex_admin_token: "admin-plex-token",
     dispatcharr_url: "http://dispatcharr.local",
     dispatcharr_api_key: "api-key-123",
-    default_group_id: "1",
-    default_profile_id: "2",
     default_provisioning_mode: "automatic",
   };
   state.existingMappingByPlexId = null;
-  state.cachedFriends = null;
   state.configuredAdmin = {
     id: 1,
     username: "admin",
@@ -196,6 +200,11 @@ function resetAll() {
     updated_at: "2024-01-01 00:00:00",
   };
   state.friends = [{ id: 12345, email: "test@example.com", status: "accepted" }];
+  state.accountId = 99999;
+  state.channelGroups = [
+    { id: 1, name: "Sports", channel_count: 3 },
+    { id: 2, name: "News", channel_count: 2 },
+  ];
   state.provisionResult = {
     status: "provisioned",
     mapping: {
@@ -208,7 +217,7 @@ function resetAll() {
       dispatcharr_user_id: 10,
       dispatcharr_username: "testuser",
       dispatcharr_xc_password_enc: "enc-pw",
-      dispatcharr_group_ids: "[1]",
+      dispatcharr_group_ids: "[1,2]",
       dispatcharr_profile_id: 2,
       provisioning_mode: "automatic",
       is_active: 1,
@@ -226,39 +235,37 @@ function resetAll() {
       (fn as ReturnType<typeof vi.fn>).mockClear();
     }
   }
+
+  // mockClear preserves implementations, but tests that override with persistent
+  // mockResolvedValue would otherwise leak. Restore the state-reading defaults.
+  mocks.listChannelGroups.mockImplementation(async () => ({
+    ok: true as const,
+    data: [...state.channelGroups],
+  }));
+  mocks.openOnboardingIdentity.mockImplementation(async (_sealed: string) =>
+    state.onboardingCookie ? state.identity : null,
+  );
 }
 
-describe("plex OAuth callback", () => {
-  beforeEach(() => {
-    resetAll();
-  });
+function activeMapping(): UserMapping {
+  return { ...(state.provisionResult.mapping as UserMapping), is_active: 1 };
+}
 
-  it("throws 400 when OAuth cookie is missing", async () => {
+describe("plex OAuth callback — load", () => {
+  beforeEach(resetAll);
+
+  it("throws 400 when neither OAuth nor onboarding cookie is present", async () => {
     state.oauthCookie = undefined;
-    const { load } = await import("./+page.server");
-    const { cookies } = createCookies();
-
-    await expect(
-      load({ cookies, getClientAddress: () => "127.0.0.1" } as unknown as Parameters<
-        typeof load
-      >[0]),
-    ).rejects.toMatchObject({
-      status: 400,
-    });
+    state.onboardingCookie = undefined;
+    const { load } = await importServer();
+    const { event } = loadEvent();
+    await expect(load(event)).rejects.toMatchObject({ status: 400 });
   });
 
-  it("deletes OAuth cookie on load", async () => {
-    const { load } = await import("./+page.server");
-    const { cookies, deleteFn } = createCookies();
-
-    try {
-      await load({ cookies, getClientAddress: () => "127.0.0.1" } as unknown as Parameters<
-        typeof load
-      >[0]);
-    } catch {
-      // redirect expected
-    }
-
+  it("deletes the OAuth cookie on a fresh handoff", async () => {
+    const { load } = await importServer();
+    const { event, deleteFn } = loadEvent();
+    await load(event); // new user → picker (returns data, no throw)
     expect(deleteFn).toHaveBeenCalledWith(
       "otpravkarr_oauth_id",
       expect.objectContaining({ path: "/" }),
@@ -268,578 +275,205 @@ describe("plex OAuth callback", () => {
   it("throws 400 when completeOAuth fails with PlexAuthError", async () => {
     const { PlexAuthError } = await import("$lib/plex/types");
     mocks.completeOAuth.mockRejectedValueOnce(new PlexAuthError("OAuth expired"));
-
-    const { load } = await import("./+page.server");
-    const { cookies } = createCookies();
-
-    await expect(
-      load({ cookies, getClientAddress: () => "127.0.0.1" } as unknown as Parameters<
-        typeof load
-      >[0]),
-    ).rejects.toMatchObject({
-      status: 400,
-    });
+    const { load } = await importServer();
+    const { event } = loadEvent();
+    await expect(load(event)).rejects.toMatchObject({ status: 400 });
   });
 
   it("re-throws unknown errors from completeOAuth", async () => {
     mocks.completeOAuth.mockRejectedValueOnce(new Error("network failure"));
-
-    const { load } = await import("./+page.server");
-    const { cookies } = createCookies();
-
-    await expect(
-      load({ cookies, getClientAddress: () => "127.0.0.1" } as unknown as Parameters<
-        typeof load
-      >[0]),
-    ).rejects.toThrow("network failure");
+    const { load } = await importServer();
+    const { event } = loadEvent();
+    await expect(load(event)).rejects.toThrow("network failure");
   });
 
   it("throws 500 when plex_admin_token is missing", async () => {
     state.configValues.plex_admin_token = null;
-
-    const { load } = await import("./+page.server");
-    const { cookies } = createCookies();
-
-    await expect(
-      load({ cookies, getClientAddress: () => "127.0.0.1" } as unknown as Parameters<
-        typeof load
-      >[0]),
-    ).rejects.toMatchObject({
-      status: 500,
-    });
+    const { load } = await importServer();
+    const { event } = loadEvent();
+    await expect(load(event)).rejects.toMatchObject({ status: 500 });
   });
 
-  it("throws 403 when user is not in accepted friends list", async () => {
-    state.friends = [{ id: 777, email: "other@example.com", status: "accepted" }];
-
-    const { load } = await import("./+page.server");
-    const { cookies } = createCookies();
-
-    await expect(
-      load({ cookies, getClientAddress: () => "127.0.0.1" } as unknown as Parameters<
-        typeof load
-      >[0]),
-    ).rejects.toMatchObject({
-      status: 403,
-    });
-  });
-
-  it("throws 403 when matching invite is pending", async () => {
-    state.friends = [{ id: 12345, email: "test@example.com", status: "pending" }];
-
-    const { load } = await import("./+page.server");
-    const { cookies } = createCookies();
-
-    await expect(
-      load({ cookies, getClientAddress: () => "127.0.0.1" } as unknown as Parameters<
-        typeof load
-      >[0]),
-    ).rejects.toMatchObject({
-      status: 403,
-    });
-  });
-
-  it("throws 403 when matching mapping is inactive", async () => {
-    state.existingMappingByPlexId = {
-      id: 2,
-      plex_account_id: 12345,
-      plex_uuid: "inactive-uuid",
-      plex_username: "inactive-user",
-      plex_email: "inactive@example.com",
-      plex_thumb: null,
-      dispatcharr_user_id: 88,
-      dispatcharr_username: "inactiveuser",
-      dispatcharr_xc_password_enc: "enc-pw",
-      dispatcharr_group_ids: "[1]",
-      dispatcharr_profile_id: 2,
-      provisioning_mode: "automatic",
-      is_active: 0,
-      group_selection_locked: 0,
-      is_owner: 0,
-      created_at: "2024-01-01 00:00:00",
-      updated_at: "2024-01-01 00:00:00",
-      last_synced_at: null,
-      last_accessed_at: null,
-    };
-
-    const { load } = await import("./+page.server");
-    const { cookies } = createCookies();
-
-    await expect(
-      load({ cookies, getClientAddress: () => "127.0.0.1" } as unknown as Parameters<
-        typeof load
-      >[0]),
-    ).rejects.toMatchObject({
-      status: 403,
-    });
-
-    expect(mocks.getUserMappingByPlexId).toHaveBeenCalledWith(12345);
-    expect(mocks.createSession).not.toHaveBeenCalled();
-    expect(mocks.provisionUser).not.toHaveBeenCalled();
-  });
-
-  it("fetches fresh friends for authorization", async () => {
-    const { load } = await import("./+page.server");
-    const { cookies } = createCookies();
-
-    try {
-      await load({ cookies, getClientAddress: () => "127.0.0.1" } as unknown as Parameters<
-        typeof load
-      >[0]);
-    } catch {
-      // redirect expected
-    }
-
-    expect(mocks.getAccount).toHaveBeenCalledWith("admin-plex-token");
-    expect(mocks.fetchFriends).toHaveBeenCalled();
-  });
-
-  it("does not authorize from cached friends when fresh list denies access", async () => {
-    state.cachedFriends = [{ id: 12345, email: "test@example.com", status: "accepted" }];
-    state.friends = [{ id: 12345, email: "test@example.com", status: "pending" }];
-
-    const { load } = await import("./+page.server");
-    const { cookies } = createCookies();
-
-    await expect(
-      load({ cookies, getClientAddress: () => "127.0.0.1" } as unknown as Parameters<
-        typeof load
-      >[0]),
-    ).rejects.toMatchObject({
-      status: 403,
-    });
-
-    expect(mocks.fetchFriends).toHaveBeenCalled();
-    expect(mocks.getCachedFriends).not.toHaveBeenCalled();
-  });
-
-  it("throws 500 when dispatcharr config is missing", async () => {
-    state.configValues.dispatcharr_url = null;
-    state.configValues.dispatcharr_api_key = null;
-
-    const { load } = await import("./+page.server");
-    const { cookies } = createCookies();
-
-    await expect(
-      load({ cookies, getClientAddress: () => "127.0.0.1" } as unknown as Parameters<
-        typeof load
-      >[0]),
-    ).rejects.toMatchObject({
-      status: 500,
-    });
-  });
-
-  it("throws 502 with safe message when provisioning fails", async () => {
-    state.provisionResult = { status: "failed", error: "DB error" };
-
-    const { load } = await import("./+page.server");
-    const { cookies } = createCookies();
-
-    await expect(
-      load({ cookies, getClientAddress: () => "127.0.0.1" } as unknown as Parameters<
-        typeof load
-      >[0]),
-    ).rejects.toMatchObject({
-      status: 502,
-      body: { message: "Unable to set up your account. Please contact the administrator." },
-    });
-  });
-
-  it("creates session, sets cookie, and redirects on success", async () => {
-    const { load } = await import("./+page.server");
-    const { cookies, set } = createCookies();
-
-    await expect(
-      load({ cookies, getClientAddress: () => "127.0.0.1" } as unknown as Parameters<
-        typeof load
-      >[0]),
-    ).rejects.toMatchObject({
-      status: 303,
-      location: "/",
-    });
-
-    expect(mocks.createSession).toHaveBeenCalledWith("1", "user", 14400);
-    expect(set).toHaveBeenCalledWith(
-      "otpravkarr_session",
-      "session-id",
-      expect.objectContaining({
-        path: "/",
-        httpOnly: true,
-      }),
-    );
-    expect(mocks.updateLastAccessed).toHaveBeenCalledWith(1);
-    expect(mocks.deleteSession).not.toHaveBeenCalled();
-  });
-
-  it("deletes prior session before creating a new one on re-auth", async () => {
-    state.priorSessionCookie = "prior-session-id";
-    const { load } = await import("./+page.server");
-    const { cookies } = createCookies();
-
-    await expect(
-      load({ cookies, getClientAddress: () => "127.0.0.1" } as unknown as Parameters<
-        typeof load
-      >[0]),
-    ).rejects.toMatchObject({
-      status: 303,
-      location: "/",
-    });
-
-    expect(mocks.deleteSession).toHaveBeenCalledWith("prior-session-id");
-    expect(mocks.createSession).toHaveBeenCalledWith("1", "user", 14400);
-    const deleteOrder = mocks.deleteSession.mock.invocationCallOrder[0] ?? Infinity;
-    const createOrder = mocks.createSession.mock.invocationCallOrder[0] ?? -Infinity;
-    expect(deleteOrder).toBeLessThan(createOrder);
-  });
-
-  it("stores encrypted one-time password flash in short-lived cookie for newly provisioned self-managed users", async () => {
-    const mapping = state.provisionResult.mapping as UserMapping;
-    state.provisionResult = {
-      status: "provisioned",
-      mapping: { ...mapping, provisioning_mode: "self_managed" },
-      initialPassword: "TempPassword!23",
-    };
-    state.configValues.default_provisioning_mode = "self_managed";
-
-    const { load } = await import("./+page.server");
-    const { cookies, set } = createCookies();
-
-    await expect(
-      load({ cookies, getClientAddress: () => "127.0.0.1" } as unknown as Parameters<
-        typeof load
-      >[0]),
-    ).rejects.toMatchObject({
-      status: 303,
-      location: "/",
-    });
-
-    expect(set).toHaveBeenCalledWith(
-      "otpravkarr_initial_password",
-      "sealed-initial-password",
-      expect.objectContaining({
-        path: "/",
-        httpOnly: true,
-        sameSite: "lax",
-        maxAge: 120,
-      }),
-    );
-    expect(mocks.sealInitialPasswordFlash).toHaveBeenCalledWith("TempPassword!23");
-  });
-
-  it("creates an admin session for the server owner and skips provisioning", async () => {
-    mocks.completeOAuth.mockResolvedValueOnce({
-      id: 99999,
-      uuid: "admin-uuid",
-      username: "admin",
-      email: "admin@example.com",
-      thumb: "",
-      authenticationToken: "admin-token",
-    });
-    state.configValues.default_provisioning_mode = "self_managed";
-
-    const { load } = await import("./+page.server");
-    const { cookies, set } = createCookies();
-
-    await expect(
-      load({ cookies, getClientAddress: () => "127.0.0.1" } as unknown as Parameters<
-        typeof load
-      >[0]),
-    ).rejects.toMatchObject({
-      status: 303,
-      location: "/dashboard",
-    });
-
-    expect(mocks.getConfiguredAdminAccount).toHaveBeenCalled();
+  it("logs the owner in as admin and redirects to /dashboard", async () => {
+    state.accountId = 12345; // owner == identity
+    const { load } = await importServer();
+    const { event } = loadEvent();
+    await expect(load(event)).rejects.toMatchObject({ status: 303, location: "/dashboard" });
     expect(mocks.createSession).toHaveBeenCalledWith("admin", "admin", 3600);
+    expect(mocks.provisionUser).not.toHaveBeenCalled();
+  });
+
+  it("throws 403 when the Plex account is not an accepted friend", async () => {
+    state.friends = [{ id: 12345, email: "test@example.com", status: "pending" }];
+    const { load } = await importServer();
+    const { event } = loadEvent();
+    await expect(load(event)).rejects.toMatchObject({ status: 403 });
+  });
+
+  it("throws 403 when an existing mapping is revoked (inactive)", async () => {
+    state.existingMappingByPlexId = { ...activeMapping(), is_active: 0 };
+    const { load } = await importServer();
+    const { event } = loadEvent();
+    await expect(load(event)).rejects.toMatchObject({ status: 403 });
+  });
+
+  it("shows the mandatory picker for a new friend and does NOT provision yet", async () => {
+    const { load } = await importServer();
+    const { event, set } = loadEvent();
+    const data = await load(event);
+
+    expect(data).toMatchObject({
+      picker: true,
+      plexUsername: "testuser",
+      offered: [
+        { id: 1, name: "Sports", channelCount: 3 },
+        { id: 2, name: "News", channelCount: 2 },
+      ],
+      selected: [1, 2],
+    });
+    // Verified identity sealed into the onboarding cookie; no provisioning.
+    expect(mocks.sealOnboardingIdentity).toHaveBeenCalledTimes(1);
     expect(set).toHaveBeenCalledWith(
-      "otpravkarr_session",
-      "session-id",
-      expect.objectContaining({
-        path: "/",
-        httpOnly: true,
-        sameSite: "strict",
-      }),
+      "otpravkarr_onboarding",
+      "sealed-onboarding",
+      expect.objectContaining({ maxAge: 600 }),
     );
-    expect(mocks.fetchFriends).not.toHaveBeenCalled();
-    expect(mocks.getUserMappingByPlexId).not.toHaveBeenCalled();
-    expect(mocks.provisionUser).not.toHaveBeenCalled();
-    expect(mocks.DispatcharrClient).not.toHaveBeenCalled();
-    expect(mocks.sealInitialPasswordFlash).not.toHaveBeenCalled();
-  });
-
-  it("handles already_exists provisioning result", async () => {
-    const mapping = state.provisionResult.mapping as UserMapping;
-    state.provisionResult = {
-      status: "already_exists",
-      mapping,
-    };
-
-    const { load } = await import("./+page.server");
-    const { cookies } = createCookies();
-
-    await expect(
-      load({ cookies, getClientAddress: () => "127.0.0.1" } as unknown as Parameters<
-        typeof load
-      >[0]),
-    ).rejects.toMatchObject({
-      status: 303,
-      location: "/",
-    });
-
-    expect(mocks.createSession).toHaveBeenCalled();
-  });
-
-  it("passes correct provisioning parameters", async () => {
-    const { load } = await import("./+page.server");
-    const { cookies } = createCookies();
-
-    try {
-      await load({ cookies, getClientAddress: () => "127.0.0.1" } as unknown as Parameters<
-        typeof load
-      >[0]);
-    } catch {
-      // redirect expected
-    }
-
-    expect(mocks.provisionUser).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({
-        plexIdentity: expect.objectContaining({
-          id: 12345,
-          username: "testuser",
-        }),
-        mode: "automatic",
-        groupIds: [1, 2],
-      }),
-      expect.objectContaining({
-        actor: "testuser",
-      }),
-    );
-  });
-
-  it("deletes a prior session before creating an admin session for the server owner", async () => {
-    mocks.completeOAuth.mockResolvedValueOnce({
-      id: 99999,
-      uuid: "admin-uuid",
-      username: "admin",
-      email: "admin@example.com",
-      thumb: "",
-      authenticationToken: "admin-token",
-    });
-    state.priorSessionCookie = "prior-session-id";
-
-    const { load } = await import("./+page.server");
-    const { cookies } = createCookies();
-
-    await expect(
-      load({ cookies, getClientAddress: () => "127.0.0.1" } as unknown as Parameters<
-        typeof load
-      >[0]),
-    ).rejects.toMatchObject({
-      status: 303,
-      location: "/dashboard",
-    });
-
-    expect(mocks.deleteSession).toHaveBeenCalledWith("prior-session-id");
-    expect(mocks.createSession).toHaveBeenCalledWith("admin", "admin", 3600);
-    const deleteOrder = mocks.deleteSession.mock.invocationCallOrder[0] ?? Infinity;
-    const createOrder = mocks.createSession.mock.invocationCallOrder[0] ?? -Infinity;
-    expect(deleteOrder).toBeLessThan(createOrder);
-  });
-
-  it("allows server owner through even when not in friends list", async () => {
-    mocks.completeOAuth.mockResolvedValueOnce({
-      id: 99999,
-      uuid: "admin-uuid",
-      username: "admin",
-      email: "admin@example.com",
-      thumb: "",
-      authenticationToken: "admin-token",
-    });
-    state.friends = [];
-
-    const { load } = await import("./+page.server");
-    const { cookies } = createCookies();
-
-    await expect(
-      load({ cookies, getClientAddress: () => "127.0.0.1" } as unknown as Parameters<
-        typeof load
-      >[0]),
-    ).rejects.toMatchObject({
-      status: 303,
-      location: "/dashboard",
-    });
-
-    expect(mocks.fetchFriends).not.toHaveBeenCalled();
     expect(mocks.provisionUser).not.toHaveBeenCalled();
   });
 
-  it("ignores an inactive duplicate mapping for the server owner", async () => {
-    mocks.completeOAuth.mockResolvedValueOnce({
-      id: 99999,
-      uuid: "admin-uuid",
-      username: "admin",
-      email: "admin@example.com",
-      thumb: "",
-      authenticationToken: "admin-token",
-    });
-    state.friends = [];
-    state.existingMappingByPlexId = {
-      id: 5,
-      plex_account_id: 99999,
-      plex_uuid: "admin-uuid",
-      plex_username: "admin",
-      plex_email: "admin@example.com",
-      plex_thumb: null,
-      dispatcharr_user_id: 50,
-      dispatcharr_username: "admin",
-      dispatcharr_xc_password_enc: "enc-pw",
-      dispatcharr_group_ids: "[1]",
-      dispatcharr_profile_id: 2,
-      provisioning_mode: "automatic",
-      is_active: 0,
-      group_selection_locked: 0,
-      is_owner: 0,
-      created_at: "2024-01-01 00:00:00",
-      updated_at: "2024-01-01 00:00:00",
-      last_synced_at: null,
-      last_accessed_at: null,
-    };
+  it("skips the picker and provisions immediately when self-select is disabled", async () => {
+    state.configValues.allow_user_self_select = "false";
+    const { load } = await importServer();
+    const { event } = loadEvent();
+    await expect(load(event)).rejects.toMatchObject({ status: 303, location: "/" });
+    expect(mocks.sealOnboardingIdentity).not.toHaveBeenCalled();
+    expect(mocks.provisionUser).toHaveBeenCalledTimes(1);
+    const [, request] = mocks.provisionUser.mock.calls[0] as unknown as [
+      unknown,
+      { groupIds: number[] },
+    ];
+    expect(request.groupIds).toEqual([1, 2]); // all offered by default
+  });
 
-    const { load } = await import("./+page.server");
-    const { cookies } = createCookies();
+  it("skips the picker when there are no offered groups", async () => {
+    state.channelGroups = [];
+    const { load } = await importServer();
+    const { event } = loadEvent();
+    await expect(load(event)).rejects.toMatchObject({ status: 303, location: "/" });
+    expect(mocks.sealOnboardingIdentity).not.toHaveBeenCalled();
+    expect(mocks.provisionUser).toHaveBeenCalledTimes(1);
+  });
 
-    await expect(
-      load({ cookies, getClientAddress: () => "127.0.0.1" } as unknown as Parameters<
-        typeof load
-      >[0]),
-    ).rejects.toMatchObject({
-      status: 303,
-      location: "/dashboard",
-    });
+  it("skips the picker for a returning (already active) user", async () => {
+    state.existingMappingByPlexId = activeMapping();
+    state.provisionResult = { status: "already_exists", mapping: activeMapping() };
+    const { load } = await importServer();
+    const { event } = loadEvent();
+    await expect(load(event)).rejects.toMatchObject({ status: 303, location: "/" });
+    expect(mocks.sealOnboardingIdentity).not.toHaveBeenCalled();
+    expect(mocks.provisionUser).toHaveBeenCalledTimes(1);
+  });
 
-    expect(mocks.getUserMappingByPlexId).not.toHaveBeenCalled();
+  it("throws 502 when the channel-group list is unavailable", async () => {
+    mocks.listChannelGroups.mockResolvedValueOnce({
+      ok: false,
+      error: "auth_failure",
+      message: "boom",
+    } as never);
+
+    const { load } = await importServer();
+    const { event } = loadEvent();
+    await expect(load(event)).rejects.toMatchObject({ status: 502 });
+  });
+
+  it("re-renders the picker on refresh from the onboarding cookie (no OAuth)", async () => {
+    state.oauthCookie = undefined;
+    state.onboardingCookie = "sealed-onboarding";
+    const { load } = await importServer();
+    const { event } = loadEvent();
+    const data = await load(event);
+    expect(data).toMatchObject({ picker: true, plexUsername: "testuser" });
+    expect(mocks.completeOAuth).not.toHaveBeenCalled();
+    expect(mocks.provisionUser).not.toHaveBeenCalled();
+  });
+});
+
+describe("plex onboarding — confirm action", () => {
+  beforeEach(() => {
+    resetAll();
+    state.onboardingCookie = "sealed-onboarding";
+  });
+
+  it("fails 400 when the onboarding cookie is missing/expired", async () => {
+    state.onboardingCookie = undefined;
+    const { actions } = await importServer();
+    const { event } = confirmEvent([1]);
+    const res = await actions.confirm?.(event);
+    expect(res).toMatchObject({ status: 400 });
     expect(mocks.provisionUser).not.toHaveBeenCalled();
   });
 
-  it("throws 500 when server owner cannot resolve a configured admin account", async () => {
-    mocks.completeOAuth.mockResolvedValueOnce({
-      id: 99999,
-      uuid: "admin-uuid",
-      username: "admin",
-      email: "admin@example.com",
-      thumb: "",
-      authenticationToken: "admin-token",
-    });
-    state.configuredAdmin = null;
+  it("fails 400 on a malformed selection", async () => {
+    const { actions } = await importServer();
+    const c = createCookies();
+    const body = new FormData();
+    body.set("group_ids", "{not json");
+    const event = {
+      cookies: c.cookies,
+      request: { formData: async () => body },
+      getClientAddress: () => "127.0.0.1",
+    } as never;
+    const res = await actions.confirm?.(event);
+    expect(res).toMatchObject({ status: 400 });
+  });
 
-    const { load } = await import("./+page.server");
-    const { cookies } = createCookies();
+  it("fails 400 on a non-positive-integer selection", async () => {
+    const { actions } = await importServer();
+    const { event } = confirmEvent([0, -1]);
+    const res = await actions.confirm?.(event);
+    expect(res).toMatchObject({ status: 400 });
+  });
 
-    await expect(
-      load({ cookies, getClientAddress: () => "127.0.0.1" } as unknown as Parameters<
-        typeof load
-      >[0]),
-    ).rejects.toMatchObject({
-      status: 500,
-    });
-
-    expect(mocks.createSession).not.toHaveBeenCalled();
+  it("fails 400 when a selected group is outside the offered set", async () => {
+    const { actions } = await importServer();
+    const { event } = confirmEvent([1, 999]); // 999 not offered
+    const res = await actions.confirm?.(event);
+    expect(res).toMatchObject({ status: 400 });
     expect(mocks.provisionUser).not.toHaveBeenCalled();
   });
 
-  it("defaults to automatic mode when config says self_managed", async () => {
-    state.configValues.default_provisioning_mode = "self_managed";
+  it("fails 403 when friend status no longer checks out", async () => {
+    state.friends = [{ id: 12345, email: "test@example.com", status: "pending" }];
+    const { actions } = await importServer();
+    const { event } = confirmEvent([1]);
+    const res = await actions.confirm?.(event);
+    expect(res).toMatchObject({ status: 403 });
+    expect(mocks.provisionUser).not.toHaveBeenCalled();
+  });
 
-    const { load } = await import("./+page.server");
-    const { cookies } = createCookies();
-
-    try {
-      await load({ cookies, getClientAddress: () => "127.0.0.1" } as unknown as Parameters<
-        typeof load
-      >[0]);
-    } catch {
-      // redirect expected
-    }
-
-    expect(mocks.provisionUser).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({
-        mode: "self_managed",
-      }),
-      expect.objectContaining({
-        actor: "testuser",
-      }),
+  it("provisions with the chosen groups and redirects to the portal", async () => {
+    const { actions } = await importServer();
+    const { event, deleteFn } = confirmEvent([1]);
+    await expect(actions.confirm?.(event)).rejects.toMatchObject({ status: 303, location: "/" });
+    expect(mocks.provisionUser).toHaveBeenCalledTimes(1);
+    const [, request] = mocks.provisionUser.mock.calls[0] as unknown as [
+      unknown,
+      { groupIds: number[] },
+    ];
+    expect(request.groupIds).toEqual([1]);
+    // Onboarding cookie consumed before provisioning.
+    expect(deleteFn).toHaveBeenCalledWith(
+      "otpravkarr_onboarding",
+      expect.objectContaining({ path: "/" }),
     );
   });
 
-  it("calls removePendingOAuth immediately after completeOAuth succeeds", async () => {
-    const { load } = await import("./+page.server");
-    const { cookies } = createCookies();
-
-    try {
-      await load({ cookies, getClientAddress: () => "127.0.0.1" } as unknown as Parameters<
-        typeof load
-      >[0]);
-    } catch {
-      // redirect expected
-    }
-
-    expect(mocks.removePendingOAuth).toHaveBeenCalledOnce();
-    expect(mocks.removePendingOAuth).toHaveBeenCalledWith("oauth-pin-id");
-    // Eviction must happen before provisioning (replay protection before side-effects).
-    const evictOrder = mocks.removePendingOAuth.mock.invocationCallOrder[0] ?? Infinity;
-    const provisionOrder = mocks.provisionUser.mock.invocationCallOrder[0] ?? -Infinity;
-    expect(evictOrder).toBeLessThan(provisionOrder);
-  });
-
-  it("calls removePendingOAuth even when completeOAuth succeeds but provisioning fails", async () => {
-    state.provisionResult = { status: "failed", error: "DB error" };
-
-    const { load } = await import("./+page.server");
-    const { cookies } = createCookies();
-
-    await expect(
-      load({ cookies, getClientAddress: () => "127.0.0.1" } as unknown as Parameters<
-        typeof load
-      >[0]),
-    ).rejects.toMatchObject({ status: 502 });
-
-    expect(mocks.removePendingOAuth).toHaveBeenCalledOnce();
-    expect(mocks.removePendingOAuth).toHaveBeenCalledWith("oauth-pin-id");
-  });
-
-  it("replaying the same oauth_id after a successful flow hits the 400 error path", async () => {
-    const { PlexAuthError } = await import("$lib/plex/types");
-
-    // First call succeeds normally; second call simulates a consumed/evicted id.
-    mocks.completeOAuth
-      .mockResolvedValueOnce({
-        id: 12345,
-        uuid: "abc-uuid",
-        username: "testuser",
-        email: "test@example.com",
-        thumb: "https://plex.tv/thumb",
-        authenticationToken: "plex-token",
-      })
-      .mockRejectedValueOnce(new PlexAuthError("OAuth session not found or expired"));
-
-    const { load } = await import("./+page.server");
-
-    // First request — succeeds (redirect 303).
-    const { cookies: cookies1 } = createCookies();
-    await expect(
-      load({ cookies: cookies1, getClientAddress: () => "127.0.0.1" } as unknown as Parameters<
-        typeof load
-      >[0]),
-    ).rejects.toMatchObject({ status: 303 });
-
-    // Replay — same oauth_id but the server-side cache is now gone.
-    const { cookies: cookies2 } = createCookies();
-    await expect(
-      load({ cookies: cookies2, getClientAddress: () => "127.0.0.1" } as unknown as Parameters<
-        typeof load
-      >[0]),
-    ).rejects.toMatchObject({ status: 400 });
+  it("fails 400 if the server owner reaches confirm", async () => {
+    state.accountId = 12345; // owner == identity
+    const { actions } = await importServer();
+    const { event } = confirmEvent([1]);
+    const res = await actions.confirm?.(event);
+    expect(res).toMatchObject({ status: 400 });
+    expect(mocks.provisionUser).not.toHaveBeenCalled();
   });
 });

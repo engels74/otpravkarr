@@ -205,8 +205,13 @@ export async function reconcileSubscriptions(
         dispatcharr_group_ids: JSON.stringify(sortedGroupIds),
         dispatcharr_profile_id: ids.length === 0 ? emptyProfileId : null,
       });
-    } catch {
-      // Local bookkeeping only; ignore.
+    } catch (err) {
+      // Remote patch landed but the local mirror write failed. Surface it: a
+      // stale dispatcharr_group_ids leaves this user flagged sanitized next
+      // cycle, re-triggering the same repatch every run with no other signal.
+      report.errors.push(
+        `User ${m.dispatcharr_user_id}: patched but local DB write failed (state may be inconsistent): ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   }
 

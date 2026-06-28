@@ -96,12 +96,16 @@ export async function reconcileSubscriptions(
     ),
   );
 
-  // Per-mapping intended group ids (existing groups only).
+  // Per-mapping intended group ids (deduped; existing groups only), mirroring
+  // applyGroupSubscription so duplicate stored ids never produce duplicate
+  // resolved profile ids in the channel_profiles PATCH below.
   const intendedByMapping = new Map<number, number[]>();
   const subscribedGroupIds = new Set<number>();
   let anyZeroGroup = false;
   for (const m of active) {
-    const ids = parseGroupIds(m.dispatcharr_group_ids).filter((id) => groupNameById.has(id));
+    const ids = [...new Set(parseGroupIds(m.dispatcharr_group_ids))].filter((id) =>
+      groupNameById.has(id),
+    );
     intendedByMapping.set(m.id, ids);
     if (ids.length === 0) {
       anyZeroGroup = true;

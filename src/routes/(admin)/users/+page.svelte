@@ -168,6 +168,29 @@ function makeEnhanceHandler() {
   };
 }
 
+function makeGroupLockEnhanceHandler() {
+  return () => {
+    submitting = true;
+    return async ({ result, update }: { result: ActionResult; update: () => Promise<void> }) => {
+      try {
+        if (result.type === "success") {
+          toast.success("Lock updated.");
+          await update();
+        } else if (result.type === "failure") {
+          toast.error(
+            (result.data as { error?: string } | undefined)?.error ?? "Failed to update lock.",
+          );
+          await update();
+        } else {
+          await applyAction(result);
+        }
+      } finally {
+        submitting = false;
+      }
+    };
+  };
+}
+
 function makeProfileEnhanceHandler() {
   return () => {
     submitting = true;
@@ -581,7 +604,7 @@ async function copyOneTimePassword() {
         <form
           method="POST"
           action="?/setGroupLock"
-          use:enhance={makeEnhanceHandler()}
+          use:enhance={makeGroupLockEnhanceHandler()}
           class="mb-3 rounded-md border border-border p-3"
         >
           <input type="hidden" name="id" value={selectedMapping.id} />

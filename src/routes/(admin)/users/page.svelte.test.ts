@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { UserMapping } from "$lib/db/types";
-import type { DispatcharrGroup } from "$lib/dispatcharr/types";
+
 import UsersPage from "./+page.svelte";
 
 const mocks = vi.hoisted(() => ({
@@ -49,6 +49,8 @@ const mapping: UserMapping = {
   dispatcharr_profile_id: null,
   provisioning_mode: "automatic",
   is_active: 1,
+  group_selection_locked: 0,
+  is_owner: 0,
   created_at: "2025-01-01 00:00:00",
   updated_at: "2025-01-01 00:00:00",
   last_synced_at: null,
@@ -57,8 +59,9 @@ const mapping: UserMapping = {
 
 const defaultData = {
   mappings: [mapping],
-  groups: [] as DispatcharrGroup[],
+  groups: [] as { id: number; name: string; channelCount: number | null }[],
   profiles: [] as { id: number; name: string }[],
+  driftByMappingId: {} as Record<number, boolean>,
   filters: { status: "all", mode: "all", search: "" },
 };
 

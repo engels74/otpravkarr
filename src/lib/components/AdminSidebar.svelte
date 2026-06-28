@@ -1,6 +1,7 @@
 <script lang="ts">
 import LayoutDashboardIcon from "lucide-svelte/icons/layout-dashboard";
 import LogOutIcon from "lucide-svelte/icons/log-out";
+import PuzzleIcon from "lucide-svelte/icons/puzzle";
 import ScrollTextIcon from "lucide-svelte/icons/scroll-text";
 import SettingsIcon from "lucide-svelte/icons/settings";
 import UsersIcon from "lucide-svelte/icons/users";
@@ -38,6 +39,7 @@ const navItems = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboardIcon },
   { label: "Users", href: "/users", icon: UsersIcon },
   { label: "Settings", href: "/settings", icon: SettingsIcon },
+  { label: "Plugins", href: "/plugins", icon: PuzzleIcon },
   { label: "Audit Log", href: "/audit", icon: ScrollTextIcon },
 ] as const;
 </script>

@@ -49,3 +49,20 @@ export function excludePlexOwnerMappings<T extends Pick<UserMapping, "plex_accou
   if (ownerPlexAccountId == null) return mappings;
   return mappings.filter((mapping) => !isPlexOwnerMapping(mapping, ownerPlexAccountId));
 }
+
+// Like excludePlexOwnerMappings, but keeps the owner's *deliberate* subscriber
+// (is_owner = 1, created via "subscribe owner") while still hiding the owner's
+// implicit superuser/auto mapping. Both share the owner's Plex account id, so a
+// pure account-id filter would also hide the intentional subscriber. Use this
+// only for admin-UI surfaces (user list, drift checks, dashboard stats) where
+// the owner-subscriber should be manageable — NOT for friend-sync reaping, which
+// must drop every owner-account mapping (see excludePlexOwnerMappings /
+// lifecycle.reconcileSync) or it would disable the owner's subscriber each sync.
+export function excludePlexOwnerNonSubscriberMappings<
+  T extends Pick<UserMapping, "plex_account_id" | "is_owner">,
+>(mappings: T[], ownerPlexAccountId: number | null): T[] {
+  if (ownerPlexAccountId == null) return mappings;
+  return mappings.filter(
+    (mapping) => mapping.plex_account_id !== ownerPlexAccountId || mapping.is_owner === 1,
+  );
+}

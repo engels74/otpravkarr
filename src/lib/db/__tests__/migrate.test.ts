@@ -488,7 +488,7 @@ describe("001_initial.sql migration", () => {
     resetMockDb();
   });
 
-  it("creates all five tables", async () => {
+  it("creates all expected tables", async () => {
     const db = new MockDatabase(":memory:");
     await runMigrations(db as any, migrationsDir);
 
@@ -498,6 +498,7 @@ describe("001_initial.sql migration", () => {
     expect(tableNames).toEqual([
       "admin_accounts",
       "audit_log",
+      "channel_group_profiles",
       "config",
       "sessions",
       "user_mappings",
@@ -571,13 +572,15 @@ describe("001_initial.sql migration", () => {
     expect(() => insert.run("s3", "invalid")).toThrow();
   });
 
-  it("records migration in _migrations table", async () => {
+  it("records migrations in _migrations table", async () => {
     const db = new MockDatabase(":memory:");
     await runMigrations(db as any, migrationsDir);
 
     const migrations = (tables._migrations as TableDef).rows;
-    expect(migrations).toHaveLength(1);
+    expect(migrations).toHaveLength(2);
     expect(migrations[0]?.version).toBe(1);
     expect(migrations[0]?.name).toBe("initial");
+    expect(migrations[1]?.version).toBe(2);
+    expect(migrations[1]?.name).toBe("channel_group_subscriptions");
   });
 });

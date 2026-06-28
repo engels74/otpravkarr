@@ -35,6 +35,15 @@ vi.mock("$lib/server/plex-owner", () => ({
     ownerPlexAccountId == null
       ? mappings
       : mappings.filter((mapping) => mapping.plex_account_id !== ownerPlexAccountId),
+  excludePlexOwnerNonSubscriberMappings: <T extends { plex_account_id: number; is_owner: number }>(
+    mappings: T[],
+    ownerPlexAccountId: number | null,
+  ) =>
+    ownerPlexAccountId == null
+      ? mappings
+      : mappings.filter(
+          (mapping) => mapping.plex_account_id !== ownerPlexAccountId || mapping.is_owner === 1,
+        ),
 }));
 
 vi.mock("$lib/db/repositories/audit", () => ({
@@ -74,6 +83,8 @@ function makeMapping(overrides?: Record<string, unknown>): UserMapping {
     dispatcharr_profile_id: null,
     provisioning_mode: "automatic",
     is_active: 1,
+    group_selection_locked: 0,
+    is_owner: 0,
     created_at: "2025-01-01 00:00:00",
     updated_at: "2025-01-01 00:00:00",
     last_synced_at: null,

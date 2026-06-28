@@ -7,6 +7,17 @@ import type { DispatcharrChannel, DispatcharrResult, PaginatedResponse } from ".
 
 const PaginatedChannelsSchema = paginatedSchema(DispatcharrChannelSchema);
 
+/**
+ * Fetch every channel (all pages) with the fields needed for subscription
+ * scoping: `id`, `effective_channel_group_id` (group membership honoring
+ * overrides), and `user_level`. Used by the bridge to bucket channels by group.
+ */
+export async function listAllChannels(
+  client: DispatcharrClient,
+): Promise<DispatcharrResult<DispatcharrChannel[]>> {
+  return fetchAllPages(client, "/api/channels/channels/", DispatcharrChannelSchema);
+}
+
 export function createChannelEndpoints(client: DispatcharrClient) {
   return {
     async listChannels(

@@ -69,6 +69,11 @@ const defaultData = {
   audit: {
     retentionDays: "90",
   },
+  subscription: {
+    allowSelfSelect: true,
+    selectableGroupIds: [],
+    channelGroups: [],
+  },
 };
 
 describe("admin settings page", () => {

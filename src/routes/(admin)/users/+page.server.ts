@@ -1,8 +1,15 @@
 import { fail } from "@sveltejs/kit";
 import { disableUser, enableUser, rotateCredentialsForMappingId } from "$lib/bridge/lifecycle";
 import { provisionUser } from "$lib/bridge/provisioner";
+import { applyGroupSubscription } from "$lib/bridge/subscriptions";
 import { db } from "$lib/db/connection";
+
 import { appendAuditLog } from "$lib/db/repositories/audit";
+import {
+  EMPTY_PROFILE_GROUP_ID,
+  getGroupProfile,
+  getGroupProfilesByGroupIds,
+} from "$lib/db/repositories/channel-group-profiles";
 import { getConfig } from "$lib/db/repositories/config";
 import { deleteUserSessionsByUserRef } from "$lib/db/repositories/sessions";
 import {
@@ -13,14 +20,25 @@ import {
 } from "$lib/db/repositories/users";
 import { AuditAction, type ProvisioningMode } from "$lib/db/types";
 import { DispatcharrClient } from "$lib/dispatcharr/client";
-import { listGroups } from "$lib/dispatcharr/endpoints/groups";
+import { listChannelGroups } from "$lib/dispatcharr/endpoints/channel-groups";
 import { listProfiles } from "$lib/dispatcharr/endpoints/profiles";
 import { updateUser } from "$lib/dispatcharr/endpoints/users";
+import { fetchAllPages } from "$lib/dispatcharr/pagination";
+import { DispatcharrUserSchema } from "$lib/dispatcharr/schemas";
+import { getAccount } from "$lib/plex/client";
+import type { PlexIdentity } from "$lib/plex/types";
 import { requireAdmin } from "$lib/server/auth";
 import {
-  excludePlexOwnerMappings,
+  excludePlexOwnerNonSubscriberMappings,
   tryResolveConfiguredPlexOwnerAccountId,
 } from "$lib/server/plex-owner";
+import {
+  computeOfferedGroups,
+  defaultSelectedGroupIds,
+  getSubscriptionDefaults,
+  isQuarantineGroup,
+} from "$lib/server/subscription-config";
+import { isTransientResultError, retryResult } from "$lib/utils/retry";
 import type { Actions, PageServerLoad } from "./$types";
 
 function parseStoredGroupIds(rawGroupIds: string): number[] {
@@ -54,7 +72,7 @@ export const load: PageServerLoad = async (event) => {
   const search = url.searchParams.get("search") ?? "";
 
   const ownerPlexAccountId = await tryResolveConfiguredPlexOwnerAccountId();
-  let mappings = excludePlexOwnerMappings(getAllUserMappings(), ownerPlexAccountId);
+  let mappings = excludePlexOwnerNonSubscriberMappings(getAllUserMappings(), ownerPlexAccountId);
 
   // Apply filters in-memory
   if (status !== "all") {
@@ -79,19 +97,71 @@ export const load: PageServerLoad = async (event) => {
     );
   }
 
-  // Fetch Dispatcharr groups + channel profiles
-  let groups: { id: number; name: string }[] = [];
+  // Fetch live Dispatcharr CHANNEL groups (the subscribable unit) + channel
+  // profiles. Quarantine groups (Graveyard/Slow/Black Screens) are excluded.
+  let groups: { id: number; name: string; channelCount: number | null }[] = [];
   let profiles: { id: number; name: string }[] = [];
+  // Per-mapping drift: does Dispatcharr's actual channel_profiles for the user
+  // match the otpravkarr-owned profiles its stored group selection resolves to?
+  const driftByMappingId: Record<number, boolean> = {};
 
   try {
     const client = await getClient();
     const [groupsResult, profilesResult] = await Promise.all([
-      listGroups(client),
+      listChannelGroups(client),
       listProfiles(client),
     ]);
-    if (groupsResult.ok) groups = groupsResult.data;
+    if (groupsResult.ok) {
+      groups = groupsResult.data
+        .filter((g) => !isQuarantineGroup(g.name))
+        .map((g) => ({ id: g.id, name: g.name, channelCount: g.channel_count ?? null }));
+    }
     if (profilesResult.ok) {
       profiles = profilesResult.data.map((p) => ({ id: p.id, name: p.name }));
+    }
+
+    // Compare each mapping's effective (remote) profile set with its intended
+    // (resolved-from-group-ids) set to surface drift in the admin UI.
+    const usersResult = await fetchAllPages(client, "/api/accounts/users/", DispatcharrUserSchema);
+    if (usersResult.ok) {
+      const remoteByUserId = new Map<number, Set<number>>();
+      for (const u of usersResult.data) {
+        const cp = (u as { channel_profiles?: unknown }).channel_profiles;
+        const ids = Array.isArray(cp) ? cp.filter((n): n is number => typeof n === "number") : [];
+        remoteByUserId.set(u.id, new Set(ids));
+      }
+      const emptyProfileId = getGroupProfile(EMPTY_PROFILE_GROUP_ID)?.profile_id ?? null;
+      for (const m of mappings) {
+        if (m.dispatcharr_user_id == null) continue;
+        const effective = remoteByUserId.get(m.dispatcharr_user_id) ?? new Set<number>();
+        const groupIds = parseStoredGroupIds(m.dispatcharr_group_ids);
+        // Resolve stored group ids to their otpravkarr-owned profiles once.
+        // getGroupProfilesByGroupIds silently omits ids with no local
+        // channel_group_profiles row, so a stored group whose mapping was
+        // deleted/never created (orphan) shrinks `intended` and could let a
+        // genuinely missing profile slip past the size/membership checks below
+        // (drift=false false-negative). Dedup first so duplicate ids don't read
+        // as "incomplete" against a Map that collapses them by key.
+        const uniqueGroupIds = [...new Set(groupIds)];
+        const resolvedMap = getGroupProfilesByGroupIds(uniqueGroupIds);
+        const incompleteResolution =
+          groupIds.length > 0 && resolvedMap.size < uniqueGroupIds.length;
+        const intended =
+          groupIds.length === 0
+            ? new Set(emptyProfileId == null ? [] : [emptyProfileId])
+            : new Set([...resolvedMap.values()].map((p) => p.profile_id));
+        // brief 3.5: a provisioned user must NEVER have empty channel_profiles
+        // (that exposes the entire catalog) — a zero-group subscription resolves
+        // to the empty profile, not []. So an empty effective set is always
+        // drift, even when `intended` is also empty (e.g. the empty-profile
+        // sentinel is missing), which the size/membership checks would otherwise
+        // treat as a match and silently hide the dangerous state.
+        driftByMappingId[m.id] =
+          incompleteResolution ||
+          effective.size === 0 ||
+          effective.size !== intended.size ||
+          [...intended].some((id) => !effective.has(id));
+      }
     }
   } catch {
     // Dispatcharr may not be configured yet — groups/profiles stay empty
@@ -101,6 +171,7 @@ export const load: PageServerLoad = async (event) => {
     mappings,
     groups,
     profiles,
+    driftByMappingId,
     filters: { status, mode, search },
   };
 };
@@ -237,6 +308,9 @@ export const actions: Actions = {
 
     const mapping = getUserMappingById(id);
     if (!mapping) return fail(400, { error: "User mapping not found" });
+    if (mapping.dispatcharr_user_id == null) {
+      return fail(400, { error: "User has no Dispatcharr account to update" });
+    }
 
     const groupIdsRaw = fd.get("group_ids");
     let parsedGroupIds: unknown;
@@ -253,36 +327,180 @@ export const actions: Actions = {
     }
     const groupIds: number[] = parsedGroupIds;
 
-    const before = parseStoredGroupIds(mapping.dispatcharr_group_ids);
+    let client: DispatcharrClient;
+    try {
+      client = await getClient();
+    } catch (err) {
+      return fail(500, {
+        error: err instanceof Error ? err.message : "Dispatcharr not configured",
+      });
+    }
+
+    // applyGroupSubscription filters submitted ids by LIVE EXISTENCE only, so a
+    // crafted request could assign a quarantine group (Graveyard/Slow/Black
+    // Screens) the admin UI hides everywhere. Reject any id that isn't a live,
+    // non-quarantine group. Fail closed if the live list is unavailable. An empty
+    // selection still passes ([].every is true) and resolves to the empty profile.
+    const groupsResult = await retryResult(() => listChannelGroups(client), isTransientResultError);
+    if (!groupsResult.ok) {
+      return fail(502, { error: "Unable to fetch channel groups. Please try again." });
+    }
+    const liveNonQuarantineIds = new Set(
+      groupsResult.data.filter((g) => !isQuarantineGroup(g.name)).map((g) => g.id),
+    );
+    if (!groupIds.every((id) => liveNonQuarantineIds.has(id))) {
+      return fail(400, { error: "Invalid group IDs" });
+    }
+
+    // applyGroupSubscription is the single path that enforces the subscription
+    // on Dispatcharr (Model A), persists the group set, and writes the audit
+    // entry. An empty selection resolves to the empty profile (zero channels),
+    // never an empty channel_profiles array (which would expose everything).
+    const result = await applyGroupSubscription(client, id, groupIds, {
+      actor: admin.username,
+      ipAddress: event.getClientAddress(),
+    });
+    if (!result.ok) {
+      return fail(502, { error: result.message });
+    }
+
+    return { success: true };
+  },
+
+  setGroupLock: async (event) => {
+    const admin = await requireAdmin(event);
+    const fd = await event.request.formData();
+    const id = Number(fd.get("id"));
+    if (!id) return fail(400, { error: "Missing user mapping ID" });
+
+    const mapping = getUserMappingById(id);
+    if (!mapping) return fail(400, { error: "User mapping not found" });
+
+    const locked = String(fd.get("locked") ?? "") === "true";
 
     try {
-      // Groups are tracked locally — the Dispatcharr User API does not have a groups field.
-      // Group assignments on Dispatcharr are managed separately through the Groups API.
-      updateUserMapping(id, { dispatcharr_group_ids: JSON.stringify(groupIds) });
+      updateUserMapping(id, { group_selection_locked: locked ? 1 : 0 });
     } catch (err) {
-      return fail(500, { error: err instanceof Error ? err.message : "Failed to change group" });
+      return fail(500, { error: err instanceof Error ? err.message : "Failed to update lock" });
     }
 
     try {
       appendAuditLog({
         actor: admin.username,
-        action: AuditAction.USER_GROUP_CHANGED,
-        detail: {
-          mapping_id: id,
-          plex_username: mapping.plex_username,
-          before,
-          after: groupIds,
-        },
+        action: AuditAction.USER_LOCK_CHANGED,
+        detail: { mapping_id: id, plex_username: mapping.plex_username, locked },
         ipAddress: event.getClientAddress(),
       });
     } catch (err) {
-      // audit log failure should not mask the successful group change
       console.warn(
-        `Failed to append audit log for USER_GROUP_CHANGED: ${err instanceof Error ? err.message : String(err)}`,
+        `Failed to append audit log for USER_LOCK_CHANGED: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
 
     return { success: true };
+  },
+
+  // Provision the Plex owner as their OWN non-admin Xtream subscriber, separate
+  // from their Dispatcharr superuser account (which bypasses profile scoping —
+  // brief 5). The mapping is flagged is_owner=1 and, sharing the owner's Plex
+  // account id, is automatically excluded from friend-sync reaping.
+  subscribeOwner: async (event) => {
+    const admin = await requireAdmin(event);
+
+    const plexToken = await getConfig("plex_admin_token");
+    if (!plexToken) {
+      return fail(400, { error: "Plex admin token is not configured." });
+    }
+
+    let account: Awaited<ReturnType<typeof getAccount>>;
+    try {
+      account = await getAccount(plexToken);
+    } catch {
+      return fail(502, { error: "Could not resolve your Plex account." });
+    }
+    const raw = account as unknown as Record<string, unknown>;
+    const accountId = typeof raw.id === "number" ? raw.id : Number(raw.id);
+    if (!Number.isFinite(accountId)) {
+      return fail(502, { error: "Plex returned an unexpected account id." });
+    }
+    const ownerIdentity: PlexIdentity = {
+      id: accountId,
+      uuid: typeof raw.uuid === "string" ? raw.uuid : String(accountId),
+      username: typeof raw.username === "string" ? raw.username : "owner",
+      email: typeof raw.email === "string" ? raw.email : "",
+      thumb: typeof raw.thumb === "string" ? raw.thumb : "",
+      authenticationToken: plexToken,
+    };
+
+    let client: DispatcharrClient;
+    try {
+      client = await getClient();
+    } catch (err) {
+      return fail(500, {
+        error: err instanceof Error ? err.message : "Dispatcharr not configured",
+      });
+    }
+
+    // Default the owner to every admin-offered group. Fail closed if the live
+    // group list is unavailable: a silent empty result would provision the owner
+    // to the empty profile (zero channels) and report success.
+    const defaults = await getSubscriptionDefaults();
+    const groupsResult = await retryResult(() => listChannelGroups(client), isTransientResultError);
+    if (!groupsResult.ok) {
+      return fail(502, { error: "Unable to fetch channel groups. Please try again." });
+    }
+    const groupIds = defaultSelectedGroupIds(computeOfferedGroups(groupsResult.data, defaults));
+
+    const result = await provisionUser(
+      client,
+      {
+        plexIdentity: ownerIdentity,
+        mode: "automatic",
+        groupIds,
+        isOwner: true,
+        exposeInitialPassword: true,
+      },
+      { actor: admin.username, ipAddress: event.getClientAddress() },
+    );
+
+    if (result.status === "failed") {
+      return fail(502, { error: result.error });
+    }
+    if (result.status === "already_exists") {
+      return fail(400, {
+        error: "You already have a subscriber account — manage it from the user list.",
+      });
+    }
+
+    try {
+      updateUserMapping(result.mapping.id, { is_owner: 1 });
+    } catch {
+      // Best-effort: provisionUser already set is_owner on create.
+    }
+
+    try {
+      appendAuditLog({
+        actor: admin.username,
+        action: AuditAction.USER_OWNER_SUBSCRIBED,
+        detail: {
+          mapping_id: result.mapping.id,
+          dispatcharr_username: result.mapping.dispatcharr_username,
+        },
+        ipAddress: event.getClientAddress(),
+      });
+    } catch (err) {
+      console.warn(
+        `Failed to append audit log for USER_OWNER_SUBSCRIBED: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+
+    const initialPassword = result.status === "provisioned" ? result.initialPassword : undefined;
+    return {
+      success: true,
+      ownerSubscribed: true,
+      dispatcharrUsername: result.mapping.dispatcharr_username,
+      initialPassword: initialPassword ?? null,
+    };
   },
 
   changeProfile: async (event) => {

@@ -22,6 +22,11 @@ vi.mock("$lib/dispatcharr/endpoints/users", () => ({
   createUser: vi.fn(),
   getUser: vi.fn(),
   updateUser: vi.fn(),
+  deleteUser: vi.fn(),
+}));
+
+vi.mock("../subscriptions", () => ({
+  applyGroupSubscription: vi.fn(),
 }));
 
 vi.mock("$lib/dispatcharr/pagination", () => ({
@@ -52,11 +57,14 @@ vi.mock("$lib/utils/retry", async (importOriginal) => {
 const { getUserMappingByPlexId, createUserMapping, updateUserMapping, getAllUserMappings } =
   await import("$lib/db/repositories/users");
 const { appendAuditLog } = await import("$lib/db/repositories/audit");
-const { createUser, getUser, updateUser } = await import("$lib/dispatcharr/endpoints/users");
+const { createUser, getUser, updateUser, deleteUser } = await import(
+  "$lib/dispatcharr/endpoints/users"
+);
 const { fetchAllPages } = await import("$lib/dispatcharr/pagination");
 const { encrypt, decrypt } = await import("$lib/crypto/encryption");
 const { generateXcPassword } = await import("$lib/crypto/passwords");
 const { sanitizeUsername, provisionUser } = await import("../provisioner");
+const { applyGroupSubscription } = await import("../subscriptions");
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -77,6 +85,8 @@ function makeMapping(overrides: Partial<UserMapping> = {}): UserMapping {
     dispatcharr_profile_id: 5,
     provisioning_mode: "automatic",
     is_active: 1,
+    group_selection_locked: 0,
+    is_owner: 0,
     created_at: "2024-01-01 00:00:00",
     updated_at: "2024-01-01 00:00:00",
     last_synced_at: null,
@@ -123,6 +133,7 @@ beforeEach(() => {
   vi.mocked(createUser).mockReset();
   vi.mocked(getUser).mockReset();
   vi.mocked(updateUser).mockReset();
+  vi.mocked(deleteUser).mockReset().mockResolvedValue({ ok: true, data: undefined });
   vi.mocked(fetchAllPages).mockReset();
   vi.mocked(encrypt)
     .mockReset()
@@ -141,6 +152,12 @@ beforeEach(() => {
     ok: true,
     data: makeDispatcharrUser(),
   } as DispatcharrResult<DispatcharrUser>);
+
+  // Default: subscription enforcement succeeds (the bridge function is unit-
+  // tested separately in subscriptions.test.ts).
+  vi.mocked(applyGroupSubscription)
+    .mockReset()
+    .mockResolvedValue({ ok: true, data: { profileIds: [10], groupIds: [1, 2] } });
 
   // Default: remote fetch fails (no client.baseUrl in mockClient), matching pre-existing behavior
   vi.mocked(fetchAllPages).mockResolvedValue({
@@ -641,6 +658,24 @@ describe("provisionUser — create (automatic mode)", () => {
       expect(result.initialPassword).toBe("generated-password-24");
     }
     expect(encrypt).toHaveBeenCalledWith("generated-password-24", "credential-encryption");
+  });
+
+  it("flags the mapping as owner when isOwner is set", async () => {
+    const dispatcharrUser = makeDispatcharrUser({ id: 99, username: "owner_2" });
+    vi.mocked(createUser).mockResolvedValue({ ok: true, data: dispatcharrUser });
+    vi.mocked(createUserMapping).mockReturnValue(
+      makeMapping({ id: 5, dispatcharr_user_id: 99, is_owner: 1 }),
+    );
+
+    const result = await provisionUser(mockClient, {
+      plexIdentity: makePlexIdentity(),
+      mode: "automatic",
+      groupIds: [1],
+      isOwner: true,
+    });
+
+    expect(result.status).toBe("provisioned");
+    expect(createUserMapping).toHaveBeenCalledWith(expect.objectContaining({ is_owner: 1 }));
   });
 });
 

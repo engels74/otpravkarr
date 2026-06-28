@@ -2,6 +2,7 @@
 import type { ActionResult } from "@sveltejs/kit";
 import { toast } from "svelte-sonner";
 import { applyAction, enhance } from "$app/forms";
+import GroupPicker from "$lib/components/GroupPicker.svelte";
 import { Badge } from "$lib/components/ui/badge";
 import { Button } from "$lib/components/ui/button";
 import * as Card from "$lib/components/ui/card";
@@ -29,10 +30,22 @@ interface Props {
     audit: {
       retentionDays: string;
     };
+    subscription: {
+      allowSelfSelect: boolean;
+      selectableGroupIds: number[];
+      channelGroups: { id: number; name: string; channelCount: number | null }[];
+    };
   };
 }
 
 let { data }: Props = $props();
+
+// Local state for the subscription-defaults picker.
+// svelte-ignore state_referenced_locally
+let selectableGroups = $state(new Set<number>(data.subscription.selectableGroupIds));
+// svelte-ignore state_referenced_locally
+let allowSelfSelect = $state(data.subscription.allowSelfSelect);
+const selectableGroupsJson = $derived(JSON.stringify([...selectableGroups]));
 
 let sectionSubmitting = $state<Record<string, boolean>>({});
 let sectionMessage = $state<Record<string, { type: "success" | "error"; text: string }>>({});
@@ -343,4 +356,74 @@ function makeEnhance(section: string) {
     </form>
   </Card.Root>
   </section>
+  <!-- ─── Channel subscriptions ─────────────────────────── -->
+  <section class="space-y-4">
+    <p class="eyebrow">Channel subscriptions</p>
+
+    <Card.Root>
+      <Card.Header>
+        <Card.Title class="text-base">Subscription defaults</Card.Title>
+        <Card.Description>
+          Control which channel groups users are offered and whether they can choose for themselves.
+        </Card.Description>
+      </Card.Header>
+      <form
+        method="POST"
+        action="?/updateDefaultProvisioning"
+        use:enhance={makeEnhance("subscription")}
+      >
+        <input type="hidden" name="allow_user_self_select" value={String(allowSelfSelect)} />
+        <input type="hidden" name="default_selectable_groups" value={selectableGroupsJson} />
+        <Card.Content class="grid gap-5">
+          <label class="flex items-start gap-3">
+            <input
+              type="checkbox"
+              class="mt-0.5 h-4 w-4 rounded border-border accent-primary"
+              bind:checked={allowSelfSelect}
+            />
+            <span class="grid gap-0.5">
+              <span class="text-sm font-medium text-foreground">Allow users to self-select</span>
+              <span class="text-xs text-muted-foreground">
+                When off, users can't change their channel groups — admins assign them per user.
+              </span>
+            </span>
+          </label>
+
+          <div class="grid gap-1.5">
+            <Label>Default selectable groups</Label>
+            <p class="text-xs text-muted-foreground">
+              The groups offered to users by default. Select none to offer every channel group.
+              Quarantine groups (Graveyard, Slow, Black Screens) are always hidden.
+            </p>
+            {#if data.subscription.channelGroups.length === 0}
+              <p class="rounded-md border border-border px-3 py-6 text-center text-sm text-muted-foreground">
+                No channel groups found. Configure and verify the Dispatcharr connection first.
+              </p>
+            {:else}
+              <GroupPicker groups={data.subscription.channelGroups} bind:selected={selectableGroups} />
+            {/if}
+          </div>
+        </Card.Content>
+        <Card.Footer class="flex items-center gap-3">
+          <Button
+            type="submit"
+            disabled={sectionSubmitting["subscription"]}
+            aria-label="Save subscription defaults"
+          >
+            {sectionSubmitting["subscription"] ? "Saving..." : "Save"}
+          </Button>
+          {#if sectionMessage["subscription"]}
+            <span
+              class="text-sm {sectionMessage['subscription'].type === 'success'
+                ? 'text-green-600 dark:text-green-400'
+                : 'text-destructive'}"
+            >
+              {sectionMessage["subscription"].text}
+            </span>
+          {/if}
+        </Card.Footer>
+      </form>
+    </Card.Root>
+  </section>
+
 </div>

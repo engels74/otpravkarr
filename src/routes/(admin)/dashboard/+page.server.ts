@@ -6,7 +6,7 @@ import { getHealthStatus } from "$lib/scheduler/jobs/health";
 import { scheduler } from "$lib/scheduler/runner";
 import { requireAdmin } from "$lib/server/auth";
 import {
-  excludePlexOwnerMappings,
+  excludePlexOwnerNonSubscriberMappings,
   tryResolveConfiguredPlexOwnerAccountId,
 } from "$lib/server/plex-owner";
 import type { PageServerLoad } from "./$types";
@@ -14,7 +14,7 @@ import type { PageServerLoad } from "./$types";
 export const load: PageServerLoad = async (event) => {
   await requireAdmin(event);
   const ownerPlexAccountId = await tryResolveConfiguredPlexOwnerAccountId();
-  const mappings = excludePlexOwnerMappings(getAllUserMappings(), ownerPlexAccountId);
+  const mappings = excludePlexOwnerNonSubscriberMappings(getAllUserMappings(), ownerPlexAccountId);
 
   // User stats
   const total = mappings.length;

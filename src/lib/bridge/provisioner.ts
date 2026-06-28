@@ -10,11 +10,12 @@ import {
 import type { UserMapping } from "$lib/db/types";
 import { AuditAction } from "$lib/db/types";
 import type { DispatcharrClient } from "$lib/dispatcharr/client";
-import { createUser, getUser, updateUser } from "$lib/dispatcharr/endpoints/users";
+import { createUser, deleteUser, getUser, updateUser } from "$lib/dispatcharr/endpoints/users";
 import { fetchAllPages } from "$lib/dispatcharr/pagination";
 import { DispatcharrUserSchema } from "$lib/dispatcharr/schemas";
 import { isTransientResultError, retryResult } from "$lib/utils/retry";
 import type { ActorContext } from "./lifecycle";
+import { applyGroupSubscription } from "./subscriptions";
 import type { ProvisioningRequest, ProvisioningResult } from "./types";
 
 const CREDENTIAL_PURPOSE = "credential-encryption";
@@ -169,7 +170,64 @@ export async function provisionUser(
         if (!updatedMapping) {
           return { status: "failed", error: "Failed to retrieve reactivated mapping" };
         }
-        return { status: "reactivated", mapping: updatedMapping };
+
+        // Enforce the channel-group subscription on Dispatcharr. A reactivated
+        // user must not be left with an empty channel_profiles set (= full
+        // catalog, brief 3.5). On failure, delete the remote Dispatcharr user
+        // and null dispatcharr_user_id — mirroring the new-user enforce-failure
+        // path below — rather than only flipping is_active locally, which would
+        // leave an over-exposed active account whose freshly re-asserted
+        // xc_password could still be used.
+        const reEnforce = await applyGroupSubscription(
+          client,
+          updatedMapping.id,
+          request.groupIds,
+          actorContext,
+        );
+        if (!reEnforce.ok) {
+          const deleteResult = await retryResult(
+            () => deleteUser(client, dispatcharrUserId),
+            isTransientResultError,
+          );
+          // Mirror disableUser: only drop the local reference when the remote
+          // account is actually gone (deleted now, or already not_found). If the
+          // delete itself failed, the remote Dispatcharr user is still live with a
+          // usable xc_password — keep dispatcharr_user_id so a later retry/sync can
+          // clean it up, and surface the orphan in the returned error.
+          const orphanError =
+            !deleteResult.ok && deleteResult.error !== "not_found" ? deleteResult.message : null;
+          try {
+            updateUserMapping(updatedMapping.id, {
+              is_active: 0,
+              ...(orphanError == null && { dispatcharr_user_id: null }),
+            });
+            // Compensating audit entry: the USER_PROVISIONED (reactivated) write
+            // above recorded a reactivation that enforcement then rolled back, so
+            // log the teardown to keep the trail truthful.
+            appendAuditLog({
+              actor: actorContext?.actor ?? request.plexIdentity.username,
+              ipAddress: actorContext?.ipAddress,
+              action: AuditAction.USER_DISABLED,
+              detail: {
+                mapping_id: updatedMapping.id,
+                dispatcharr_username: result.data.username,
+                reason: "reactivation_enforcement_failed",
+              },
+            });
+          } catch {
+            // best-effort neutralization
+          }
+          return {
+            status: "failed",
+            error:
+              orphanError == null
+                ? `Reactivated but failed to enforce channel access: ${reEnforce.message}`
+                : `Reactivated but failed to enforce channel access: ${reEnforce.message}; remote Dispatcharr user ${dispatcharrUserId} could not be deleted and is still live: ${orphanError}`,
+          };
+        }
+
+        const enforcedMapping = getUserMappingByPlexId(request.plexIdentity.id) ?? updatedMapping;
+        return { status: "reactivated", mapping: enforcedMapping };
       } catch (err) {
         return {
           status: "failed",
@@ -263,6 +321,7 @@ export async function provisionUser(
         ...(request.profileId !== undefined && { dispatcharr_profile_id: request.profileId }),
         provisioning_mode: request.mode,
         is_active: 1,
+        ...(request.isOwner !== undefined && { is_owner: request.isOwner ? 1 : 0 }),
       });
 
       const updated = getUserMappingByPlexId(request.plexIdentity.id);
@@ -284,6 +343,7 @@ export async function provisionUser(
         dispatcharr_profile_id: request.profileId ?? null,
         provisioning_mode: request.mode,
         is_active: 1,
+        is_owner: request.isOwner ? 1 : 0,
         last_synced_at: null,
         last_accessed_at: null,
       });
@@ -306,6 +366,50 @@ export async function provisionUser(
       error: `Dispatcharr user created but local mapping write failed: ${err instanceof Error ? err.message : String(err)}`,
     };
   }
+
+  // Enforce the channel-group subscription on Dispatcharr. The freshly created
+  // user currently has an empty channel_profiles set, which Dispatcharr treats
+  // as "see everything" (brief 3.5). applyGroupSubscription scopes it to the
+  // selected groups (or the empty profile for a zero-group selection) and forces
+  // a non-admin user_level. If it fails, delete the remote user and neutralize
+  // the mapping rather than leave an unrestricted account whose stored
+  // credentials could later be retrieved through the portal.
+  const enforce = await applyGroupSubscription(
+    client,
+    finalMapping.id,
+    request.groupIds,
+    actorContext,
+  );
+  if (!enforce.ok) {
+    const deleteResult = await retryResult(
+      () => deleteUser(client, dispatcharrUser.id),
+      isTransientResultError,
+    );
+    // Mirror disableUser: only drop the local reference when the remote account
+    // is actually gone (deleted now, or already not_found). If the delete itself
+    // failed, the remote Dispatcharr user is still live with a usable xc_password
+    // — keep dispatcharr_user_id so a later retry/sync can clean it up, and
+    // surface the orphan in the returned error.
+    const orphanError =
+      !deleteResult.ok && deleteResult.error !== "not_found" ? deleteResult.message : null;
+    try {
+      updateUserMapping(finalMapping.id, {
+        is_active: 0,
+        ...(orphanError == null && { dispatcharr_user_id: null }),
+      });
+    } catch {
+      // best-effort neutralization
+    }
+    return {
+      status: "failed",
+      error:
+        orphanError == null
+          ? `Provisioned but failed to enforce channel access: ${enforce.message}`
+          : `Provisioned but failed to enforce channel access: ${enforce.message}; remote Dispatcharr user ${dispatcharrUser.id} could not be deleted and is still live: ${orphanError}`,
+    };
+  }
+  const enforcedMapping = getUserMappingByPlexId(request.plexIdentity.id) ?? finalMapping;
+  finalMapping = enforcedMapping;
 
   // Automatic mode normally persists the encrypted password and rotates on
   // demand, so the initial value is not surfaced. Admin re-provisioning can

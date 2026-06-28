@@ -12,7 +12,9 @@ vi.mock("ofetch", () => ({
 
 // Import after mocking
 const { DispatcharrClient } = await import("../client");
-const { listProfiles } = await import("../endpoints/profiles");
+const { listProfiles, getProfile, createProfile, bulkUpdateProfileMembership } = await import(
+  "../endpoints/profiles"
+);
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -131,5 +133,77 @@ describe("listProfiles", () => {
     if (!result.ok) {
       expect(result.error).toBe("network_error");
     }
+  });
+});
+describe("getProfile", () => {
+  it("returns the profile with its enabled-channel membership", async () => {
+    mockOfetch.mockResolvedValueOnce({ id: 1, name: "Sports", channels: [10, 11, 12] });
+    const result = await getProfile(createClient(), 1);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.id).toBe(1);
+      expect(result.data.channels).toEqual([10, 11, 12]);
+    }
+    expect(mockOfetch).toHaveBeenCalledWith(
+      "https://dispatch.example.com/api/channels/profiles/1/",
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
+
+  it("rejects a non-array channels field instead of coercing it to [] (under-disable guard)", async () => {
+    // Coercing a non-array shape to [] would leave `currentEnabled` empty, so the
+    // bridge's disable loop would no-op and a fresh (all-enabled) profile would
+    // stay ALL-ENABLED — full-catalog exposure (brief 3.5). Strict parsing must
+    // surface unexpected_shape so callers abort instead of silently under-disabling.
+    mockOfetch.mockResolvedValueOnce({ id: 2, name: "News", channels: "weird" });
+    const result = await getProfile(createClient(), 2);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toBe("unexpected_shape");
+  });
+});
+
+describe("createProfile", () => {
+  it("POSTs the name and returns the created profile", async () => {
+    mockOfetch.mockResolvedValueOnce({ id: 7, name: "otpravkarr:g1:Sports", channels: [1, 2, 3] });
+    const result = await createProfile(createClient(), "otpravkarr:g1:Sports");
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.data.id).toBe(7);
+    expect(mockOfetch).toHaveBeenCalledWith(
+      "https://dispatch.example.com/api/channels/profiles/",
+      expect.objectContaining({ method: "POST", body: { name: "otpravkarr:g1:Sports" } }),
+    );
+  });
+
+  it("returns a validation_error on a duplicate name (400)", async () => {
+    const err = new Error("exists") as Error & { statusCode: number; statusMessage: string };
+    err.statusCode = 400;
+    err.statusMessage = "exists";
+    mockOfetch.mockRejectedValueOnce(err);
+    const result = await createProfile(createClient(), "dup");
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toBe("validation_error");
+  });
+});
+
+describe("bulkUpdateProfileMembership", () => {
+  it("PATCHes the membership diff to the bulk-update endpoint", async () => {
+    mockOfetch.mockResolvedValueOnce({ detail: "ok" });
+    const result = await bulkUpdateProfileMembership(createClient(), 5, [
+      { channel_id: 1, enabled: false },
+      { channel_id: 2, enabled: true },
+    ]);
+    expect(result.ok).toBe(true);
+    expect(mockOfetch).toHaveBeenCalledWith(
+      "https://dispatch.example.com/api/channels/profiles/5/channels/bulk-update/",
+      expect.objectContaining({
+        method: "PATCH",
+        body: {
+          channels: [
+            { channel_id: 1, enabled: false },
+            { channel_id: 2, enabled: true },
+          ],
+        },
+      }),
+    );
   });
 });

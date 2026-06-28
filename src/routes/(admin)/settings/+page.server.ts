@@ -3,6 +3,7 @@ import { appendAuditLog } from "$lib/db/repositories/audit";
 import { getConfig, invalidateConfigCache, setConfig } from "$lib/db/repositories/config";
 import { AuditAction } from "$lib/db/types";
 import { DispatcharrClient } from "$lib/dispatcharr/client";
+import { listChannelGroups } from "$lib/dispatcharr/endpoints/channel-groups";
 import { createHealthEndpoints } from "$lib/dispatcharr/endpoints/health";
 import { validateServerToken } from "$lib/plex/client";
 import { PlexAuthError, PlexConnectionError } from "$lib/plex/types";
@@ -10,6 +11,12 @@ import { createSyncJob } from "$lib/scheduler/jobs/sync";
 import { scheduler } from "$lib/scheduler/runner";
 import { requireAdmin } from "$lib/server/auth";
 import { parseAndNormalizeOrigins } from "$lib/server/origins";
+import {
+  ALLOW_USER_SELF_SELECT_KEY,
+  DEFAULT_SELECTABLE_GROUPS_KEY,
+  getSubscriptionDefaults,
+  isQuarantineGroup,
+} from "$lib/server/subscription-config";
 import {
   AuditRetentionSchema,
   DispatcharrConfigSchema,
@@ -56,6 +63,24 @@ export const load: PageServerLoad = async (event) => {
     }
   }
 
+  // Channel-group subscription defaults + the selectable channel groups admins
+  // can offer. Quarantine groups (Graveyard/Slow/Black Screens) are excluded.
+  const subscriptionDefaults = await getSubscriptionDefaults();
+  let channelGroups: { id: number; name: string; channelCount: number | null }[] = [];
+  if (dispatcharrUrl && dispatcharrApiKey) {
+    try {
+      const client = new DispatcharrClient(dispatcharrUrl, dispatcharrApiKey);
+      const groupsResult = await listChannelGroups(client);
+      if (groupsResult.ok) {
+        channelGroups = groupsResult.data
+          .filter((g) => !isQuarantineGroup(g.name))
+          .map((g) => ({ id: g.id, name: g.name, channelCount: g.channel_count ?? null }));
+      }
+    } catch {
+      // Dispatcharr may be unreachable — leave the group list empty.
+    }
+  }
+
   return {
     plex: {
       serverUrl: plexServerUrl ?? "",
@@ -75,6 +100,11 @@ export const load: PageServerLoad = async (event) => {
     },
     audit: {
       retentionDays: auditRetentionDays ?? "90",
+    },
+    subscription: {
+      allowSelfSelect: subscriptionDefaults.allowSelfSelect,
+      selectableGroupIds: subscriptionDefaults.selectableGroupIds ?? [],
+      channelGroups,
     },
   };
 };
@@ -271,10 +301,45 @@ export const actions: Actions = {
 
   updateDefaultProvisioning: async (event) => {
     await requireAdmin(event);
-    return fail(400, {
-      error:
-        "Default provisioning overrides are currently unavailable because runtime provisioning does not consume these settings.",
+    const { request, locals, getClientAddress } = event;
+    const fd = await request.formData();
+    const actor = locals.admin?.username ?? "unknown";
+
+    // Whether users may self-select their groups (global default).
+    const allowSelfSelect = String(fd.get("allow_user_self_select") ?? "") === "true";
+
+    // Default selectable groups: a JSON array of group IDs ("[]" = offer all).
+    const rawGroups = String(fd.get("default_selectable_groups") ?? "[]");
+    let parsedGroups: unknown;
+    try {
+      parsedGroups = JSON.parse(rawGroups);
+    } catch {
+      return fail(400, { error: "Invalid selectable group selection" });
+    }
+    if (
+      !Array.isArray(parsedGroups) ||
+      !parsedGroups.every((v): v is number => Number.isInteger(v) && v > 0)
+    ) {
+      return fail(400, { error: "Invalid selectable group selection" });
+    }
+    const selectableGroupIds = [...new Set(parsedGroups as number[])].sort((a, b) => a - b);
+
+    await setConfig(ALLOW_USER_SELF_SELECT_KEY, allowSelfSelect ? "true" : "false");
+    await setConfig(DEFAULT_SELECTABLE_GROUPS_KEY, JSON.stringify(selectableGroupIds));
+    invalidateConfigCache();
+
+    appendAuditLog({
+      actor,
+      action: AuditAction.CONFIG_CHANGED,
+      detail: {
+        section: "subscription",
+        allow_user_self_select: allowSelfSelect,
+        default_selectable_groups_count: selectableGroupIds.length,
+      },
+      ipAddress: getClientAddress(),
     });
+
+    return { success: true, message: "Subscription defaults saved." };
   },
 
   updateSecurity: async (event) => {

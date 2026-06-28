@@ -54,8 +54,9 @@ function insertStmt() {
       plex_account_id, plex_uuid, plex_username, plex_email, plex_thumb,
       dispatcharr_user_id, dispatcharr_username, dispatcharr_xc_password_enc,
       dispatcharr_group_ids, dispatcharr_profile_id, provisioning_mode, is_active,
+      group_selection_locked, is_owner,
       last_synced_at, last_accessed_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   return stmtInsert;
 }
@@ -145,7 +146,11 @@ export function getAllUserMappings(filters?: { isActive?: boolean }): UserMappin
  * Returns the created row.
  */
 export function createUserMapping(
-  mapping: Omit<UserMapping, "id" | "created_at" | "updated_at">,
+  mapping: Omit<
+    UserMapping,
+    "id" | "created_at" | "updated_at" | "group_selection_locked" | "is_owner"
+  > &
+    Partial<Pick<UserMapping, "group_selection_locked" | "is_owner">>,
 ): UserMapping {
   const result = insertStmt().run(
     mapping.plex_account_id,
@@ -160,6 +165,8 @@ export function createUserMapping(
     mapping.dispatcharr_profile_id,
     mapping.provisioning_mode,
     mapping.is_active,
+    mapping.group_selection_locked ?? 0,
+    mapping.is_owner ?? 0,
     mapping.last_synced_at,
     mapping.last_accessed_at,
   );
@@ -188,6 +195,8 @@ export function updateUserMapping(
     "dispatcharr_profile_id",
     "provisioning_mode",
     "is_active",
+    "group_selection_locked",
+    "is_owner",
     "last_synced_at",
     "last_accessed_at",
   ] as const;

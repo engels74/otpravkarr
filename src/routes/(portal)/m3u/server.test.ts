@@ -96,6 +96,8 @@ function createUser(overrides: Partial<UserMapping> = {}): UserMapping {
     dispatcharr_profile_id: null,
     provisioning_mode: "automatic",
     is_active: 1,
+    group_selection_locked: 0,
+    is_owner: 0,
     created_at: "2024-01-01 00:00:00",
     updated_at: "2024-01-01 00:00:00",
     last_synced_at: null,

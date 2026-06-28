@@ -18,6 +18,11 @@ const mocks = vi.hoisted(() => ({
   deleteUserSessionsByUserRef: vi.fn(() => 0),
   transaction: vi.fn((fn: () => unknown) => fn),
   listGroups: vi.fn(async () => ({ ok: true, data: [] })),
+  listChannelGroups: vi.fn(async () => ({ ok: true, data: [] as { id: number; name: string }[] })),
+  applyGroupSubscription: vi.fn(async () => ({
+    ok: true,
+    data: { profileIds: [10], groupIds: [5, 7] },
+  })),
   listProfiles: vi.fn(async () => ({ ok: true, data: [] })),
   updateUser: vi.fn(async () => ({ ok: true, data: {} })),
   rotateCredentialsForMappingId: vi.fn(async () => undefined),
@@ -27,6 +32,25 @@ const mocks = vi.hoisted(() => ({
     async () => ({ status: "provisioned", mapping: {} }) as ProvisioningResult,
   ),
   appendAuditLog: vi.fn(),
+  getAccount: vi.fn(async () => ({
+    id: 99999,
+    uuid: "owner-uuid",
+    username: "engels74",
+    email: "owner@example.com",
+    thumb: "",
+  })),
+}));
+
+vi.mock("$lib/plex/client", () => ({
+  getAccount: mocks.getAccount,
+}));
+
+vi.mock("$lib/dispatcharr/endpoints/channel-groups", () => ({
+  listChannelGroups: mocks.listChannelGroups,
+}));
+
+vi.mock("$lib/bridge/subscriptions", () => ({
+  applyGroupSubscription: mocks.applyGroupSubscription,
 }));
 
 vi.mock("$lib/server/auth", () => ({
@@ -42,6 +66,15 @@ vi.mock("$lib/server/plex-owner", () => ({
     ownerPlexAccountId == null
       ? mappings
       : mappings.filter((mapping) => mapping.plex_account_id !== ownerPlexAccountId),
+  excludePlexOwnerNonSubscriberMappings: <T extends { plex_account_id: number; is_owner: number }>(
+    mappings: T[],
+    ownerPlexAccountId: number | null,
+  ) =>
+    ownerPlexAccountId == null
+      ? mappings
+      : mappings.filter(
+          (mapping) => mapping.plex_account_id !== ownerPlexAccountId || mapping.is_owner === 1,
+        ),
 }));
 
 vi.mock("$lib/db/connection", () => ({
@@ -110,12 +143,30 @@ function resetMocks() {
   mocks.transaction.mockClear();
   mocks.transaction.mockImplementation((fn: () => unknown) => fn);
   mocks.listGroups.mockClear();
+  mocks.listChannelGroups.mockClear();
+  mocks.applyGroupSubscription.mockClear();
+  mocks.applyGroupSubscription.mockResolvedValue({
+    ok: true,
+    data: { profileIds: [10], groupIds: [5, 7] },
+  });
   mocks.listProfiles.mockClear();
   mocks.updateUser.mockClear();
   mocks.rotateCredentialsForMappingId.mockClear();
   mocks.disableUser.mockClear();
   mocks.enableUser.mockClear();
   mocks.provisionUser.mockClear();
+  mocks.provisionUser.mockResolvedValue({
+    status: "provisioned",
+    mapping: {},
+  } as ProvisioningResult);
+  mocks.getAccount.mockClear();
+  mocks.getAccount.mockResolvedValue({
+    id: 99999,
+    uuid: "owner-uuid",
+    username: "engels74",
+    email: "owner@example.com",
+    thumb: "",
+  });
   mocks.appendAuditLog.mockClear();
   mocks.appendAuditLog.mockImplementation(() => undefined);
 }
@@ -210,17 +261,28 @@ describe("admin users actions", () => {
     });
   });
 
-  it("saves group IDs locally on changeGroup without calling Dispatcharr", async () => {
+  it("enforces the subscription via applyGroupSubscription on changeGroup", async () => {
     const { actions } = await import("./+page.server");
     const changeGroup = actions.changeGroup;
     if (!changeGroup) throw new Error("changeGroup action is undefined");
 
+    mocks.getConfig.mockResolvedValue("https://dispatcharr.example");
     mocks.getUserMappingById.mockReturnValueOnce({
       id: 1,
       dispatcharr_user_id: 42,
       dispatcharr_group_ids: JSON.stringify([2]),
       plex_username: "alice",
     } as unknown as { id: number; dispatcharr_user_id: number | null });
+
+    // changeGroup validates submitted ids against the live, non-quarantine group
+    // list before enforcing, so 5 and 7 must exist as offerable groups.
+    mocks.listChannelGroups.mockResolvedValueOnce({
+      ok: true,
+      data: [
+        { id: 5, name: "Sports" },
+        { id: 7, name: "News" },
+      ],
+    });
 
     const body = new FormData();
     body.set("id", "1");
@@ -231,21 +293,109 @@ describe("admin users actions", () => {
     );
 
     expect(result).toMatchObject({ success: true });
-    expect(mocks.updateUserMapping).toHaveBeenCalledWith(1, {
-      dispatcharr_group_ids: JSON.stringify([5, 7]),
-    });
-    expect(mocks.requireAdmin).toHaveBeenCalledOnce();
-    expect(mocks.appendAuditLog).toHaveBeenCalledWith({
+    // The single enforcement path is used (it persists group ids + audits).
+    expect(mocks.applyGroupSubscription).toHaveBeenCalledWith(expect.anything(), 1, [5, 7], {
       actor: "admin",
-      action: "user.group_changed",
-      detail: {
-        mapping_id: 1,
-        plex_username: "alice",
-        before: [2],
-        after: [5, 7],
-      },
       ipAddress: "127.0.0.1",
     });
+    expect(mocks.requireAdmin).toHaveBeenCalledOnce();
+  });
+
+  it("fails changeGroup for a mapping without a Dispatcharr account", async () => {
+    const { actions } = await import("./+page.server");
+    const changeGroup = actions.changeGroup;
+    if (!changeGroup) throw new Error("changeGroup action is undefined");
+
+    mocks.getUserMappingById.mockReturnValueOnce({
+      id: 1,
+      dispatcharr_user_id: null,
+      dispatcharr_group_ids: "[]",
+      plex_username: "alice",
+    } as unknown as { id: number; dispatcharr_user_id: number | null });
+
+    const body = new FormData();
+    body.set("id", "1");
+    body.set("group_ids", JSON.stringify([5]));
+
+    const result = await changeGroup(
+      createActionEvent(body) as unknown as Parameters<typeof changeGroup>[0],
+    );
+
+    expect(result).toMatchObject({ status: 400 });
+    expect(mocks.applyGroupSubscription).not.toHaveBeenCalled();
+  });
+
+  it("toggles the per-user group lock via setGroupLock", async () => {
+    const { actions } = await import("./+page.server");
+    const setGroupLock = actions.setGroupLock;
+    if (!setGroupLock) throw new Error("setGroupLock action is undefined");
+
+    mocks.getUserMappingById.mockReturnValueOnce({
+      id: 1,
+      dispatcharr_user_id: 42,
+      dispatcharr_group_ids: "[]",
+      plex_username: "alice",
+    } as unknown as { id: number; dispatcharr_user_id: number | null });
+
+    const body = new FormData();
+    body.set("id", "1");
+    body.set("locked", "true");
+
+    const result = await setGroupLock(
+      createActionEvent(body) as unknown as Parameters<typeof setGroupLock>[0],
+    );
+
+    expect(result).toMatchObject({ success: true });
+    expect(mocks.updateUserMapping).toHaveBeenCalledWith(1, { group_selection_locked: 1 });
+    expect(mocks.appendAuditLog).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "user.lock_changed" }),
+    );
+  });
+
+  it("provisions the owner as a non-admin subscriber via subscribeOwner", async () => {
+    const { actions } = await import("./+page.server");
+    const subscribeOwner = actions.subscribeOwner;
+    if (!subscribeOwner) throw new Error("subscribeOwner action is undefined");
+
+    mocks.getConfig.mockResolvedValue("https://dispatcharr.example");
+    mocks.provisionUser.mockResolvedValue({
+      status: "provisioned",
+      mapping: { id: 7, dispatcharr_username: "engels74_2" },
+      initialPassword: "owner-otp",
+    } as unknown as ProvisioningResult);
+
+    const result = await subscribeOwner(
+      createActionEvent(new FormData()) as unknown as Parameters<typeof subscribeOwner>[0],
+    );
+
+    expect(mocks.getAccount).toHaveBeenCalled();
+    expect(mocks.provisionUser).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ isOwner: true, mode: "automatic" }),
+      expect.objectContaining({ actor: "admin" }),
+    );
+    expect(result).toMatchObject({ ownerSubscribed: true, initialPassword: "owner-otp" });
+    expect(mocks.appendAuditLog).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "user.owner_subscribed" }),
+    );
+  });
+
+  it("rejects subscribeOwner when the owner already has a subscriber account", async () => {
+    const { actions } = await import("./+page.server");
+    const subscribeOwner = actions.subscribeOwner;
+    if (!subscribeOwner) throw new Error("missing");
+
+    mocks.getConfig.mockResolvedValue("https://dispatcharr.example");
+    mocks.provisionUser.mockResolvedValue({
+      status: "already_exists",
+      mapping: {},
+    } as ProvisioningResult);
+
+    const result = await subscribeOwner(
+      createActionEvent(new FormData()) as unknown as Parameters<typeof subscribeOwner>[0],
+    );
+
+    expect(result).toMatchObject({ status: 400 });
   });
 
   describe("deleteMapping", () => {

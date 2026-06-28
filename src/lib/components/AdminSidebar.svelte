@@ -45,6 +45,14 @@ const navItems = [
 </script>
 
 <SidebarProvider>
+  <!-- Skip link must be the FIRST focusable element (WCAG 2.4.1): render it
+       before the sidebar nav so the initial Tab reaches it. -->
+  <a
+    href="#main-content"
+    class="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:rounded-md focus:bg-background focus:px-3 focus:py-2 focus:ring-2 focus:ring-primary"
+  >
+    Skip to main content
+  </a>
   <Sidebar>
     <SidebarHeader>
       <div class="flex flex-col gap-1 px-2 py-2">
@@ -106,12 +114,6 @@ const navItems = [
   </Sidebar>
 
   <SidebarInset>
-    <a
-      href="#main-content"
-      class="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:rounded-md focus:bg-background focus:px-3 focus:py-2 focus:ring-2 focus:ring-primary"
-    >
-      Skip to main content
-    </a>
     <header class="flex h-12 shrink-0 items-center gap-2 border-b px-4">
       <SidebarTrigger />
       <Separator orientation="vertical" class="mr-2 !h-4" />

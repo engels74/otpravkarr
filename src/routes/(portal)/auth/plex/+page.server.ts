@@ -211,7 +211,12 @@ export const load: PageServerLoad = async ({ cookies, getClientAddress }) => {
     throw error(500, "Server configuration incomplete: missing Plex admin token");
   }
 
-  const account = await getAccount(plexAdminToken);
+  let account: Awaited<ReturnType<typeof getAccount>>;
+  try {
+    account = await getAccount(plexAdminToken);
+  } catch {
+    throw error(502, "Couldn't reach Plex. Please try again.");
+  }
   const isServerOwner = account.id === identity.id;
 
   if (isServerOwner) {
@@ -230,7 +235,12 @@ export const load: PageServerLoad = async ({ cookies, getClientAddress }) => {
     throw redirect(303, "/dashboard");
   }
 
-  const friends = await fetchFriends(account);
+  let friends: Awaited<ReturnType<typeof fetchFriends>>;
+  try {
+    friends = await fetchFriends(account);
+  } catch {
+    throw error(502, "Couldn't reach Plex. Please try again.");
+  }
   const hasAcceptedAccess = friends.some(
     (friend) => friend.id === identity.id && friend.status.trim().toLowerCase() === "accepted",
   );

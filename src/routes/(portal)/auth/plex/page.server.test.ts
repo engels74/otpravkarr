@@ -469,13 +469,30 @@ describe("plex onboarding — confirm action", () => {
     );
   });
 
-  it("fails 403 when friend status no longer checks out", async () => {
+  it("fails 403 and clears the cookie when friend status no longer checks out", async () => {
     state.friends = [{ id: 12345, email: "test@example.com", status: "pending" }];
     const { actions } = await importServer();
-    const { event } = confirmEvent([1]);
+    const { event, deleteFn } = confirmEvent([1]);
     const res = await actions.confirm?.(event);
     expect(res).toMatchObject({ status: 403 });
     expect(mocks.provisionUser).not.toHaveBeenCalled();
+    expect(deleteFn).toHaveBeenCalledWith(
+      "otpravkarr_onboarding",
+      expect.objectContaining({ path: "/" }),
+    );
+  });
+
+  it("fails 403 and clears the cookie when the existing mapping is revoked", async () => {
+    state.existingMappingByPlexId = { ...activeMapping(), is_active: 0 };
+    const { actions } = await importServer();
+    const { event, deleteFn } = confirmEvent([1]);
+    const res = await actions.confirm?.(event);
+    expect(res).toMatchObject({ status: 403 });
+    expect(mocks.provisionUser).not.toHaveBeenCalled();
+    expect(deleteFn).toHaveBeenCalledWith(
+      "otpravkarr_onboarding",
+      expect.objectContaining({ path: "/" }),
+    );
   });
 
   it("provisions with the chosen groups and redirects to the portal", async () => {

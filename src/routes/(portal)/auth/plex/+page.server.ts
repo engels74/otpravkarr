@@ -345,10 +345,12 @@ export const actions: Actions = {
       (friend) => friend.id === identity.id && friend.status.trim().toLowerCase() === "accepted",
     );
     if (!hasAcceptedAccess) {
+      cookies.delete(ONBOARDING_COOKIE_NAME, OAUTH_COOKIE_DELETE_OPTIONS);
       return fail(403, { error: "Your Plex account does not have access to this server." });
     }
     const existingMapping = getUserMappingByPlexId(identity.id);
     if (existingMapping?.is_active === 0) {
+      cookies.delete(ONBOARDING_COOKIE_NAME, OAUTH_COOKIE_DELETE_OPTIONS);
       return fail(403, { error: "Your access to this server has been revoked." });
     }
 

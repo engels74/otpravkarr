@@ -12,8 +12,10 @@ const {
   computeOfferedGroups,
   defaultSelectedGroupIds,
   isQuarantineGroup,
+  getQuarantineGroupState,
   getQuarantineGroupNames,
   setQuarantineGroupNames,
+  applyPersistedQuarantineGroupState,
 } = await import("../subscription-config");
 
 function group(id: number, name: string): DispatcharrChannelGroup {
@@ -61,6 +63,59 @@ describe("setQuarantineGroupNames / getQuarantineGroupNames", () => {
     const names = getQuarantineGroupNames();
     // "Dead" added once; "GRAVEYARD" folds into the existing "Graveyard".
     expect(names).toEqual(["Graveyard", "Slow", "Black Screens", "Dead"]);
+  });
+
+  it("exposes source-aware quarantine state for diagnostics", () => {
+    const initial = getQuarantineGroupState();
+    expect(initial).toMatchObject({
+      version: 1,
+      defaultNames: ["Graveyard", "Slow", "Black Screens"],
+      pluginNames: [],
+      resolvedNames: ["Graveyard", "Slow", "Black Screens"],
+      source: "defaults",
+      refreshedAt: null,
+    });
+
+    setQuarantineGroupNames(["Dead Channels"], {
+      source: "plugin",
+      refreshedAt: "2026-06-28T13:20:00.000Z",
+    });
+
+    expect(getQuarantineGroupState()).toMatchObject({
+      version: 1,
+      pluginNames: ["Dead Channels"],
+      resolvedNames: ["Graveyard", "Slow", "Black Screens", "Dead Channels"],
+      source: "plugin",
+      refreshedAt: "2026-06-28T13:20:00.000Z",
+    });
+  });
+});
+
+describe("applyPersistedQuarantineGroupState", () => {
+  afterEach(() => {
+    setQuarantineGroupNames([]);
+  });
+
+  it("hydrates from valid pluginNames even when resolvedNames is missing", () => {
+    // `resolvedNames` is rebuilt from `pluginNames`, so a partial payload that
+    // omits it must still restore the matcher rather than silently fall back.
+    const ok = applyPersistedQuarantineGroupState({
+      version: 1,
+      pluginNames: ["Dead Channels"],
+      source: "plugin",
+      refreshedAt: "2026-06-28T13:20:00.000Z",
+    });
+    expect(ok).toBe(true);
+    expect(isQuarantineGroup("Dead Channels")).toBe(true);
+    expect(getQuarantineGroupState()).toMatchObject({
+      pluginNames: ["Dead Channels"],
+      resolvedNames: ["Graveyard", "Slow", "Black Screens", "Dead Channels"],
+      source: "plugin",
+    });
+  });
+
+  it("rejects a v1 payload whose pluginNames is malformed", () => {
+    expect(applyPersistedQuarantineGroupState({ version: 1, pluginNames: [1, 2] })).toBe(false);
   });
 });
 

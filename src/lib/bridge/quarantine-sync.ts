@@ -53,7 +53,7 @@ export interface QuarantineSyncResult {
   /** Quarantine names now in effect (defaults ∪ plugin-configured). */
   names: string[];
   /** Where the plugin-configured names came from this cycle. */
-  source: "plugin" | "plugin_absent" | "error";
+  source: "plugin" | "plugin_absent" | "plugin_empty" | "error";
   /** Present when `source === "error"`. */
   error?: string;
 }
@@ -63,10 +63,12 @@ export interface QuarantineSyncResult {
  * them to the in-memory matcher, persisting the result to config so a restart
  * keeps tracking renamed groups before the next sync runs.
  *
- * Fail-safe: when the plugin list can't be read OR the plugin is absent from
- * the live list (disabled/uninstalled), its configured names are unavailable —
- * not authoritatively empty — so the current matcher is left untouched. The
- * policy never narrows on missing plugin info; only a present plugin updates it.
+ * Fail-safe: when the plugin list can't be read, the plugin is absent from the
+ * live list (disabled/uninstalled), OR the plugin is present but its settings
+ * yield no usable quarantine names (fields omitted/blank or shape-mismatched),
+ * its configured names are unavailable — not authoritatively empty — so the
+ * current matcher is left untouched. The policy never narrows on missing plugin
+ * info; only a present plugin reporting usable names updates it.
  */
 export async function reconcileQuarantineGroups(
   client: DispatcharrClient,
@@ -86,6 +88,14 @@ export async function reconcileQuarantineGroups(
   }
 
   const pluginNames = extractQuarantineNames(plugin.settings);
+  if (pluginNames.length === 0) {
+    // Plugin present but its settings yielded no usable quarantine names (fields
+    // omitted, shape-mismatched, or all blank). We can't distinguish that from a
+    // transient/garbled read, so — like the absent/error paths — leave the
+    // current matcher untouched rather than narrowing back to defaults and
+    // re-exposing already-resolved renamed quarantine groups.
+    return { names: getQuarantineGroupNames(), source: "plugin_empty" };
+  }
 
   // setQuarantineGroupNames always re-unions the built-in defaults, so passing
   // only the plugin names still yields defaults ∪ plugin names.

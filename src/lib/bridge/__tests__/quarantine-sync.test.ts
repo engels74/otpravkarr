@@ -97,6 +97,30 @@ describe("reconcileQuarantineGroups", () => {
     expect(mocks.setConfig).not.toHaveBeenCalled();
   });
 
+  it("never narrows the policy when a present plugin reports no usable names after a prior rename", async () => {
+    // Seed a prior rename so we can prove it survives a present-but-blank read.
+    setQuarantineGroupNames(["Dead Channels"]);
+    mocks.listPlugins.mockResolvedValue(
+      pluginsOk([
+        {
+          key: "iptv_checker",
+          name: "IPTV Checker",
+          enabled: true,
+          // Present plugin, but every quarantine-name field is blank/omitted.
+          settings: { move_to_group_name: "  ", move_black_screen_group: "" },
+        },
+      ]),
+    );
+
+    const result = await reconcileQuarantineGroups(client);
+
+    expect(result.source).toBe("plugin_empty");
+    // Existing matcher untouched; no destructive persist.
+    expect(isQuarantineGroup("Dead Channels")).toBe(true);
+    expect(isQuarantineGroup("Graveyard")).toBe(true);
+    expect(mocks.setConfig).not.toHaveBeenCalled();
+  });
+
   it("ignores blank/missing plugin name fields", async () => {
     mocks.listPlugins.mockResolvedValue(
       pluginsOk([

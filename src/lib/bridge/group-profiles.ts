@@ -67,7 +67,13 @@ export function buildGroupChannelMap(channels: DispatcharrChannel[]): Map<number
 export function profileNameForGroup(groupId: number, groupName: string): string {
   const base = `${OTPRAVKARR_PROFILE_PREFIX}g${groupId}:`;
   const remaining = PROFILE_NAME_MAX_LENGTH - base.length;
-  const cleaned = groupName.replace(/\s+/g, " ").trim();
+  // Strip commas before collapsing whitespace: ECM's `channel_profile_name` is a
+  // comma-separated list (see bridge/ecm-scope.ts), so a comma embedded in the
+  // group name would make the profile name un-round-trippable — split into two
+  // bogus entries on read-back, seen as perpetually "missing", and re-appended
+  // every sync. Profile names are otpravkarr's own namespace, so normalizing the
+  // delimiter out of them here is safe and self-contained.
+  const cleaned = groupName.replace(/,/g, " ").replace(/\s+/g, " ").trim();
   return `${base}${cleaned.slice(0, Math.max(0, remaining))}`;
 }
 

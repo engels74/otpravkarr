@@ -396,6 +396,20 @@ describe("plex OAuth callback — load", () => {
     expect(mocks.completeOAuth).not.toHaveBeenCalled();
     expect(mocks.provisionUser).not.toHaveBeenCalled();
   });
+
+  it("on refresh, throws 400 and clears the cookie when self-select was disabled", async () => {
+    state.oauthCookie = undefined;
+    state.onboardingCookie = "sealed-onboarding";
+    state.configValues.allow_user_self_select = "false";
+    const { load } = await importServer();
+    const { event, deleteFn } = loadEvent();
+    await expect(load(event)).rejects.toMatchObject({ status: 400 });
+    expect(deleteFn).toHaveBeenCalledWith(
+      "otpravkarr_onboarding",
+      expect.objectContaining({ path: "/" }),
+    );
+    expect(mocks.provisionUser).not.toHaveBeenCalled();
+  });
 });
 
 describe("plex onboarding — confirm action", () => {
@@ -440,6 +454,19 @@ describe("plex onboarding — confirm action", () => {
     const res = await actions.confirm?.(event);
     expect(res).toMatchObject({ status: 400 });
     expect(mocks.provisionUser).not.toHaveBeenCalled();
+  });
+
+  it("fails 400 and clears the cookie when self-select was disabled after issue", async () => {
+    state.configValues.allow_user_self_select = "false";
+    const { actions } = await importServer();
+    const { event, deleteFn } = confirmEvent([1]);
+    const res = await actions.confirm?.(event);
+    expect(res).toMatchObject({ status: 400 });
+    expect(mocks.provisionUser).not.toHaveBeenCalled();
+    expect(deleteFn).toHaveBeenCalledWith(
+      "otpravkarr_onboarding",
+      expect.objectContaining({ path: "/" }),
+    );
   });
 
   it("fails 403 when friend status no longer checks out", async () => {

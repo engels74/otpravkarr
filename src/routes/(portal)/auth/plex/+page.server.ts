@@ -175,7 +175,16 @@ export const load: PageServerLoad = async ({ cookies, getClientAddress }) => {
       const identity = await openOnboardingIdentity(onboardingCookie);
       if (identity) {
         const client = await buildDispatcharrClient();
-        const { groups } = await fetchOfferedGroups(client);
+        const { groups, allowSelfSelect } = await fetchOfferedGroups(client);
+        // Self-select may have been disabled by an admin after this onboarding
+        // cookie was issued. Mirror the fresh-path policy and skip the picker.
+        // We can't provision from here (the load path doesn't re-verify Plex
+        // friend status the way confirm does), so clear the cookie and force a
+        // fresh sign-in, which auto-provisions with admin defaults via the gate.
+        if (!allowSelfSelect) {
+          cookies.delete(ONBOARDING_COOKIE_NAME, OAUTH_COOKIE_DELETE_OPTIONS);
+          throw error(400, "Group selection is no longer available. Please sign in again.");
+        }
         return {
           picker: true,
           plexUsername: identity.username,
@@ -355,6 +364,14 @@ export const actions: Actions = {
     // Re-derive the offered set server-side and reject anything outside it — the
     // client must not be trusted to post only offered IDs. Fail closed.
     const defaults = await getSubscriptionDefaults();
+    // Enforce the global self-select policy: if an admin disabled self-select
+    // after this cookie was issued, reject the submitted selection rather than
+    // provisioning the user's own choices. Force a fresh sign-in, which
+    // provisions with admin defaults via the correctly-gated load path.
+    if (!defaults.allowSelfSelect) {
+      cookies.delete(ONBOARDING_COOKIE_NAME, OAUTH_COOKIE_DELETE_OPTIONS);
+      return fail(400, { error: "Group selection is no longer available. Please sign in again." });
+    }
     const groupsResult = await retryResult(() => listChannelGroups(client), isTransientResultError);
     if (!groupsResult.ok) {
       return fail(502, { error: "Unable to set up your account. Please try again." });

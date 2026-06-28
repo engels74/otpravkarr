@@ -84,8 +84,8 @@ vi.mock("$lib/dispatcharr/client", () => ({
   DispatcharrClient: vi.fn(),
 }));
 
-vi.mock("$lib/dispatcharr/endpoints/groups", () => ({
-  listGroups: vi.fn(async () => ({ ok: true, data: [] })),
+vi.mock("$lib/dispatcharr/endpoints/channel-groups", () => ({
+  listChannelGroups: vi.fn(async () => ({ ok: true, data: [] })),
 }));
 
 vi.mock("$lib/dispatcharr/endpoints/health", () => ({
@@ -315,11 +315,11 @@ describe("setup claim ownership", () => {
     state.configValues.set("dispatcharr_api_key", setupPrerequisiteConfig.dispatcharr_api_key);
     const { cookies } = createCookies({ [setupClaimCookie]: "proof-123" });
 
-    const groups = await import("$lib/dispatcharr/endpoints/groups");
+    const groups = await import("$lib/dispatcharr/endpoints/channel-groups");
     const profiles = await import("$lib/dispatcharr/endpoints/profiles");
-    vi.mocked(groups.listGroups).mockResolvedValueOnce({
+    vi.mocked(groups.listChannelGroups).mockResolvedValueOnce({
       ok: true,
-      data: [{ id: 10, name: "Group 10", permissions: [] }],
+      data: [{ id: 10, name: "Group 10", channel_count: 3 }],
     });
     vi.mocked(profiles.listProfiles).mockResolvedValueOnce({
       ok: true,
@@ -350,11 +350,11 @@ describe("setup claim ownership", () => {
     }
     const { cookies } = createCookies({ [setupClaimCookie]: "proof-123" });
 
-    const groups = await import("$lib/dispatcharr/endpoints/groups");
+    const groups = await import("$lib/dispatcharr/endpoints/channel-groups");
     const profiles = await import("$lib/dispatcharr/endpoints/profiles");
-    vi.mocked(groups.listGroups).mockResolvedValueOnce({
+    vi.mocked(groups.listChannelGroups).mockResolvedValueOnce({
       ok: true,
-      data: [{ id: 30, name: "Group 30", permissions: [] }],
+      data: [{ id: 30, name: "Group 30", channel_count: 5 }],
     });
     vi.mocked(profiles.listProfiles).mockResolvedValueOnce({
       ok: true,
@@ -403,9 +403,9 @@ describe("setup claim ownership", () => {
     // No matching claim cookie — request is unclaimed
     const { cookies } = createCookies();
 
-    const groups = await import("$lib/dispatcharr/endpoints/groups");
+    const groups = await import("$lib/dispatcharr/endpoints/channel-groups");
     const profiles = await import("$lib/dispatcharr/endpoints/profiles");
-    vi.mocked(groups.listGroups).mockClear();
+    vi.mocked(groups.listChannelGroups).mockClear();
     vi.mocked(profiles.listProfiles).mockClear();
 
     const { load } = await import("./+page.server");
@@ -421,7 +421,7 @@ describe("setup claim ownership", () => {
       dispatcharrProfiles: [],
     });
     // Dispatcharr client must not be consulted when the requester has not claimed setup
-    expect(groups.listGroups).not.toHaveBeenCalled();
+    expect(groups.listChannelGroups).not.toHaveBeenCalled();
     expect(profiles.listProfiles).not.toHaveBeenCalled();
   });
 
@@ -435,11 +435,11 @@ describe("setup claim ownership", () => {
     }
     const { cookies } = createCookies({ [setupClaimCookie]: "proof-123" });
 
-    const groups = await import("$lib/dispatcharr/endpoints/groups");
+    const groups = await import("$lib/dispatcharr/endpoints/channel-groups");
     const profiles = await import("$lib/dispatcharr/endpoints/profiles");
-    vi.mocked(groups.listGroups).mockResolvedValueOnce({
+    vi.mocked(groups.listChannelGroups).mockResolvedValueOnce({
       ok: true,
-      data: [{ id: 50, name: "Group 50", permissions: [] }],
+      data: [{ id: 50, name: "Group 50", channel_count: 7 }],
     });
     vi.mocked(profiles.listProfiles).mockResolvedValueOnce({
       ok: true,
@@ -458,8 +458,48 @@ describe("setup claim ownership", () => {
       dispatcharrGroups: [{ id: 50, name: "Group 50" }],
       dispatcharrProfiles: [{ id: 60, name: "Profile 60" }],
     });
-    expect(groups.listGroups).toHaveBeenCalled();
+    expect(groups.listChannelGroups).toHaveBeenCalled();
     expect(profiles.listProfiles).toHaveBeenCalled();
+  });
+
+  // ISSUE-002: the defaults-step group picker must be sourced from the
+  // SUBSCRIBABLE channel-groups endpoint (/api/channels/groups/), not Django
+  // permission groups, and must exclude quarantine groups — matching Settings.
+  it("sources the defaults group picker from channel groups and excludes quarantine groups", async () => {
+    mocks.adminExists.mockReturnValue(true);
+    state.configValues.set(setupClaimedKey, "true");
+    state.configValues.set(setupClaimProofKey, "proof-123");
+    state.configValues.set(setupClaimedAtKey, String(Date.now()));
+    for (const [key, value] of Object.entries(setupPrerequisiteConfig)) {
+      state.configValues.set(key, value);
+    }
+    const { cookies } = createCookies({ [setupClaimCookie]: "proof-123" });
+
+    const groups = await import("$lib/dispatcharr/endpoints/channel-groups");
+    vi.mocked(groups.listChannelGroups).mockResolvedValueOnce({
+      ok: true,
+      data: [
+        { id: 100, name: "Sports", channel_count: 12 },
+        { id: 101, name: "News", channel_count: 8 },
+        { id: 102, name: "Graveyard", channel_count: 99 },
+      ],
+    });
+
+    const { load } = await import("./+page.server");
+    const result = (await load({
+      url: new URL("http://localhost/setup"),
+      cookies,
+    } as unknown as Parameters<typeof load>[0])) as {
+      dispatcharrGroups: { id: number; name: string }[];
+    };
+
+    expect(groups.listChannelGroups).toHaveBeenCalled();
+    expect(result.dispatcharrGroups).toEqual([
+      { id: 100, name: "Sports" },
+      { id: 101, name: "News" },
+    ]);
+    // Quarantine group must not be offered.
+    expect(result.dispatcharrGroups.some((g) => g.name === "Graveyard")).toBe(false);
   });
 
   it("blocks setup actions when instance is claimed by a different requester", async () => {

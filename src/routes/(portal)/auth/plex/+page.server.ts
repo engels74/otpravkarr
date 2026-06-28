@@ -309,7 +309,12 @@ export const actions: Actions = {
       cookies.delete(ONBOARDING_COOKIE_NAME, OAUTH_COOKIE_DELETE_OPTIONS);
       return fail(400, { error: "Please sign in again." });
     }
-    const friends = await fetchFriends(account);
+    let friends: Awaited<ReturnType<typeof fetchFriends>>;
+    try {
+      friends = await fetchFriends(account);
+    } catch {
+      return fail(502, { error: "Couldn't reach Plex. Please try again." });
+    }
     const hasAcceptedAccess = friends.some(
       (friend) => friend.id === identity.id && friend.status.trim().toLowerCase() === "accepted",
     );

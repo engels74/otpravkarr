@@ -83,6 +83,20 @@ describe("reconcileQuarantineGroups", () => {
     expect(isQuarantineGroup("Graveyard")).toBe(true);
   });
 
+  it("never narrows the policy when the plugin is absent after a prior rename", async () => {
+    // Seed a prior rename so we can prove it survives the plugin going absent.
+    setQuarantineGroupNames(["Dead Channels"]);
+    mocks.listPlugins.mockResolvedValue(pluginsOk([{ key: "lineuparr", name: "Lineuparr" }]));
+
+    const result = await reconcileQuarantineGroups(client);
+
+    expect(result.source).toBe("plugin_absent");
+    // Existing matcher untouched; no destructive persist.
+    expect(isQuarantineGroup("Dead Channels")).toBe(true);
+    expect(isQuarantineGroup("Graveyard")).toBe(true);
+    expect(mocks.setConfig).not.toHaveBeenCalled();
+  });
+
   it("ignores blank/missing plugin name fields", async () => {
     mocks.listPlugins.mockResolvedValue(
       pluginsOk([

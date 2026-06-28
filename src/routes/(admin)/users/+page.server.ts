@@ -134,10 +134,21 @@ export const load: PageServerLoad = async (event) => {
         if (m.dispatcharr_user_id == null) continue;
         const effective = remoteByUserId.get(m.dispatcharr_user_id) ?? new Set<number>();
         const groupIds = parseStoredGroupIds(m.dispatcharr_group_ids);
+        // Resolve stored group ids to their otpravkarr-owned profiles once.
+        // getGroupProfilesByGroupIds silently omits ids with no local
+        // channel_group_profiles row, so a stored group whose mapping was
+        // deleted/never created (orphan) shrinks `intended` and could let a
+        // genuinely missing profile slip past the size/membership checks below
+        // (drift=false false-negative). Dedup first so duplicate ids don't read
+        // as "incomplete" against a Map that collapses them by key.
+        const uniqueGroupIds = [...new Set(groupIds)];
+        const resolvedMap = getGroupProfilesByGroupIds(uniqueGroupIds);
+        const incompleteResolution =
+          groupIds.length > 0 && resolvedMap.size < uniqueGroupIds.length;
         const intended =
           groupIds.length === 0
             ? new Set(emptyProfileId == null ? [] : [emptyProfileId])
-            : new Set([...getGroupProfilesByGroupIds(groupIds).values()].map((p) => p.profile_id));
+            : new Set([...resolvedMap.values()].map((p) => p.profile_id));
         // brief 3.5: a provisioned user must NEVER have empty channel_profiles
         // (that exposes the entire catalog) — a zero-group subscription resolves
         // to the empty profile, not []. So an empty effective set is always
@@ -145,6 +156,7 @@ export const load: PageServerLoad = async (event) => {
         // sentinel is missing), which the size/membership checks would otherwise
         // treat as a match and silently hide the dangerous state.
         driftByMappingId[m.id] =
+          incompleteResolution ||
           effective.size === 0 ||
           effective.size !== intended.size ||
           [...intended].some((id) => !effective.has(id));

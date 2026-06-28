@@ -28,6 +28,7 @@ import {
   defaultSelectedGroupIds,
   getSubscriptionDefaults,
 } from "$lib/server/subscription-config";
+import { isTransientResultError, retryResult } from "$lib/utils/retry";
 import type { PageServerLoad } from "./$types";
 
 const OAUTH_COOKIE_NAME = "otpravkarr_oauth_id";
@@ -129,14 +130,19 @@ export const load: PageServerLoad = async ({ cookies, getClientAddress }) => {
   // new friend is scoped to the offered catalog — never the whole lineup (an
   // empty channel_profiles set) and never nothing unless the admin offers no
   // groups. The portal lets them adjust afterward.
-  let groupIds: number[] = [];
   const subscriptionDefaults = await getSubscriptionDefaults();
-  const groupsResult = await listChannelGroups(client);
-  if (groupsResult.ok) {
-    groupIds = defaultSelectedGroupIds(
-      computeOfferedGroups(groupsResult.data, subscriptionDefaults),
-    );
+  const groupsResult = await retryResult(() => listChannelGroups(client), isTransientResultError);
+  if (!groupsResult.ok) {
+    // Fail closed: a transient Dispatcharr error here would otherwise provision
+    // the new friend against an empty channel set, mark them active, and the
+    // already_exists fast-return on later logins would never self-heal it. A
+    // genuinely empty offered catalog (ok with no groups) still flows through.
+    console.error("[auth/plex] Failed to list channel groups:", groupsResult.error);
+    throw error(502, "Unable to set up your account. Please contact the administrator.");
   }
+  const groupIds = defaultSelectedGroupIds(
+    computeOfferedGroups(groupsResult.data, subscriptionDefaults),
+  );
 
   const result = await provisionUser(
     client,

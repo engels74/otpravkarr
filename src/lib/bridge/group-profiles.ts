@@ -134,17 +134,29 @@ export async function reconcileGroupProfile(
   let profileId: number;
   let currentEnabled: Set<number>;
 
+  const expectedName = profileNameForGroup(groupId, groupName);
+  // Ownership is keyed on the rename-stable `otpravkarr:g{groupId}:` prefix, not
+  // the full name: the human group name is mutable (Channel Mapparr renames
+  // groups), so a prefix match lets us reconcile our profile in place across
+  // renames instead of orphaning it and recreating a new one every rename. The
+  // groupId in the prefix is unique, so a foreign profile that merely reused
+  // this numeric id won't carry it.
+  const ownedPrefix = `${OTPRAVKARR_PROFILE_PREFIX}g${groupId}:`;
   const existing = getGroupProfile(groupId);
   if (existing) {
     const got = await retryResult(
       () => getProfile(client, existing.profile_id),
       isTransientResultError,
     );
-    if (got.ok) {
+    if (got.ok && got.data.name.startsWith(ownedPrefix)) {
       profileId = got.data.id;
       currentEnabled = new Set(got.data.channels);
-    } else if (got.error === "not_found") {
-      const created = await adoptOrCreateProfile(client, profileNameForGroup(groupId, groupName));
+    } else if (got.ok || got.error === "not_found") {
+      // Stale mapping: the profile was deleted (404) or its numeric id was
+      // reused by an unrelated profile (name lacks our prefix). Re-adopt/create
+      // the owned profile under the current name and correct the local mapping
+      // rather than mutating a foreign profile.
+      const created = await adoptOrCreateProfile(client, expectedName);
       if (!created.ok) return created;
       upsertGroupProfile(groupId, created.data.id, created.data.name);
       profileId = created.data.id;
@@ -153,7 +165,7 @@ export async function reconcileGroupProfile(
       return { ok: false, error: got.error, message: got.message };
     }
   } else {
-    const created = await adoptOrCreateProfile(client, profileNameForGroup(groupId, groupName));
+    const created = await adoptOrCreateProfile(client, expectedName);
     if (!created.ok) return created;
     upsertGroupProfile(groupId, created.data.id, created.data.name);
     profileId = created.data.id;
@@ -181,7 +193,7 @@ export async function ensureEmptyProfile(
       () => getProfile(client, existing.profile_id),
       isTransientResultError,
     );
-    if (got.ok) {
+    if (got.ok && got.data.name === EMPTY_PROFILE_NAME) {
       const diff = await applyMembershipDiff(
         client,
         got.data.id,
@@ -191,10 +203,12 @@ export async function ensureEmptyProfile(
       if (!diff.ok) return { ok: false, error: diff.error, message: diff.message };
       return { ok: true, data: got.data.id };
     }
-    if (got.error !== "not_found") {
+    if (!got.ok && got.error !== "not_found") {
       return { ok: false, error: got.error, message: got.message };
     }
-    // Fall through and recreate.
+    // Stale mapping: the profile was deleted (404) or its numeric id was reused
+    // by an unrelated profile (name mismatch). Fall through and re-adopt/create
+    // the empty profile by name rather than disabling channels on a foreign one.
   }
 
   const created = await adoptOrCreateProfile(client, EMPTY_PROFILE_NAME);

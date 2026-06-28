@@ -107,6 +107,8 @@ describe("reconcileGroupProfile", () => {
 
   it("creates and scopes a brand-new profile (fresh profiles start all-enabled)", async () => {
     vi.mocked(getGroupProfile).mockReturnValue(null);
+    // No existing prefix-owned profile, so the prefix scan falls through to create.
+    vi.mocked(listProfiles).mockResolvedValue(ok([]));
     // A freshly created Dispatcharr profile reports ALL channels enabled.
     vi.mocked(createProfile).mockResolvedValue(
       ok(profile(200, "otpravkarr:g2:News", [1, 2, 3, 4])),
@@ -137,6 +139,8 @@ describe("reconcileGroupProfile", () => {
       updated_at: "",
     });
     vi.mocked(getProfile).mockResolvedValue({ ok: false, error: "not_found", message: "gone" });
+    // Profile was deleted, so the prefix scan finds nothing and re-creates it.
+    vi.mocked(listProfiles).mockResolvedValue(ok([]));
     vi.mocked(createProfile).mockResolvedValue(ok(profile(300, "otpravkarr:g1:Sports", [1, 2])));
 
     const result = await reconcileGroupProfile(client, 1, "Sports", new Set([1, 2]));
@@ -177,6 +181,23 @@ describe("reconcileGroupProfile", () => {
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.data).toBe(77);
     expect(upsertGroupProfile).toHaveBeenCalledWith(1, 77, "otpravkarr:g1:Sports");
+  });
+
+  it("adopts the prefix-owned profile after a group rename instead of orphaning it", async () => {
+    // Mapping lost (DB reset) while the Dispatcharr profile survived under its
+    // OLD display name after a group rename. An exact-name match would miss it
+    // and createProfile would succeed, orphaning the old profile behind a
+    // second otpravkarr:g1:* one.
+    vi.mocked(getGroupProfile).mockReturnValue(null);
+    vi.mocked(listProfiles).mockResolvedValue(ok([{ id: 55, name: "otpravkarr:g1:OldName" }]));
+    vi.mocked(getProfile).mockResolvedValue(ok(profile(55, "otpravkarr:g1:OldName", [1, 2])));
+
+    const result = await reconcileGroupProfile(client, 1, "NewName", new Set([1, 2]));
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.data).toBe(55);
+    expect(createProfile).not.toHaveBeenCalled();
+    expect(upsertGroupProfile).toHaveBeenCalledWith(1, 55, "otpravkarr:g1:OldName");
   });
 });
 

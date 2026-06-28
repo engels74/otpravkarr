@@ -72,14 +72,37 @@ export function profileNameForGroup(groupId: number, groupName: string): string 
 }
 
 /**
- * Create a profile by name, or adopt an existing one with the same name. The
- * adopt path covers a reset local DB whose Dispatcharr profiles survived
- * (otherwise the unique-name constraint would hard-fail provisioning).
+ * Create a profile by name, or adopt an existing one. The adopt path covers a
+ * reset local DB whose Dispatcharr profiles survived (otherwise the unique-name
+ * constraint would hard-fail provisioning).
+ *
+ * When `adoptPrefix` is given (group profiles), scan for an existing owned
+ * profile by the rename-stable `otpravkarr:g{groupId}:` prefix BEFORE creating.
+ * A group renamed since the last sync still carries the prefix under its old
+ * display name, so an exact-name match would miss it and `createProfile` would
+ * succeed — silently orphaning the old profile behind a second prefix-matching
+ * one. A list failure other than `not_found` is surfaced rather than blindly
+ * creating a duplicate. Callers without a prefix (the constant-named empty
+ * profile) keep the exact-name collision fallback below.
  */
 async function adoptOrCreateProfile(
   client: DispatcharrClient,
   name: string,
+  adoptPrefix?: string,
 ): Promise<DispatcharrResult<DispatcharrChannelProfileWithChannels>> {
+  if (adoptPrefix !== undefined) {
+    const list = await retryResult(() => listProfiles(client), isTransientResultError);
+    if (!list.ok && list.error !== "not_found") {
+      return { ok: false, error: list.error, message: list.message };
+    }
+    if (list.ok) {
+      const match = list.data.find((p) => p.name.startsWith(adoptPrefix));
+      if (match) {
+        return retryResult(() => getProfile(client, match.id), isTransientResultError);
+      }
+    }
+  }
+
   const created = await retryResult(() => createProfile(client, name), isTransientResultError);
   if (created.ok) return created;
   // A name collision surfaces as a 400 validation error.
@@ -179,7 +202,7 @@ export async function reconcileGroupProfile(
       // reused by an unrelated profile (name lacks our prefix). Re-adopt/create
       // the owned profile under the current name and correct the local mapping
       // rather than mutating a foreign profile.
-      const created = await adoptOrCreateProfile(client, expectedName);
+      const created = await adoptOrCreateProfile(client, expectedName, ownedPrefix);
       if (!created.ok) return created;
       const saved = upsertGroupProfileSafe(groupId, created.data.id, created.data.name);
       if (!saved.ok) return saved;
@@ -189,7 +212,7 @@ export async function reconcileGroupProfile(
       return { ok: false, error: got.error, message: got.message };
     }
   } else {
-    const created = await adoptOrCreateProfile(client, expectedName);
+    const created = await adoptOrCreateProfile(client, expectedName, ownedPrefix);
     if (!created.ok) return created;
     const saved = upsertGroupProfileSafe(groupId, created.data.id, created.data.name);
     if (!saved.ok) return saved;

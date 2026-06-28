@@ -150,11 +150,15 @@ describe("getProfile", () => {
     );
   });
 
-  it("coerces a non-array channels field (OpenAPI types it as string) to []", async () => {
+  it("rejects a non-array channels field instead of coercing it to [] (under-disable guard)", async () => {
+    // Coercing a non-array shape to [] would leave `currentEnabled` empty, so the
+    // bridge's disable loop would no-op and a fresh (all-enabled) profile would
+    // stay ALL-ENABLED — full-catalog exposure (brief 3.5). Strict parsing must
+    // surface unexpected_shape so callers abort instead of silently under-disabling.
     mockOfetch.mockResolvedValueOnce({ id: 2, name: "News", channels: "weird" });
     const result = await getProfile(createClient(), 2);
-    expect(result.ok).toBe(true);
-    if (result.ok) expect(result.data.channels).toEqual([]);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toBe("unexpected_shape");
   });
 });
 

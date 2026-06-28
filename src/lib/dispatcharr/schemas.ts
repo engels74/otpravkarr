@@ -61,18 +61,27 @@ export const DispatcharrChannelGroupSchema = z
 /**
  * Channel Profile with its enabled-channel membership.
  *
- * The OpenAPI spec types `channels` as a string, but the real API returns an
- * array of enabled channel IDs. Parse defensively: coerce any non-array shape
- * (string / null / missing) to an empty list and drop non-numeric entries.
+ * The OpenAPI spec mistypes `channels` as a string, but the real API returns an
+ * array of enabled channel IDs. `channels` is REQUIRED and must be a numeric
+ * array — do NOT coerce a missing / null / string / non-array value to `[]`.
+ *
+ * Why strict instead of defensive coercion: consumers in bridge/group-profiles.ts
+ * use this list as `currentEnabled`, and `applyMembershipDiff` only DISABLES ids
+ * that are present in `currentEnabled`. A freshly created Dispatcharr profile
+ * starts with EVERY channel enabled (server-side post_save). If a malformed
+ * response coerced `channels` to `[]`, `currentEnabled` would be empty, the
+ * disable loop would no-op, and an "empty" profile would silently stay
+ * ALL-ENABLED — exposing the full catalog to a zero-group subscriber (brief 3.5)
+ * while still returning `ok: true`. Failing parse instead yields
+ * `{ ok: false, error: "unexpected_shape" }`, which the bridge's existing
+ * `!created.ok` / `!got.ok` guards turn into a safe abort. A legitimately empty
+ * profile still parses as `[]` and reconciles correctly.
  */
 export const DispatcharrChannelProfileWithChannelsSchema = z
   .object({
     id: z.number(),
     name: z.string(),
-    channels: z.preprocess(
-      (v) => (Array.isArray(v) ? v.filter((x) => typeof x === "number") : []),
-      z.array(z.number()),
-    ),
+    channels: z.array(z.number()),
   })
   .passthrough();
 

@@ -818,35 +818,35 @@ describe("admin users actions", () => {
     );
   });
 
-  it("changeProfile clears the profile when given an empty profile_id", async () => {
-    mocks.getConfig.mockResolvedValue("https://dispatcharr.example");
-
+  it.each([
+    ["empty", (body: FormData) => body.set("profile_id", "")],
+    ["absent", (body: FormData) => body.delete("profile_id")],
+    ["zero", (body: FormData) => body.set("profile_id", "0")],
+    ["negative", (body: FormData) => body.set("profile_id", "-1")],
+    ["decimal", (body: FormData) => body.set("profile_id", "1.5")],
+    ["non-numeric", (body: FormData) => body.set("profile_id", "abc")],
+  ])("changeProfile rejects %s profile_id without mutating Dispatcharr", async (_label, setup) => {
     const { actions } = await import("./+page.server");
     const changeProfile = actions.changeProfile;
     if (!changeProfile) throw new Error("changeProfile action is undefined");
 
-    mocks.getUserMappingById.mockReturnValueOnce({
-      id: 1,
-      dispatcharr_user_id: 42,
-      dispatcharr_profile_id: 7,
-      plex_username: "alice",
-    } as unknown as { id: number; dispatcharr_user_id: number | null });
-
     const body = new FormData();
     body.set("id", "1");
-    body.set("profile_id", "");
+    setup(body);
 
     const result = await changeProfile(
       createActionEvent(body) as unknown as Parameters<typeof changeProfile>[0],
     );
 
-    expect(result).toMatchObject({ success: true });
-    expect(mocks.updateUser).toHaveBeenCalledWith(expect.anything(), 42, {
-      channel_profiles: [],
+    expect(result).toMatchObject({
+      status: 400,
+      data: { error: "Invalid profile ID" },
     });
-    expect(mocks.updateUserMapping).toHaveBeenCalledWith(1, {
-      dispatcharr_profile_id: null,
-    });
+    expect(mocks.getUserMappingById).not.toHaveBeenCalled();
+    expect(mocks.getConfig).not.toHaveBeenCalled();
+    expect(mocks.updateUser).not.toHaveBeenCalled();
+    expect(mocks.updateUserMapping).not.toHaveBeenCalled();
+    expect(mocks.appendAuditLog).not.toHaveBeenCalled();
   });
 
   it("changeProfile rejects users without a Dispatcharr account", async () => {

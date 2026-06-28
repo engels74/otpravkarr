@@ -660,7 +660,7 @@ async function copyOneTimePassword() {
         {#if data.profiles.length === 0}
           No channel profiles exist yet. Create profiles in Dispatcharr, then return here.
         {:else}
-          Select a channel profile for {selectedMapping?.plex_username ?? "user"}, or choose "All channels" for no restriction.
+          Select a concrete channel profile for {selectedMapping?.plex_username ?? "user"}.
         {/if}
       </Dialog.Description>
     </Dialog.Header>
@@ -679,15 +679,12 @@ async function copyOneTimePassword() {
           <input type="hidden" name="id" value={selectedMapping.id} />
           <input type="hidden" name="profile_id" value={selectedProfileId == null ? "" : String(selectedProfileId)} />
           <div class="grid gap-2 py-2">
-            <label class="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted cursor-pointer">
-              <input
-                type="radio"
-                name="profile_radio"
-                checked={selectedProfileId == null}
-                onchange={() => (selectedProfileId = null)}
-              />
-              <span class="text-muted-foreground">All channels (no profile)</span>
-            </label>
+            {#if selectedProfileId == null}
+              <p class="rounded-md border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                Choose a channel profile to enable saving. Unrestricted profile clearing is not
+                available for managed subscribers.
+              </p>
+            {/if}
             {#each data.profiles as profile (profile.id)}
               <label class="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted cursor-pointer">
                 <input
@@ -701,7 +698,7 @@ async function copyOneTimePassword() {
             {/each}
           </div>
           <Dialog.Footer>
-            <Button type="submit" disabled={submitting} size="sm">
+            <Button type="submit" disabled={submitting || selectedProfileId == null} size="sm">
               {submitting ? "Saving..." : "Save"}
             </Button>
           </Dialog.Footer>

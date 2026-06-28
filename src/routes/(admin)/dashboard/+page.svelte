@@ -255,24 +255,46 @@ async function runSyncNow() {
 
           <Separator class="my-4" />
 
-          <div class="flex items-center justify-between gap-3">
-            <div class="text-xs text-muted-foreground">
-              Health check: {#if data.healthJob}
-                {data.healthJob.running ? "running" : formatTimestamp(data.healthJob.lastRunAt)}
-              {:else}
-                not registered
-              {/if}
-            </div>
-            <Button
-              size="sm"
-              onclick={runSyncNow}
-              disabled={syncRunning}
-            >
+          <div class="flex items-center justify-end">
+            <Button size="sm" onclick={runSyncNow} disabled={syncRunning}>
               {syncRunning ? "Syncing…" : "Run sync now"}
             </Button>
           </div>
         {:else}
           <p class="text-sm text-muted-foreground">Sync job not registered.</p>
+        {/if}
+      </Card.Content>
+    </Card.Root>
+
+    <!-- ─── Health Check ────────────────────────────────── -->
+    <Card.Root>
+      <Card.Header>
+        <Card.Title class="text-base">Health Check</Card.Title>
+      </Card.Header>
+      <Card.Content>
+        {#if data.healthJob}
+          <div class="space-y-3">
+            <div class="flex items-center justify-between text-sm">
+              <span class="text-muted-foreground">Status</span>
+              {#if data.healthJob.running}
+                <Badge variant="default">Running</Badge>
+              {:else}
+                <Badge variant="secondary">Idle</Badge>
+              {/if}
+            </div>
+            <div class="flex items-center justify-between text-sm">
+              <span class="text-muted-foreground">Last Run</span>
+              <span class="font-medium">{formatTimestamp(data.healthJob.lastRunAt)}</span>
+            </div>
+            <div class="flex items-center justify-between text-sm">
+              <span class="text-muted-foreground">Duration</span>
+              <span class="font-medium">
+                {data.healthJob.lastDurationMs != null ? `${data.healthJob.lastDurationMs}ms` : "—"}
+              </span>
+            </div>
+          </div>
+        {:else}
+          <p class="text-sm text-muted-foreground">Health job not registered.</p>
         {/if}
       </Card.Content>
     </Card.Root>
@@ -286,6 +308,7 @@ async function runSyncNow() {
         <a
           href="/audit"
           class="text-xs text-muted-foreground hover:text-foreground"
+          aria-label="View all audit log entries"
         >
           View all →
         </a>

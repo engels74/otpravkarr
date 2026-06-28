@@ -111,7 +111,7 @@ export const HealthProbeSchema = z.object({
  *
  * The OpenAPI spec marks this endpoint "No response body" (untyped), so parse
  * defensively: require only `key` + `name`, accept everything else via
- * passthrough, and coerce `settings` to an object when present. The real API
+ * passthrough, and coerce `settings` (null / non-object / missing) to `{}`. The real API
  * returns `{ plugins: [...] }` with each entry carrying enabled/version/settings/
  * fields/actions and update metadata.
  */
@@ -121,7 +121,10 @@ export const DispatcharrPluginSchema = z
     name: z.string(),
     version: z.string().nullable().optional(),
     enabled: z.boolean().optional().default(false),
-    settings: z.record(z.string(), z.unknown()).optional(),
+    settings: z.preprocess(
+      (v) => (v !== null && typeof v === "object" && !Array.isArray(v) ? v : {}),
+      z.record(z.string(), z.unknown()),
+    ),
   })
   .passthrough();
 

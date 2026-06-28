@@ -18,6 +18,7 @@ interface Props {
     plexUsername: string;
     offered: OfferedGroup[];
     selected: number[];
+    assignedGroups: OfferedGroup[];
     locked: boolean;
     saved: boolean;
   };
@@ -31,9 +32,9 @@ let selected = $state(new Set<number>(data.selected));
 
 const selectedJson = $derived(JSON.stringify([...selected]));
 
-const lockedSelectedNames = $derived(
-  data.offered.filter((g) => data.selected.includes(g.id)).map((g) => g.name),
-);
+// Locked view shows the user's actual assignment (resolved server-side against
+// live non-quarantine groups), which can exceed the offered set.
+const lockedSelectedNames = $derived(data.assignedGroups.map((g) => g.name));
 </script>
 
 <svelte:head>

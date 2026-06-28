@@ -5,7 +5,11 @@ import { getUserMappingById } from "$lib/db/repositories/users";
 import { DispatcharrClient } from "$lib/dispatcharr/client";
 import { listChannelGroups } from "$lib/dispatcharr/endpoints/channel-groups";
 import { requireUser } from "$lib/server/auth";
-import { computeOfferedGroups, getSubscriptionDefaults } from "$lib/server/subscription-config";
+import {
+  computeOfferedGroups,
+  getSubscriptionDefaults,
+  isQuarantineGroup,
+} from "$lib/server/subscription-config";
 import type { Actions, PageServerLoad } from "./$types";
 
 function parseStoredGroupIds(raw: string): number[] {
@@ -34,7 +38,15 @@ export const load: PageServerLoad = async (event) => {
   // A user may self-select unless globally disabled or individually locked.
   const locked = user.group_selection_locked === 1 || !defaults.allowSelfSelect;
 
+  const storedGroupIds = parseStoredGroupIds(user.dispatcharr_group_ids);
+
   let offered: { id: number; name: string; channelCount: number | null }[] = [];
+  // Locked users can hold groups the admin assigned from OUTSIDE the offered set
+  // (the admin UI assigns any non-quarantine group, regardless of the selectable
+  // whitelist). Resolve their actual assignment against the live non-quarantine
+  // groups so the locked view shows real names and deleted groups drop off —
+  // `offered` is the wrong source there and would hide assigned groups.
+  let assignedGroups: { id: number; name: string; channelCount: number | null }[] = [];
   const client = await getClient();
   if (client) {
     const groupsResult = await listChannelGroups(client);
@@ -44,20 +56,23 @@ export const load: PageServerLoad = async (event) => {
         name: g.name,
         channelCount: g.channel_count ?? null,
       }));
+      const storedIds = new Set(storedGroupIds);
+      assignedGroups = groupsResult.data
+        .filter((g) => !isQuarantineGroup(g.name) && storedIds.has(g.id))
+        .map((g) => ({ id: g.id, name: g.name, channelCount: g.channel_count ?? null }));
     }
   }
 
-  // Current selection, intersected with what's still offered (a group that
-  // disappeared or is no longer offered should not appear as selected).
+  // Unlocked picker selection, intersected with what's still offered (a group
+  // that disappeared or is no longer offered should not appear as selected).
   const offeredIds = new Set(offered.map((g) => g.id));
-  const selected = parseStoredGroupIds(user.dispatcharr_group_ids).filter((id) =>
-    offeredIds.has(id),
-  );
+  const selected = storedGroupIds.filter((id) => offeredIds.has(id));
 
   return {
     plexUsername: user.plex_username,
     offered,
     selected,
+    assignedGroups,
     locked,
     saved: event.url.searchParams.get("saved") === "1",
   };

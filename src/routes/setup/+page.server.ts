@@ -12,7 +12,7 @@ import { getConfig, setConfig } from "$lib/db/repositories/config";
 import { createSession, deleteSession } from "$lib/db/repositories/sessions";
 import { AuditAction } from "$lib/db/types";
 import { DispatcharrClient } from "$lib/dispatcharr/client";
-import { listGroups } from "$lib/dispatcharr/endpoints/groups";
+import { listChannelGroups } from "$lib/dispatcharr/endpoints/channel-groups";
 import { createHealthEndpoints } from "$lib/dispatcharr/endpoints/health";
 import { listProfiles } from "$lib/dispatcharr/endpoints/profiles";
 import { discoverServers, validateServerToken } from "$lib/plex/client";
@@ -30,6 +30,7 @@ import {
 } from "$lib/server/auth";
 import { parseAndNormalizeOrigins } from "$lib/server/origins";
 import { setupLimiter } from "$lib/server/ratelimit";
+import { isQuarantineGroup } from "$lib/server/subscription-config";
 import {
   CreateAdminSchema,
   DefaultsSchema,
@@ -232,12 +233,19 @@ async function loadDispatcharrSetupPayload(phase: SetupResumePhase): Promise<Set
   try {
     const client = new DispatcharrClient(dispatcharrUrl, dispatcharrApiKey);
     const [groupsResult, profilesResult] = await Promise.all([
-      listGroups(client),
+      listChannelGroups(client),
       listProfiles(client),
     ]);
 
     return {
-      dispatcharrGroups: groupsResult.ok ? groupsResult.data : [],
+      // Mirror Settings: the default-group picker offers the SUBSCRIBABLE
+      // channel groups (/api/channels/groups/), not Django permission groups,
+      // excluding quarantine groups. Map to the {id, name} option shape.
+      dispatcharrGroups: groupsResult.ok
+        ? groupsResult.data
+            .filter((g) => !isQuarantineGroup(g.name))
+            .map((g) => ({ id: g.id, name: g.name }))
+        : [],
       dispatcharrProfiles: profilesResult.ok ? profilesResult.data : [],
     };
   } catch {
@@ -634,11 +642,15 @@ export const actions: Actions = {
     ]);
 
     const [groupsResult, profilesResult] = await Promise.all([
-      listGroups(client),
+      listChannelGroups(client),
       listProfiles(client),
     ]);
 
-    const groups = groupsResult.ok ? groupsResult.data : [];
+    const groups = groupsResult.ok
+      ? groupsResult.data
+          .filter((g) => !isQuarantineGroup(g.name))
+          .map((g) => ({ id: g.id, name: g.name }))
+      : [];
     const profiles = profilesResult.ok ? profilesResult.data : [];
 
     let xcProbe: { found: boolean; template?: string; probedPaths: string[] } | null = null;

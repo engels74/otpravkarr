@@ -259,6 +259,47 @@ describe("admin users actions", () => {
       expect(result.mappings[0]?.plex_username).toBe("active-user");
       expect(result.filters).toEqual({ status: "active", mode: "all", search: "active" });
     });
+
+    // ISSUE-007: an unrecognized mode (e.g. the hyphenated "self-managed")
+    // must default to "all" rather than silently selecting the wrong filter.
+    it("defaults an unknown mode filter to 'all' and does not mis-filter", async () => {
+      const { load } = await import("./+page.server");
+      mocks.getAllUserMappings.mockReturnValueOnce([
+        makeMapping({ id: 1, plex_account_id: 100, provisioning_mode: "automatic" }),
+        makeMapping({ id: 2, plex_account_id: 101, provisioning_mode: "self_managed" }),
+        makeMapping({ id: 3, plex_account_id: 102, provisioning_mode: "staff" }),
+      ]);
+
+      const result = (await load(
+        createLoadEvent("?mode=self-managed") as unknown as Parameters<typeof load>[0],
+      )) as {
+        mappings: UserMapping[];
+        filters: { status: string; mode: string; search: string };
+      };
+
+      expect(result.filters.mode).toBe("all");
+      // No filtering applied → all three modes remain visible.
+      expect(result.mappings).toHaveLength(3);
+    });
+
+    it("keeps a valid mode filter", async () => {
+      const { load } = await import("./+page.server");
+      mocks.getAllUserMappings.mockReturnValueOnce([
+        makeMapping({ id: 1, plex_account_id: 100, provisioning_mode: "automatic" }),
+        makeMapping({ id: 2, plex_account_id: 101, provisioning_mode: "self_managed" }),
+      ]);
+
+      const result = (await load(
+        createLoadEvent("?mode=self_managed") as unknown as Parameters<typeof load>[0],
+      )) as {
+        mappings: UserMapping[];
+        filters: { status: string; mode: string; search: string };
+      };
+
+      expect(result.filters.mode).toBe("self_managed");
+      expect(result.mappings).toHaveLength(1);
+      expect(result.mappings[0]?.provisioning_mode).toBe("self_managed");
+    });
   });
 
   it("enforces the subscription via applyGroupSubscription on changeGroup", async () => {

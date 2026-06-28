@@ -175,6 +175,30 @@ describe("subscription save action", () => {
     expect(mocks.applyGroupSubscription).not.toHaveBeenCalled();
   });
 
+  // ISSUE-008 verify-first: an *authenticated* locked user POSTing `save` must
+  // get fail(403), even when self-select is globally enabled — i.e. the per-user
+  // lock alone drives the 403. The dogfood's observed 303→"/" was an
+  // under-authenticated POST handled by requireUser, not this branch.
+  it("returns fail(403) for an authenticated locked user even when self-select is enabled", async () => {
+    mocks.getConfig.mockImplementation(async (key: string) => {
+      if (key === "allow_user_self_select") return "true";
+      if (key === "dispatcharr_url") return "https://d.example";
+      if (key === "dispatcharr_api_key") return "key";
+      return null;
+    });
+    mocks.requireUser.mockResolvedValue(makeMapping({ group_selection_locked: 1 }));
+    const { actions } = await import("./+page.server");
+    const body = new FormData();
+    body.set("group_ids", JSON.stringify([1]));
+
+    const result = await actions.save?.(
+      actionEvent(body) as unknown as Parameters<typeof actions.save>[0],
+    );
+
+    expect(result).toMatchObject({ status: 403 });
+    expect(mocks.applyGroupSubscription).not.toHaveBeenCalled();
+  });
+
   it("rejects a malformed selection", async () => {
     const { actions } = await import("./+page.server");
     const body = new FormData();

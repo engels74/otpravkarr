@@ -20,6 +20,8 @@ type SetupPageData = {
   oauthCallback: boolean;
   adminPresent: boolean;
   recoveryAvailable: boolean;
+  claimHeldElsewhere: boolean;
+  claimRetryAt: string | null;
 };
 
 type StepErrors = Record<string, string>;
@@ -117,6 +119,14 @@ let syncIntervalError = $derived.by(() => {
 
 // ── Derived values ──────────────────────────────────────────────
 const steps = ["Claim", "Admin", "Plex", "Dispatcharr", "Origin", "Defaults"] as const;
+
+// ISSUE-004: human-readable local time when a held-elsewhere claim lapses.
+const claimRetryLabel = $derived.by(() => {
+  if (!data.claimRetryAt) return "";
+  const when = new Date(data.claimRetryAt);
+  if (Number.isNaN(when.getTime())) return "";
+  return when.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+});
 
 let passwordStrength = $derived.by(() => {
   if (!password) return { level: 0, label: "", color: "" };
@@ -546,6 +556,18 @@ function enhanceHandler(nextStep?: number) {
             </Card.Description>
           </Card.Header>
           <Card.Content>
+
+            {#if data.claimHeldElsewhere}
+              <Alert.Root class="mb-4">
+                <Alert.Title>Setup already claimed from another session</Alert.Title>
+                <Alert.Description>
+                  This instance was claimed from a different browser or device. For
+                  security, re-claiming is blocked{#if claimRetryLabel} until {claimRetryLabel}{/if}.
+                  Re-enter your bootstrap token{#if claimRetryLabel} then{/if}, or restart the
+                  server to mint a fresh token from the startup logs.
+                </Alert.Description>
+              </Alert.Root>
+            {/if}
             {#if hasError && stepErrors.error !== 'rate_limited'}
               <Alert.Root variant="destructive" class="mb-4">
                 <Alert.Title>Verification failed</Alert.Title>

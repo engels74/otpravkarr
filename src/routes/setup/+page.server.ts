@@ -152,6 +152,31 @@ async function getActiveSetupClaimProof(): Promise<string | null> {
   return expectedProof;
 }
 
+/**
+ * Epoch-ms timestamp at which an active setup claim expires and the instance can
+ * be re-claimed, or null when there is no still-valid claim. Used by `load` to
+ * tell a stranded user (lost claim cookie, no admin yet) WHEN re-claiming opens
+ * up again (ISSUE-004). Mirrors the TTL check in getActiveSetupClaimProof.
+ */
+async function getActiveSetupClaimExpiry(): Promise<number | null> {
+  if (!(await isSetupClaimed())) {
+    return null;
+  }
+
+  const claimTimestampRaw = await getConfig(SETUP_CLAIMED_AT_CONFIG_KEY);
+  if (!claimTimestampRaw) {
+    return null;
+  }
+
+  const claimTimestamp = Number(claimTimestampRaw);
+  if (!Number.isFinite(claimTimestamp)) {
+    return null;
+  }
+
+  const expiry = claimTimestamp + SETUP_CLAIM_TTL_MS;
+  return Date.now() >= expiry ? null : expiry;
+}
+
 async function hasActiveSetupClaim(cookies: Cookies): Promise<boolean> {
   const expectedProof = await getActiveSetupClaimProof();
   if (!expectedProof) {
@@ -270,6 +295,14 @@ export const load = async ({ url, cookies }: RequestEvent) => {
   const adminPresent = adminExists();
   const recoveryAvailable = adminPresent && !claimActive;
 
+  // ISSUE-004: a claim is active but THIS browser does not hold it and no admin
+  // exists yet. The user is stranded — createAdmin → 403 (not claimed here), a
+  // fresh claimInstance → 409 (already claimed), recoverWithAdmin → 409 (no
+  // admin). The anti-claim-stealing guard is intentional; surface WHY re-claim
+  // is blocked and WHEN it reopens (the claim TTL) instead of leaving the Claim
+  // step silently dead. No gate is relaxed.
+  const claimRetryAtMs = !claimActive && !adminPresent ? await getActiveSetupClaimExpiry() : null;
+
   return {
     claimActive,
     resumePhase,
@@ -278,6 +311,8 @@ export const load = async ({ url, cookies }: RequestEvent) => {
     oauthCallback,
     adminPresent,
     recoveryAvailable,
+    claimHeldElsewhere: claimRetryAtMs !== null,
+    claimRetryAt: claimRetryAtMs !== null ? new Date(claimRetryAtMs).toISOString() : null,
   };
 };
 

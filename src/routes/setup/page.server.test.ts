@@ -282,6 +282,70 @@ describe("setup claim ownership", () => {
     expect(mocks.requireSetupIncomplete).toHaveBeenCalledOnce();
   });
 
+  it("surfaces claimHeldElsewhere + retry time when the cookie is lost pre-admin (ISSUE-004)", async () => {
+    const claimedAt = Date.now();
+    state.configValues.set(setupClaimedKey, "true");
+    state.configValues.set(setupClaimProofKey, "proof-123");
+    state.configValues.set(setupClaimedAtKey, String(claimedAt));
+    // No claim cookie in this browser, and no admin exists yet → stranded.
+    const { cookies } = createCookies();
+
+    const { load } = await import("./+page.server");
+    const result = await load({
+      url: new URL("http://localhost/setup"),
+      cookies,
+    } as unknown as Parameters<typeof load>[0]);
+
+    expect(result).toMatchObject({
+      claimActive: false,
+      adminPresent: false,
+      recoveryAvailable: false,
+      claimHeldElsewhere: true,
+    });
+    expect(result.claimRetryAt).toBe(new Date(claimedAt + setupClaimTtlMs).toISOString());
+  });
+
+  it("does not flag claimHeldElsewhere once an admin exists (recovery is offered instead)", async () => {
+    mocks.adminExists.mockReturnValue(true);
+    state.configValues.set(setupClaimedKey, "true");
+    state.configValues.set(setupClaimProofKey, "proof-123");
+    state.configValues.set(setupClaimedAtKey, String(Date.now()));
+    const { cookies } = createCookies(); // cookie lost
+
+    const { load } = await import("./+page.server");
+    const result = await load({
+      url: new URL("http://localhost/setup"),
+      cookies,
+    } as unknown as Parameters<typeof load>[0]);
+
+    expect(result).toMatchObject({
+      claimActive: false,
+      adminPresent: true,
+      recoveryAvailable: true,
+      claimHeldElsewhere: false,
+      claimRetryAt: null,
+    });
+  });
+
+  it("does not flag claimHeldElsewhere once the claim TTL has lapsed (re-claim allowed)", async () => {
+    state.configValues.set(setupClaimedKey, "true");
+    state.configValues.set(setupClaimProofKey, "proof-123");
+    state.configValues.set(setupClaimedAtKey, String(Date.now() - setupClaimTtlMs - 1));
+    const { cookies } = createCookies(); // cookie lost
+
+    const { load } = await import("./+page.server");
+    const result = await load({
+      url: new URL("http://localhost/setup"),
+      cookies,
+    } as unknown as Parameters<typeof load>[0]);
+
+    expect(result).toMatchObject({
+      claimActive: false,
+      claimHeldElsewhere: false,
+      claimRetryAt: null,
+    });
+  });
+
   it("resumes at Plex step when an admin already exists", async () => {
     mocks.adminExists.mockReturnValue(true);
     state.configValues.set(setupClaimedKey, "true");

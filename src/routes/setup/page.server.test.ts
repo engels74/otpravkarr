@@ -305,6 +305,29 @@ describe("setup claim ownership", () => {
     expect(result.claimRetryAt).toBe(new Date(claimedAt + setupClaimTtlMs).toISOString());
   });
 
+  it("does not flag claimHeldElsewhere when setup_claim_proof is missing (re-claim not actually blocked)", async () => {
+    state.configValues.set(setupClaimedKey, "true");
+    // Timestamp present + within TTL, but the proof is absent. The real re-claim
+    // gate (getActiveSetupClaimProof) returns null here, so claimInstance would
+    // NOT block — guidance must match and not falsely strand the user.
+    state.configValues.set(setupClaimedAtKey, String(Date.now()));
+    const { cookies } = createCookies(); // no cookie, no admin → would-be stranded
+
+    const { load } = await import("./+page.server");
+    const result = await load({
+      url: new URL("http://localhost/setup"),
+      cookies,
+    } as unknown as Parameters<typeof load>[0]);
+
+    expect(result).toMatchObject({
+      claimActive: false,
+      adminPresent: false,
+      recoveryAvailable: false,
+      claimHeldElsewhere: false,
+      claimRetryAt: null,
+    });
+  });
+
   it("does not flag claimHeldElsewhere once an admin exists (recovery is offered instead)", async () => {
     mocks.adminExists.mockReturnValue(true);
     state.configValues.set(setupClaimedKey, "true");

@@ -156,15 +156,21 @@ async function getActiveSetupClaimProof(): Promise<string | null> {
  * Epoch-ms timestamp at which an active setup claim expires and the instance can
  * be re-claimed, or null when there is no still-valid claim. Used by `load` to
  * tell a stranded user (lost claim cookie, no admin yet) WHEN re-claiming opens
- * up again (ISSUE-004). Mirrors the TTL check in getActiveSetupClaimProof.
+ * up again (ISSUE-004). Mirrors getActiveSetupClaimProof, including its
+ * requirement of a non-empty `setup_claim_proof`, so the guidance matches the
+ * real re-claim gate: if the proof is missing/corrupt, claimInstance does NOT
+ * block, so this returns null instead of falsely flagging claimHeldElsewhere.
  */
 async function getActiveSetupClaimExpiry(): Promise<number | null> {
   if (!(await isSetupClaimed())) {
     return null;
   }
 
-  const claimTimestampRaw = await getConfig(SETUP_CLAIMED_AT_CONFIG_KEY);
-  if (!claimTimestampRaw) {
+  const [expectedProof, claimTimestampRaw] = await Promise.all([
+    getConfig(SETUP_CLAIM_PROOF_CONFIG_KEY),
+    getConfig(SETUP_CLAIMED_AT_CONFIG_KEY),
+  ]);
+  if (!expectedProof || !claimTimestampRaw) {
     return null;
   }
 

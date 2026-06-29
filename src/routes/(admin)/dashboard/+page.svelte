@@ -257,8 +257,8 @@ async function runSyncNow() {
 
           <div class="flex items-center justify-between gap-3">
             <p class="text-xs text-muted-foreground">
-              Runs a full reconcile: friend sync, channel-group subscriptions, and the ECM
-              plugin scope.
+              Runs a full reconcile: friend sync, quarantine reconcile, channel-group
+              subscriptions, and the ECM plugin scope.
             </p>
             <Button size="sm" onclick={runSyncNow} disabled={syncRunning}>
               {syncRunning ? "Syncing…" : "Run sync now"}

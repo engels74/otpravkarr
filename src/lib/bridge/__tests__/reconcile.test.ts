@@ -1,7 +1,8 @@
 // @vitest-environment node
 
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { DispatcharrClient } from "$lib/dispatcharr/client";
 
@@ -103,7 +104,8 @@ describe("runFullReconcile (ISSUE-005)", () => {
   });
 
   it("never acquires the scheduler lock itself (callers own exclusivity)", () => {
-    const source = readFileSync(join(process.cwd(), "src/lib/bridge/reconcile.ts"), "utf8");
+    const testDir = dirname(fileURLToPath(import.meta.url));
+    const source = readFileSync(join(testDir, "..", "reconcile.ts"), "utf8");
     // No lock acquisition (no runExclusive call) and no dependency on the runner.
     expect(source).not.toMatch(/runExclusive\s*\(/);
     expect(source).not.toContain("scheduler/runner");

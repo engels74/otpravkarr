@@ -174,6 +174,15 @@ async function getActiveSetupClaimExpiry(): Promise<number | null> {
   }
 
   const expiry = claimTimestamp + SETUP_CLAIM_TTL_MS;
+  // A corrupted/tampered `setup_claimed_at` can hold a finite value whose expiry
+  // exceeds the max representable JS Date (±8.64e15 ms). Feeding that to
+  // `new Date(expiry).toISOString()` in `load` throws RangeError and 500s the
+  // setup page, so treat out-of-range expiries as "no active claim" — the
+  // graceful fallback the UI already handles via claimRetryAt: null.
+  const MAX_DATE_MS = 8_640_000_000_000_000;
+  if (!Number.isFinite(expiry) || Math.abs(expiry) > MAX_DATE_MS) {
+    return null;
+  }
   return Date.now() >= expiry ? null : expiry;
 }
 

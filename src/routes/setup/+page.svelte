@@ -572,7 +572,13 @@ function enhanceHandler(nextStep?: number) {
               <Alert.Root variant="destructive" class="mb-4">
                 <Alert.Title>Verification failed</Alert.Title>
                 <Alert.Description>
-                  {stepErrors.token ?? stepErrors.message ?? 'Invalid or expired token.'}
+                  {#if stepErrors.error === 'setup_claimed'}
+                    This instance is already claimed from another session. Re-enter your
+                    bootstrap token once the claim expires, or restart the server to mint a
+                    fresh token from the startup logs.
+                  {:else}
+                    {stepErrors.token ?? stepErrors.message ?? 'Invalid or expired token.'}
+                  {/if}
                 </Alert.Description>
               </Alert.Root>
             {/if}

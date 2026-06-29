@@ -1,5 +1,6 @@
 <script lang="ts">
 import LogOutIcon from "lucide-svelte/icons/log-out";
+import { page } from "$app/state";
 import AppLogo from "$lib/components/AppLogo.svelte";
 import PlexAvatar from "$lib/components/PlexAvatar.svelte";
 import { Button } from "$lib/components/ui/button";
@@ -20,6 +21,7 @@ let { plexUsername, plexThumb, class: className }: Props = $props();
     <a
       href="/subscription"
       class="text-sm text-muted-foreground no-underline transition hover:text-foreground"
+      aria-current={page.url.pathname === "/subscription" ? "page" : undefined}
     >
       My channels
     </a>

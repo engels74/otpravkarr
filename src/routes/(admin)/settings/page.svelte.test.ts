@@ -22,7 +22,10 @@ vi.mock("$app/forms", () => ({
   enhance: (
     node: HTMLFormElement,
     submit?: () =>
-      | ((args: { result: MockActionResult; update: () => Promise<void> }) => Promise<void>)
+      | ((args: {
+          result: MockActionResult;
+          update: (options?: { reset?: boolean; invalidateAll?: boolean }) => Promise<void>;
+        }) => Promise<void>)
       | void,
   ) => {
     const onSubmit = async (event: Event) => {
@@ -30,7 +33,17 @@ vi.mock("$app/forms", () => ({
       const callback = submit?.();
       const result = state.queuedResults.shift();
       if (!callback || !result) return;
-      await callback({ result, update: async () => undefined });
+      // Mirror SvelteKit's real update(): reset the submitting form unless the
+      // caller opts out with { reset: false }. This is what makes the ISSUE-008
+      // assertions (origins retained vs secrets cleared) meaningful.
+      await callback({
+        result,
+        update: async (options?: { reset?: boolean; invalidateAll?: boolean }) => {
+          if (options?.reset !== false) {
+            node.reset();
+          }
+        },
+      });
     };
     node.addEventListener("submit", onSubmit);
     return {
@@ -167,5 +180,74 @@ describe("admin settings page", () => {
     expect(error).toBeTruthy();
     expect(syncInput.getAttribute("aria-invalid")).toBe("true");
     expect(syncInput.getAttribute("aria-describedby")).toBe(error.id);
+  });
+
+  it("keeps the Allowed Origins textarea populated after a successful save (ISSUE-008)", async () => {
+    state.queuedResults.push({
+      type: "success",
+      data: { message: "Security settings saved." },
+    });
+
+    const { container } = render(SettingsPage, { props: { data: defaultData } });
+    const textarea = container.querySelector<HTMLTextAreaElement>("#allowed_origins");
+    if (!textarea) throw new Error("Allowed origins textarea not found");
+
+    await fireEvent.input(textarea, { target: { value: "https://app.example.com" } });
+
+    const securityForm = container.querySelector<HTMLFormElement>(
+      'form[action="?/updateSecurity"]',
+    );
+    if (!securityForm) throw new Error("Security form not found");
+
+    await fireEvent.submit(securityForm);
+
+    // reset:false → the uncontrolled textarea keeps the saved value instead of
+    // being blanked by form.reset().
+    expect(textarea.value).toBe("https://app.example.com");
+  });
+
+  it("clears the Plex token field after a successful save (ISSUE-008 inverse)", async () => {
+    state.queuedResults.push({
+      type: "success",
+      data: { message: "Plex settings saved." },
+    });
+
+    const { container } = render(SettingsPage, { props: { data: defaultData } });
+    const tokenInput = container.querySelector<HTMLInputElement>("#plex_admin_token");
+    if (!tokenInput) throw new Error("Plex token input not found");
+
+    await fireEvent.input(tokenInput, { target: { value: "super-secret-plex-token" } });
+
+    const plexForm = container.querySelector<HTMLFormElement>(
+      'form[action="?/updatePlexConnection"]',
+    );
+    if (!plexForm) throw new Error("Plex form not found");
+
+    await fireEvent.submit(plexForm);
+
+    // The "leave blank to keep current" secret field must NOT linger in the DOM.
+    expect(tokenInput.value).toBe("");
+  });
+
+  it("clears the Dispatcharr API key field after a successful save (ISSUE-008 inverse)", async () => {
+    state.queuedResults.push({
+      type: "success",
+      data: { message: "Dispatcharr settings saved." },
+    });
+
+    const { container } = render(SettingsPage, { props: { data: defaultData } });
+    const apiKeyInput = container.querySelector<HTMLInputElement>("#dispatcharr_api_key");
+    if (!apiKeyInput) throw new Error("Dispatcharr API key input not found");
+
+    await fireEvent.input(apiKeyInput, { target: { value: "super-secret-api-key" } });
+
+    const dispatcharrForm = container.querySelector<HTMLFormElement>(
+      'form[action="?/updateDispatcharrConnection"]',
+    );
+    if (!dispatcharrForm) throw new Error("Dispatcharr form not found");
+
+    await fireEvent.submit(dispatcharrForm);
+
+    expect(apiKeyInput.value).toBe("");
   });
 });

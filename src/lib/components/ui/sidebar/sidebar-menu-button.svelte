@@ -61,6 +61,8 @@ export type SidebarMenuButtonSize = VariantProps<typeof sidebarMenuButtonVariant
 		"data-sidebar": "menu-button",
 		"data-size": size,
 		"data-active": isActive || undefined,
+		// ISSUE-009: expose the active nav item to assistive tech, not just styling.
+		"aria-current": isActive ? ("page" as const) : undefined,
 		...restProps,
 	});
 </script>

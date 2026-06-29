@@ -1,5 +1,5 @@
 <script lang="ts">
-import { untrack } from "svelte";
+import { onMount, untrack } from "svelte";
 import { enhance } from "$app/forms";
 import SetupWizard from "$lib/components/SetupWizard.svelte";
 import * as Alert from "$lib/components/ui/alert";
@@ -20,6 +20,8 @@ type SetupPageData = {
   oauthCallback: boolean;
   adminPresent: boolean;
   recoveryAvailable: boolean;
+  claimHeldElsewhere: boolean;
+  claimRetryAt: string | null;
 };
 
 type StepErrors = Record<string, string>;
@@ -117,6 +119,25 @@ let syncIntervalError = $derived.by(() => {
 
 // ── Derived values ──────────────────────────────────────────────
 const steps = ["Claim", "Admin", "Plex", "Dispatcharr", "Origin", "Defaults"] as const;
+
+// Gate locale-dependent rendering until after hydration. `onMount` fires
+// after the initial client pass, so SSR and the hydration render both produce
+// "" — avoiding an SSR/locale hydration mismatch (server TZ vs user TZ).
+let mounted = $state(false);
+onMount(() => {
+  mounted = true;
+});
+
+// ISSUE-004: human-readable local time when a held-elsewhere claim lapses.
+// Computed only post-mount (see `mounted` above) so the SSR/client locale
+// difference can't trigger a hydration_mismatch on the claim banner.
+const claimRetryLabel = $derived.by(() => {
+  if (!mounted) return "";
+  if (!data.claimRetryAt) return "";
+  const when = new Date(data.claimRetryAt);
+  if (Number.isNaN(when.getTime())) return "";
+  return when.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+});
 
 let passwordStrength = $derived.by(() => {
   if (!password) return { level: 0, label: "", color: "" };
@@ -546,11 +567,29 @@ function enhanceHandler(nextStep?: number) {
             </Card.Description>
           </Card.Header>
           <Card.Content>
+
+            {#if data.claimHeldElsewhere}
+              <Alert.Root class="mb-4">
+                <Alert.Title>Setup already claimed from another session</Alert.Title>
+                <Alert.Description>
+                  This instance was claimed from a different browser or device. For
+                  security, re-claiming is blocked{#if claimRetryLabel} until {claimRetryLabel}{/if}.
+                  Re-enter your bootstrap token{#if claimRetryLabel} then{/if}, or restart the
+                  server to mint a fresh token from the startup logs.
+                </Alert.Description>
+              </Alert.Root>
+            {/if}
             {#if hasError && stepErrors.error !== 'rate_limited'}
               <Alert.Root variant="destructive" class="mb-4">
                 <Alert.Title>Verification failed</Alert.Title>
                 <Alert.Description>
-                  {stepErrors.token ?? stepErrors.message ?? 'Invalid or expired token.'}
+                  {#if stepErrors.error === 'setup_claimed'}
+                    This instance is already claimed from another session. Re-enter your
+                    bootstrap token once the claim expires, or restart the server to mint a
+                    fresh token from the startup logs.
+                  {:else}
+                    {stepErrors.token ?? stepErrors.message ?? 'Invalid or expired token.'}
+                  {/if}
                 </Alert.Description>
               </Alert.Root>
             {/if}

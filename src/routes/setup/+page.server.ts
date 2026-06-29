@@ -1,6 +1,7 @@
 import type { Actions, Cookies, RequestEvent } from "@sveltejs/kit";
 import { fail, redirect } from "@sveltejs/kit";
 import { clearBootstrapToken, validateBootstrapToken } from "$lib/crypto/bootstrap";
+import { DecryptionError } from "$lib/crypto/encryption";
 import { hashAdminPassword, verifyAdminPassword } from "$lib/crypto/passwords";
 import {
   adminExists,
@@ -131,13 +132,48 @@ async function isSetupClaimed(): Promise<boolean> {
   return claimed === SETUP_CLAIMED_VALUE;
 }
 
+/**
+ * Read the encrypted `setup_claim_proof`, tolerating decryption failures.
+ *
+ * `getConfig` calls `decrypt` for the encrypted proof row, which throws
+ * `DecryptionError` on a corrupt/tampered ciphertext or after an
+ * `OTPRAVKARR_SECRET` rotation (HKDF key change → GCM auth-tag mismatch).
+ * Letting that propagate would 500 GET /setup and POST ?/claimInstance instead
+ * of the documented "missing/corrupt proof → null" fallback. An unreadable proof
+ * cannot verify any claim, so treat it as "no active claim" and surface it for
+ * observability (matching the scheduler's structured-log style) rather than
+ * swallowing it silently.
+ *
+ * Only `DecryptionError` is tolerated this way. Any other error (e.g. a SQLite
+ * fault from `getConfig`'s row read — locked/corrupt DB, closed connection) is a
+ * real outage, not an undecryptable proof, so it propagates (→ 500) instead of
+ * being masked as "no active claim".
+ */
+async function readSetupClaimProof(): Promise<string | null> {
+  try {
+    return await getConfig(SETUP_CLAIM_PROOF_CONFIG_KEY);
+  } catch (error) {
+    if (!(error instanceof DecryptionError)) {
+      throw error;
+    }
+    console.log(
+      JSON.stringify({
+        timestamp: new Date().toISOString(),
+        event: "setup.claim_proof.unreadable",
+        error: error.message,
+      }),
+    );
+    return null;
+  }
+}
+
 async function getActiveSetupClaimProof(): Promise<string | null> {
   if (!(await isSetupClaimed())) {
     return null;
   }
 
   const [expectedProof, claimTimestampRaw] = await Promise.all([
-    getConfig(SETUP_CLAIM_PROOF_CONFIG_KEY),
+    readSetupClaimProof(),
     getConfig(SETUP_CLAIMED_AT_CONFIG_KEY),
   ]);
   if (!expectedProof || !claimTimestampRaw) {
@@ -145,11 +181,68 @@ async function getActiveSetupClaimProof(): Promise<string | null> {
   }
 
   const claimTimestamp = Number(claimTimestampRaw);
-  if (!Number.isFinite(claimTimestamp) || Date.now() >= claimTimestamp + SETUP_CLAIM_TTL_MS) {
+  // A future `setup_claimed_at` (clock skew or tampering) is untrusted: every write
+  // site stores String(Date.now()), so a legitimate timestamp is never ahead of now.
+  // Honoring a future value makes `Date.now() >= claimTimestamp + TTL` false for the
+  // whole now..future+TTL window, extending the 409 lockout well past the 10-min TTL.
+  // A backward clock step (e.g. NTP correction) can briefly make a legitimate claim
+  // look future and allow re-claiming early — accepted: re-claim still requires a
+  // valid bootstrap token, so erring toward re-claimability beats unbounded lockout.
+  if (
+    !Number.isFinite(claimTimestamp) ||
+    claimTimestamp > Date.now() ||
+    Date.now() >= claimTimestamp + SETUP_CLAIM_TTL_MS
+  ) {
     return null;
   }
 
   return expectedProof;
+}
+
+/**
+ * Epoch-ms timestamp at which an active setup claim expires and the instance can
+ * be re-claimed, or null when there is no still-valid claim. Used by `load` to
+ * tell a stranded user (lost claim cookie, no admin yet) WHEN re-claiming opens
+ * up again (ISSUE-004). Mirrors getActiveSetupClaimProof, including its
+ * requirement of a non-empty `setup_claim_proof`, so the guidance matches the
+ * real re-claim gate: if the proof is missing/corrupt, claimInstance does NOT
+ * block, so this returns null instead of falsely flagging claimHeldElsewhere.
+ * Future `setup_claimed_at` values are treated as untrusted (mirrors
+ * getActiveSetupClaimProof) so a skewed/tampered timestamp can't push the
+ * reported expiry past the real re-claim window.
+ */
+async function getActiveSetupClaimExpiry(): Promise<number | null> {
+  if (!(await isSetupClaimed())) {
+    return null;
+  }
+
+  const [expectedProof, claimTimestampRaw] = await Promise.all([
+    readSetupClaimProof(),
+    getConfig(SETUP_CLAIMED_AT_CONFIG_KEY),
+  ]);
+  if (!expectedProof || !claimTimestampRaw) {
+    return null;
+  }
+
+  const claimTimestamp = Number(claimTimestampRaw);
+  // Future timestamps are untrusted (see getActiveSetupClaimProof): a tampered or
+  // clock-skewed value would otherwise push `expiry` far beyond the 10-min TTL and
+  // strand the user past the real re-claim window the gate actually enforces.
+  if (!Number.isFinite(claimTimestamp) || claimTimestamp > Date.now()) {
+    return null;
+  }
+
+  const expiry = claimTimestamp + SETUP_CLAIM_TTL_MS;
+  // A corrupted/tampered `setup_claimed_at` can hold a finite value whose expiry
+  // exceeds the max representable JS Date (±8.64e15 ms). Feeding that to
+  // `new Date(expiry).toISOString()` in `load` throws RangeError and 500s the
+  // setup page, so treat out-of-range expiries as "no active claim" — the
+  // graceful fallback the UI already handles via claimRetryAt: null.
+  const MAX_DATE_MS = 8_640_000_000_000_000;
+  if (!Number.isFinite(expiry) || Math.abs(expiry) > MAX_DATE_MS) {
+    return null;
+  }
+  return Date.now() >= expiry ? null : expiry;
 }
 
 async function hasActiveSetupClaim(cookies: Cookies): Promise<boolean> {
@@ -270,6 +363,17 @@ export const load = async ({ url, cookies }: RequestEvent) => {
   const adminPresent = adminExists();
   const recoveryAvailable = adminPresent && !claimActive;
 
+  // ISSUE-004: a claim is active but THIS browser does not hold it and no admin
+  // exists yet. The user is stranded — createAdmin → 403 (not claimed here), a
+  // fresh claimInstance → 409 (already claimed), recoverWithAdmin → 409 (no
+  // admin). The anti-claim-stealing guard is intentional; surface WHY re-claim
+  // is blocked and WHEN it reopens (the claim TTL) instead of leaving the Claim
+  // step silently dead. No gate is relaxed.
+  // Note: this re-reads setup_claim_proof (claimActive above came from an earlier read).
+  // The extra decrypt is negligible; on the rare unreadable-proof path it just logs
+  // setup.claim_proof.unreadable twice — acceptable in that already-broken state.
+  const claimRetryAtMs = !claimActive && !adminPresent ? await getActiveSetupClaimExpiry() : null;
+
   return {
     claimActive,
     resumePhase,
@@ -278,6 +382,8 @@ export const load = async ({ url, cookies }: RequestEvent) => {
     oauthCallback,
     adminPresent,
     recoveryAvailable,
+    claimHeldElsewhere: claimRetryAtMs !== null,
+    claimRetryAt: claimRetryAtMs !== null ? new Date(claimRetryAtMs).toISOString() : null,
   };
 };
 

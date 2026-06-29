@@ -1,6 +1,7 @@
 // @vitest-environment node
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { DecryptionError } from "$lib/crypto/encryption";
 
 const state = vi.hoisted(() => ({
   configValues: new Map<string, string>(),
@@ -280,6 +281,264 @@ describe("setup claim ownership", () => {
     expect(result).not.toHaveProperty("tokenFromUrl");
     expect(result).not.toHaveProperty("tokenProvided");
     expect(mocks.requireSetupIncomplete).toHaveBeenCalledOnce();
+  });
+
+  it("surfaces claimHeldElsewhere + retry time when the cookie is lost pre-admin (ISSUE-004)", async () => {
+    const claimedAt = Date.now();
+    state.configValues.set(setupClaimedKey, "true");
+    state.configValues.set(setupClaimProofKey, "proof-123");
+    state.configValues.set(setupClaimedAtKey, String(claimedAt));
+    // No claim cookie in this browser, and no admin exists yet → stranded.
+    const { cookies } = createCookies();
+
+    const { load } = await import("./+page.server");
+    const result = await load({
+      url: new URL("http://localhost/setup"),
+      cookies,
+    } as unknown as Parameters<typeof load>[0]);
+
+    expect(result).toMatchObject({
+      claimActive: false,
+      adminPresent: false,
+      recoveryAvailable: false,
+      claimHeldElsewhere: true,
+    });
+    expect(result.claimRetryAt).toBe(new Date(claimedAt + setupClaimTtlMs).toISOString());
+  });
+
+  it("does not flag claimHeldElsewhere when setup_claim_proof is missing (re-claim not actually blocked)", async () => {
+    state.configValues.set(setupClaimedKey, "true");
+    // Timestamp present + within TTL, but the proof is absent. The real re-claim
+    // gate (getActiveSetupClaimProof) returns null here, so claimInstance would
+    // NOT block — guidance must match and not falsely strand the user.
+    state.configValues.set(setupClaimedAtKey, String(Date.now()));
+    const { cookies } = createCookies(); // no cookie, no admin → would-be stranded
+
+    const { load } = await import("./+page.server");
+    const result = await load({
+      url: new URL("http://localhost/setup"),
+      cookies,
+    } as unknown as Parameters<typeof load>[0]);
+
+    expect(result).toMatchObject({
+      claimActive: false,
+      adminPresent: false,
+      recoveryAvailable: false,
+      claimHeldElsewhere: false,
+      claimRetryAt: null,
+    });
+  });
+
+  it("does not flag claimHeldElsewhere once an admin exists (recovery is offered instead)", async () => {
+    mocks.adminExists.mockReturnValue(true);
+    state.configValues.set(setupClaimedKey, "true");
+    state.configValues.set(setupClaimProofKey, "proof-123");
+    state.configValues.set(setupClaimedAtKey, String(Date.now()));
+    const { cookies } = createCookies(); // cookie lost
+
+    const { load } = await import("./+page.server");
+    const result = await load({
+      url: new URL("http://localhost/setup"),
+      cookies,
+    } as unknown as Parameters<typeof load>[0]);
+
+    expect(result).toMatchObject({
+      claimActive: false,
+      adminPresent: true,
+      recoveryAvailable: true,
+      claimHeldElsewhere: false,
+      claimRetryAt: null,
+    });
+  });
+
+  it("does not flag claimHeldElsewhere once the claim TTL has lapsed (re-claim allowed)", async () => {
+    state.configValues.set(setupClaimedKey, "true");
+    state.configValues.set(setupClaimProofKey, "proof-123");
+    state.configValues.set(setupClaimedAtKey, String(Date.now() - setupClaimTtlMs - 1));
+    const { cookies } = createCookies(); // cookie lost
+
+    const { load } = await import("./+page.server");
+    const result = await load({
+      url: new URL("http://localhost/setup"),
+      cookies,
+    } as unknown as Parameters<typeof load>[0]);
+
+    expect(result).toMatchObject({
+      claimActive: false,
+      claimHeldElsewhere: false,
+      claimRetryAt: null,
+    });
+  });
+
+  it("does not throw when setup_claimed_at is corrupted out of Date range (returns null)", async () => {
+    state.configValues.set(setupClaimedKey, "true");
+    state.configValues.set(setupClaimProofKey, "proof-123");
+    // Finite and <= now (passes the future guard), but a large NEGATIVE value whose
+    // expiry (claimTimestamp + TTL = -8_640_000_000_400_000) exceeds the max JS Date
+    // magnitude (8.64e15 ms). This targets the MAX_DATE_MS range guard specifically:
+    // new Date(expiry).toISOString() would throw RangeError and 500 the page without it.
+    // (A huge positive value would short-circuit at the future guard instead; that path
+    // is covered by the separate future-timestamp test.)
+    state.configValues.set(setupClaimedAtKey, String(-8_640_000_001_000_000));
+    const { cookies } = createCookies(); // cookie lost, no admin yet → stranded
+
+    const { load } = await import("./+page.server");
+    const result = await load({
+      url: new URL("http://localhost/setup"),
+      cookies,
+    } as unknown as Parameters<typeof load>[0]);
+
+    expect(result).toMatchObject({
+      claimActive: false,
+      claimHeldElsewhere: false,
+      claimRetryAt: null,
+    });
+  });
+
+  it("treats a future-dated setup_claimed_at as untrusted on load (not claimHeldElsewhere)", async () => {
+    state.configValues.set(setupClaimedKey, "true");
+    state.configValues.set(setupClaimProofKey, "proof-123");
+    // Future timestamp (clock skew/tampering): every write site stores
+    // String(Date.now()), so a value ahead of now is untrusted. Honoring it would
+    // push the reported expiry well past the 10-min TTL and strand the user, so the
+    // guidance must report no active claim instead of a far-future claimRetryAt.
+    state.configValues.set(setupClaimedAtKey, String(Date.now() + 86_400_000));
+    const { cookies } = createCookies(); // cookie lost, no admin yet → would-be stranded
+
+    const { load } = await import("./+page.server");
+    const result = await load({
+      url: new URL("http://localhost/setup"),
+      cookies,
+    } as unknown as Parameters<typeof load>[0]);
+
+    expect(result).toMatchObject({
+      claimActive: false,
+      claimHeldElsewhere: false,
+      claimRetryAt: null,
+    });
+  });
+
+  it("does not 500 on load when the encrypted setup_claim_proof cannot be decrypted (returns null)", async () => {
+    state.configValues.set(setupClaimedKey, "true");
+    // Timestamp present + within TTL, but the encrypted proof row is corrupt /
+    // undecryptable (e.g. OTPRAVKARR_SECRET rotation → GCM auth-tag mismatch), so
+    // getConfig throws DecryptionError for it. load must fall back to "no active
+    // claim" (the documented "missing/corrupt proof → null" contract), not 500.
+    state.configValues.set(setupClaimedAtKey, String(Date.now()));
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    mocks.getConfig.mockImplementation(async (key: string) => {
+      if (key === setupClaimProofKey) {
+        throw new DecryptionError(
+          "Decryption failed: authentication tag mismatch or corrupted data",
+        );
+      }
+      return state.configValues.get(key) ?? null;
+    });
+    try {
+      const { cookies } = createCookies(); // cookie lost, no admin yet → would-be stranded
+
+      const { load } = await import("./+page.server");
+      const result = await load({
+        url: new URL("http://localhost/setup"),
+        cookies,
+      } as unknown as Parameters<typeof load>[0]);
+
+      expect(result).toMatchObject({
+        claimActive: false,
+        claimHeldElsewhere: false,
+        claimRetryAt: null,
+      });
+      // The decryption failure is surfaced for observability, not swallowed silently.
+      expect(logSpy).toHaveBeenCalledWith(expect.stringContaining("setup.claim_proof.unreadable"));
+    } finally {
+      logSpy.mockRestore();
+      mocks.getConfig.mockImplementation(
+        async (key: string) => state.configValues.get(key) ?? null,
+      );
+    }
+  });
+
+  it("lets a valid bootstrap token claim setup when the stored proof is undecryptable (not 500/409)", async () => {
+    const claimProof = "55555555-5555-5555-5555-555555555555";
+    const randomUuidSpy = vi.spyOn(crypto, "randomUUID").mockReturnValue(claimProof);
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    mocks.getConfig.mockImplementation(async (key: string) => {
+      if (key === setupClaimProofKey) {
+        throw new DecryptionError(
+          "Decryption failed: authentication tag mismatch or corrupted data",
+        );
+      }
+      return state.configValues.get(key) ?? null;
+    });
+    try {
+      state.configValues.set(setupClaimedKey, "true");
+      state.configValues.set(setupClaimedAtKey, String(Date.now()));
+      const { cookies, setCalls } = createCookies(); // no matching claim cookie
+
+      const body = new FormData();
+      body.set("token", "valid-token");
+      const request = new Request("http://localhost/setup", { method: "POST", body });
+
+      const { actions } = await import("./+page.server");
+      const claimInstance = actions.claimInstance;
+      if (!claimInstance) {
+        throw new Error("claimInstance action is undefined");
+      }
+
+      // An undecryptable proof cannot verify any claim, so claimInstance must treat
+      // it as no active claim and proceed to token validation — not 500 (throw) or
+      // 409 (falsely blocked by a "claim" it can't even read).
+      const result = await claimInstance({
+        request,
+        getClientAddress: () => "127.0.0.1",
+        cookies,
+      } as unknown as Parameters<typeof claimInstance>[0]);
+
+      expect(result).toEqual({ success: true });
+      expect(mocks.validateBootstrapToken).toHaveBeenCalledWith("valid-token");
+      expect(setCalls).toContainEqual(
+        expect.objectContaining({
+          name: setupClaimCookie,
+          value: claimProof,
+        }),
+      );
+    } finally {
+      randomUuidSpy.mockRestore();
+      logSpy.mockRestore();
+      mocks.getConfig.mockImplementation(
+        async (key: string) => state.configValues.get(key) ?? null,
+      );
+    }
+  });
+
+  it("propagates a non-DecryptionError from getConfig on load instead of masking it as no claim", async () => {
+    state.configValues.set(setupClaimedKey, "true");
+    // Timestamp present + within TTL, but reading the proof row hits a real DB
+    // fault (SQLITE_BUSY), not a decryption failure. That is a genuine outage, so
+    // load must let it propagate (→ 500) rather than swallow it as "no active
+    // claim" and silently alter claim-gating.
+    state.configValues.set(setupClaimedAtKey, String(Date.now()));
+    mocks.getConfig.mockImplementation(async (key: string) => {
+      if (key === setupClaimProofKey) {
+        throw new Error("SQLITE_BUSY: database is locked");
+      }
+      return state.configValues.get(key) ?? null;
+    });
+    try {
+      const { cookies } = createCookies(); // cookie lost, no admin yet → would-be stranded
+
+      const { load } = await import("./+page.server");
+      await expect(
+        load({
+          url: new URL("http://localhost/setup"),
+          cookies,
+        } as unknown as Parameters<typeof load>[0]),
+      ).rejects.toThrow("SQLITE_BUSY: database is locked");
+    } finally {
+      mocks.getConfig.mockImplementation(
+        async (key: string) => state.configValues.get(key) ?? null,
+      );
+    }
   });
 
   it("resumes at Plex step when an admin already exists", async () => {
@@ -629,6 +888,48 @@ describe("setup claim ownership", () => {
     expect(mocks.validateBootstrapToken).not.toHaveBeenCalled();
     expect(state.configValues.get(setupClaimProofKey)).toBe("owner-proof");
     expect(setCalls).toHaveLength(0);
+  });
+
+  it("does not honor a future-dated claim and lets a valid token re-claim (not 409)", async () => {
+    const claimProof = "44444444-4444-4444-4444-444444444444";
+    const randomUuidSpy = vi.spyOn(crypto, "randomUUID").mockReturnValue(claimProof);
+    try {
+      state.configValues.set(setupClaimedKey, "true");
+      state.configValues.set(setupClaimProofKey, "owner-proof");
+      // Future timestamp (clock skew/tampering). The proof gate must reject it so
+      // claimInstance does NOT block with 409 for the inflated now..future+TTL
+      // window — proving the gate, not just the guidance, ignores tampered claims.
+      state.configValues.set(setupClaimedAtKey, String(Date.now() + 86_400_000));
+      const { cookies, setCalls } = createCookies(); // no matching claim cookie
+
+      const body = new FormData();
+      body.set("token", "valid-token");
+      const request = new Request("http://localhost/setup", { method: "POST", body });
+
+      const { actions } = await import("./+page.server");
+      const claimInstance = actions.claimInstance;
+      if (!claimInstance) {
+        throw new Error("claimInstance action is undefined");
+      }
+
+      const result = await claimInstance({
+        request,
+        getClientAddress: () => "127.0.0.1",
+        cookies,
+      } as unknown as Parameters<typeof claimInstance>[0]);
+
+      expect(result).toEqual({ success: true });
+      expect(mocks.validateBootstrapToken).toHaveBeenCalledWith("valid-token");
+      expect(state.configValues.get(setupClaimProofKey)).toBe(claimProof);
+      expect(setCalls).toContainEqual(
+        expect.objectContaining({
+          name: setupClaimCookie,
+          value: claimProof,
+        }),
+      );
+    } finally {
+      randomUuidSpy.mockRestore();
+    }
   });
 
   it("rejects reclaiming setup with an invalid bootstrap token after the claim expires", async () => {

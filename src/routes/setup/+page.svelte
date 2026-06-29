@@ -1,5 +1,5 @@
 <script lang="ts">
-import { untrack } from "svelte";
+import { onMount, untrack } from "svelte";
 import { enhance } from "$app/forms";
 import SetupWizard from "$lib/components/SetupWizard.svelte";
 import * as Alert from "$lib/components/ui/alert";
@@ -120,8 +120,19 @@ let syncIntervalError = $derived.by(() => {
 // ── Derived values ──────────────────────────────────────────────
 const steps = ["Claim", "Admin", "Plex", "Dispatcharr", "Origin", "Defaults"] as const;
 
+// Gate locale-dependent rendering until after hydration. `onMount` fires
+// after the initial client pass, so SSR and the hydration render both produce
+// "" — avoiding an SSR/locale hydration mismatch (server TZ vs user TZ).
+let mounted = $state(false);
+onMount(() => {
+  mounted = true;
+});
+
 // ISSUE-004: human-readable local time when a held-elsewhere claim lapses.
+// Computed only post-mount (see `mounted` above) so the SSR/client locale
+// difference can't trigger a hydration_mismatch on the claim banner.
 const claimRetryLabel = $derived.by(() => {
+  if (!mounted) return "";
   if (!data.claimRetryAt) return "";
   const when = new Date(data.claimRetryAt);
   if (Number.isNaN(when.getTime())) return "";

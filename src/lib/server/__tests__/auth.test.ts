@@ -72,6 +72,7 @@ const {
   ADMIN_SESSION_TTL,
   USER_SESSION_TTL,
   ADMIN_COOKIE_OPTIONS,
+  ADMIN_OAUTH_COOKIE_OPTIONS,
   USER_COOKIE_OPTIONS,
 } = await import("../auth");
 
@@ -602,5 +603,26 @@ describe("auth guards", () => {
       mockSetupCompleted = null;
       await expect(isSetupComplete()).resolves.toBe(false);
     });
+  });
+});
+
+describe("admin cookie SameSite posture (ISSUE-001)", () => {
+  it("keeps the default admin cookie SameSite=Strict", () => {
+    expect(ADMIN_COOKIE_OPTIONS.sameSite).toBe("strict");
+  });
+
+  it("issues the OAuth admin cookie as SameSite=Lax", () => {
+    expect(ADMIN_OAUTH_COOKIE_OPTIONS.sameSite).toBe("lax");
+  });
+
+  it("differs from the strict admin cookie only in sameSite", () => {
+    expect(ADMIN_OAUTH_COOKIE_OPTIONS).toEqual({
+      ...ADMIN_COOKIE_OPTIONS,
+      sameSite: "lax",
+    });
+    // httpOnly/secure/path/maxAge must be identical to the strict variant.
+    expect(ADMIN_OAUTH_COOKIE_OPTIONS.httpOnly).toBe(ADMIN_COOKIE_OPTIONS.httpOnly);
+    expect(ADMIN_OAUTH_COOKIE_OPTIONS.path).toBe(ADMIN_COOKIE_OPTIONS.path);
+    expect(ADMIN_OAUTH_COOKIE_OPTIONS.maxAge).toBe(ADMIN_COOKIE_OPTIONS.maxAge);
   });
 });

@@ -23,6 +23,21 @@ export const ADMIN_COOKIE_OPTIONS = {
   maxAge: ADMIN_SESSION_TTL,
 };
 
+// SameSite=Lax variant of the admin cookie, used ONLY for the owner OAuth
+// redirect (src/routes/(portal)/auth/plex/+page.server.ts). The owner OAuth
+// flow finishes with a top-level navigation that originates cross-site at
+// app.plex.tv; a SameSite=Strict cookie is withheld on that redirect, so the
+// admin session would be invisible to requireAdmin and bounce to /login. Lax is
+// sent on top-level cross-site GET navigations, so the session survives the
+// handoff. Steady state stays Strict: sessionResolver re-issues this cookie with
+// ADMIN_COOKIE_OPTIONS on the very next authenticated request. CSRF is
+// unaffected — mutating methods are Origin-validated server-side (csrf.ts) and
+// GET loads do not mutate.
+export const ADMIN_OAUTH_COOKIE_OPTIONS = {
+  ...ADMIN_COOKIE_OPTIONS,
+  sameSite: "lax" as const,
+};
+
 export const USER_COOKIE_OPTIONS = {
   path: "/",
   httpOnly: true,

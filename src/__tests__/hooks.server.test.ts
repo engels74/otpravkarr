@@ -274,6 +274,26 @@ describe("hooks sessionResolver", () => {
     expect(event.locals.revokedUser).toBeNull();
   });
 
+  it("reconverges the admin cookie to SameSite=Strict on the next authenticated request (ISSUE-001)", async () => {
+    // After the owner OAuth handoff issues a SameSite=Lax admin cookie, the very
+    // next authenticated request must re-issue it with ADMIN_COOKIE_OPTIONS
+    // (SameSite=Strict), so the Lax window lasts exactly one navigation.
+    mockSession = { ...validAdminSession };
+    mockAdmin = { ...validAdmin };
+    const event = createMockEvent({ sessionId: "sess-admin-1" });
+
+    await handle({
+      event,
+      resolve: async () => new Response(null, { status: 200 }),
+    });
+
+    expect(event.cookies.set).toHaveBeenCalledWith(
+      "otpravkarr_session",
+      "sess-admin-1",
+      expect.objectContaining({ sameSite: "strict" }),
+    );
+  });
+
   it("places an active mapping in locals.user with revokedUser null", async () => {
     mockSession = { ...validUserSession };
     mockUser = { ...activeUser };

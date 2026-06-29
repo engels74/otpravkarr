@@ -1,6 +1,7 @@
 // @vitest-environment node
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { DecryptionError } from "$lib/crypto/encryption";
 
 const state = vi.hoisted(() => ({
   configValues: new Map<string, string>(),
@@ -427,7 +428,9 @@ describe("setup claim ownership", () => {
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     mocks.getConfig.mockImplementation(async (key: string) => {
       if (key === setupClaimProofKey) {
-        throw new Error("Decryption failed: authentication tag mismatch or corrupted data");
+        throw new DecryptionError(
+          "Decryption failed: authentication tag mismatch or corrupted data",
+        );
       }
       return state.configValues.get(key) ?? null;
     });
@@ -461,7 +464,9 @@ describe("setup claim ownership", () => {
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     mocks.getConfig.mockImplementation(async (key: string) => {
       if (key === setupClaimProofKey) {
-        throw new Error("Decryption failed: authentication tag mismatch or corrupted data");
+        throw new DecryptionError(
+          "Decryption failed: authentication tag mismatch or corrupted data",
+        );
       }
       return state.configValues.get(key) ?? null;
     });
@@ -500,6 +505,36 @@ describe("setup claim ownership", () => {
     } finally {
       randomUuidSpy.mockRestore();
       logSpy.mockRestore();
+      mocks.getConfig.mockImplementation(
+        async (key: string) => state.configValues.get(key) ?? null,
+      );
+    }
+  });
+
+  it("propagates a non-DecryptionError from getConfig on load instead of masking it as no claim", async () => {
+    state.configValues.set(setupClaimedKey, "true");
+    // Timestamp present + within TTL, but reading the proof row hits a real DB
+    // fault (SQLITE_BUSY), not a decryption failure. That is a genuine outage, so
+    // load must let it propagate (→ 500) rather than swallow it as "no active
+    // claim" and silently alter claim-gating.
+    state.configValues.set(setupClaimedAtKey, String(Date.now()));
+    mocks.getConfig.mockImplementation(async (key: string) => {
+      if (key === setupClaimProofKey) {
+        throw new Error("SQLITE_BUSY: database is locked");
+      }
+      return state.configValues.get(key) ?? null;
+    });
+    try {
+      const { cookies } = createCookies(); // cookie lost, no admin yet → would-be stranded
+
+      const { load } = await import("./+page.server");
+      await expect(
+        load({
+          url: new URL("http://localhost/setup"),
+          cookies,
+        } as unknown as Parameters<typeof load>[0]),
+      ).rejects.toThrow("SQLITE_BUSY: database is locked");
+    } finally {
       mocks.getConfig.mockImplementation(
         async (key: string) => state.configValues.get(key) ?? null,
       );

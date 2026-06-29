@@ -1,6 +1,7 @@
 import type { Actions, Cookies, RequestEvent } from "@sveltejs/kit";
 import { fail, redirect } from "@sveltejs/kit";
 import { clearBootstrapToken, validateBootstrapToken } from "$lib/crypto/bootstrap";
+import { DecryptionError } from "$lib/crypto/encryption";
 import { hashAdminPassword, verifyAdminPassword } from "$lib/crypto/passwords";
 import {
   adminExists,
@@ -142,16 +143,24 @@ async function isSetupClaimed(): Promise<boolean> {
  * cannot verify any claim, so treat it as "no active claim" and surface it for
  * observability (matching the scheduler's structured-log style) rather than
  * swallowing it silently.
+ *
+ * Only `DecryptionError` is tolerated this way. Any other error (e.g. a SQLite
+ * fault from `getConfig`'s row read — locked/corrupt DB, closed connection) is a
+ * real outage, not an undecryptable proof, so it propagates (→ 500) instead of
+ * being masked as "no active claim".
  */
 async function readSetupClaimProof(): Promise<string | null> {
   try {
     return await getConfig(SETUP_CLAIM_PROOF_CONFIG_KEY);
   } catch (error) {
+    if (!(error instanceof DecryptionError)) {
+      throw error;
+    }
     console.log(
       JSON.stringify({
         timestamp: new Date().toISOString(),
         event: "setup.claim_proof.unreadable",
-        error: error instanceof Error ? error.message : String(error),
+        error: error.message,
       }),
     );
     return null;

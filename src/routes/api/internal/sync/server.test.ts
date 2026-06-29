@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   getConfig: vi.fn((_key: string): Promise<string | null> => Promise.resolve(null)),
   appendAuditLog: vi.fn(),
   reconcileSync: vi.fn(),
+  runFullReconcile: vi.fn(),
   runExclusive: vi.fn(),
 }));
 
@@ -45,6 +46,10 @@ vi.mock("$lib/bridge/lifecycle", () => ({
   reconcileSync: mocks.reconcileSync,
 }));
 
+vi.mock("$lib/bridge/reconcile", () => ({
+  runFullReconcile: mocks.runFullReconcile,
+}));
+
 vi.mock("$lib/scheduler/runner", () => ({
   scheduler: {
     runExclusive: mocks.runExclusive,
@@ -62,6 +67,7 @@ function resetAll() {
   mocks.getConfig.mockClear();
   mocks.appendAuditLog.mockClear();
   mocks.reconcileSync.mockClear();
+  mocks.runFullReconcile.mockClear();
   mocks.runExclusive.mockClear();
 }
 
@@ -127,14 +133,22 @@ describe("POST /api/internal/sync", () => {
     });
 
     const report = { unmappedFriends: 2, disabled: 0, orphaned: 0, refreshed: 1, errors: [] };
-    mocks.reconcileSync.mockResolvedValueOnce(report);
+    mocks.runFullReconcile.mockResolvedValueOnce({
+      report,
+      quarantine: { names: [], source: "plugin" },
+      subscriptions: { groupsReconciled: 0, profilesRecreated: 0, usersRepatched: 0, errors: [] },
+      ecmScope: { ok: true, data: { updated: false, added: [], reason: "already_in_scope" } },
+    });
 
     const { POST } = await import("./+server");
     const response = await POST(createEvent());
 
     expect(response.status).toBe(200);
     const body = await response.json();
+    // API envelope unchanged: only the friend-sync report is exposed.
     expect(body).toEqual({ ok: true, report });
+    // Manual sync now runs the FULL reconcile sequence, not just reconcileSync (ISSUE-005).
+    expect(mocks.runFullReconcile).toHaveBeenCalledTimes(1);
   });
 
   it("does not duplicate SYNC_COMPLETED audit log on success", async () => {
@@ -149,13 +163,19 @@ describe("POST /api/internal/sync", () => {
     });
 
     const report = { unmappedFriends: 0, disabled: 0, orphaned: 0, refreshed: 0, errors: [] };
-    mocks.reconcileSync.mockImplementationOnce(async () => {
-      // reconcileSync writes sync.completed; route should not write another one.
+    mocks.runFullReconcile.mockImplementationOnce(async () => {
+      // reconcileSync (inside runFullReconcile) writes sync.completed; the route
+      // must not write another one.
       mocks.appendAuditLog({
         action: "sync.completed",
         detail: report,
       });
-      return report;
+      return {
+        report,
+        quarantine: { names: [], source: "plugin" },
+        subscriptions: { groupsReconciled: 0, profilesRecreated: 0, usersRepatched: 0, errors: [] },
+        ecmScope: { ok: true, data: { updated: false, added: [], reason: "already_in_scope" } },
+      };
     });
 
     const { POST } = await import("./+server");
@@ -186,7 +206,7 @@ describe("POST /api/internal/sync", () => {
       return Promise.resolve(config[key] ?? null);
     });
 
-    mocks.reconcileSync.mockRejectedValueOnce(new Error("Plex API timeout"));
+    mocks.runFullReconcile.mockRejectedValueOnce(new Error("Plex API timeout"));
 
     const { POST } = await import("./+server");
     const response = await POST(createEvent());
@@ -211,7 +231,7 @@ describe("POST /api/internal/sync", () => {
       return Promise.resolve(config[key] ?? null);
     });
 
-    mocks.reconcileSync.mockRejectedValueOnce(new Error("Connection refused"));
+    mocks.runFullReconcile.mockRejectedValueOnce(new Error("Connection refused"));
 
     const { POST } = await import("./+server");
     await POST(createEvent());

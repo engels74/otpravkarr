@@ -49,6 +49,7 @@ vi.mock("$lib/db/repositories/audit", () => ({
 
 vi.mock("$lib/db/types", () => ({
   AuditAction: {
+    SYNC_STARTED: "sync.started",
     SYNC_COMPLETED: "sync.completed",
     SYNC_FAILED: "sync.failed",
   },
@@ -184,10 +185,12 @@ describe("sync job fn", () => {
     expect(completedLog?.quarantine).toBeDefined();
     expect(completedLog?.ecmScope).toBeDefined();
 
-    expect(mockAppendAuditLog).toHaveBeenCalledWith({
-      action: "sync.completed",
-      detail: { report },
-    });
+    // ISSUE-006/007: the scheduler no longer writes its own sync.completed.
+    // reconcileSync (mocked here) is the sole writer, so nothing is emitted in
+    // this test — proving the duplicate scheduler write is gone.
+    expect(mockAppendAuditLog).not.toHaveBeenCalledWith(
+      expect.objectContaining({ action: "sync.completed" }),
+    );
   });
 
   it("logs ECM settings drift as a non-aborting sync result", async () => {
@@ -216,10 +219,40 @@ describe("sync job fn", () => {
     const logs = getLogEntries();
     const completedLog = logs.find((l) => l.event === "sync.completed");
     expect(completedLog?.ecmScope).toEqual(ecmResult);
-    expect(mockAppendAuditLog).toHaveBeenCalledWith({
-      action: "sync.completed",
-      detail: { report },
+    expect(mockAppendAuditLog).not.toHaveBeenCalledWith(
+      expect.objectContaining({ action: "sync.completed" }),
+    );
+  });
+
+  it("emits exactly one sync.completed per sync.started across the full cycle (ISSUE-006/007)", async () => {
+    mockConfigWith(FULL_CONFIG);
+    const report = {
+      unmappedFriends: 0,
+      disabled: 0,
+      orphaned: 0,
+      refreshed: 0,
+      errors: [],
+    };
+    // Simulate reconcileSync's real contract: it writes exactly one FLAT
+    // sync.completed on every return path. The scheduler must add none of its own.
+    mockReconcileSync.mockImplementationOnce(async () => {
+      mockAppendAuditLog({ action: "sync.completed", detail: report });
+      return report;
     });
+
+    const job = await createSyncJob();
+    await job.fn();
+
+    const started = mockAppendAuditLog.mock.calls.filter(
+      (c) => (c[0] as { action: string }).action === "sync.started",
+    );
+    const completed = mockAppendAuditLog.mock.calls.filter(
+      (c) => (c[0] as { action: string }).action === "sync.completed",
+    );
+    expect(started).toHaveLength(1);
+    expect(completed).toHaveLength(1);
+    // Flat shape (report fields directly), not nested under { report }.
+    expect((completed[0][0] as { detail: unknown }).detail).toEqual(report);
   });
 
   it("missing config: logs warning and returns early without calling reconcileSync", async () => {

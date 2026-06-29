@@ -1,4 +1,4 @@
-import { reconcileSync } from "$lib/bridge/lifecycle";
+import { runFullReconcile } from "$lib/bridge/reconcile";
 import { appendAuditLog } from "$lib/db/repositories/audit";
 import { getConfig } from "$lib/db/repositories/config";
 import { AuditAction } from "$lib/db/types";
@@ -41,7 +41,11 @@ export const POST: RequestHandler = async (event) => {
         // audit log failure should not block the sync
       }
       const client = new DispatcharrClient(dispatcharrUrl, apiKey);
-      return reconcileSync(client, plexAdminToken);
+      // Run the SAME full reconcile sequence as the scheduled job (friend sync →
+      // quarantine → subscriptions → ECM scope) so "Run Sync Now" is a true full
+      // sync (ISSUE-005). The helper must not re-acquire the lock — we already
+      // hold "plex-dispatcharr-sync" here.
+      return runFullReconcile(client, plexAdminToken);
     });
 
     if (!exclusive.ok) {
@@ -54,7 +58,9 @@ export const POST: RequestHandler = async (event) => {
       return Response.json({ ok: false, error: "sync_in_progress" }, { status: 409 });
     }
 
-    return Response.json({ ok: true, report: exclusive.result }, { status: 200 });
+    // Preserve the existing { ok, report } API envelope; the full result's extra
+    // reconcile details are surfaced via audit/logs, not this response.
+    return Response.json({ ok: true, report: exclusive.result.report }, { status: 200 });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
 

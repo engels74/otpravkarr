@@ -1,7 +1,4 @@
-import { reconcileEcmScope } from "$lib/bridge/ecm-scope";
-import { reconcileSync } from "$lib/bridge/lifecycle";
-import { reconcileQuarantineGroups } from "$lib/bridge/quarantine-sync";
-import { reconcileSubscriptions } from "$lib/bridge/subscription-sync";
+import { runFullReconcile } from "$lib/bridge/reconcile";
 import { appendAuditLog } from "$lib/db/repositories/audit";
 import { getConfig } from "$lib/db/repositories/config";
 import { AuditAction } from "$lib/db/types";
@@ -86,47 +83,16 @@ export async function createSyncJob(defaultIntervalMs = DEFAULT_INTERVAL_MS): Pr
 
       try {
         const client = new DispatcharrClient(dispatcharrUrl, apiKey);
-        const report = await reconcileSync(client, plexAdminToken);
-        // Refresh the quarantine-group name policy from the live IPTV Checker
-        // plugin BEFORE reconciling subscriptions, so renamed junk groups stay
-        // hidden this cycle. Isolated: a failure here must not abort the sync.
-        let quarantine: Awaited<ReturnType<typeof reconcileQuarantineGroups>> | { error: string };
-        try {
-          quarantine = await reconcileQuarantineGroups(client);
-        } catch (qError) {
-          quarantine = { error: qError instanceof Error ? qError.message : String(qError) };
-        }
-        // Converge channel-group subscriptions against live Dispatcharr state
-        // (channels moved between groups, plugins created channels, etc.). Kept
-        // separate so a subscription error never masks the friend-sync result.
-        let subscriptions: Awaited<ReturnType<typeof reconcileSubscriptions>> | { error: string };
-        try {
-          subscriptions = await reconcileSubscriptions(client);
-        } catch (subError) {
-          subscriptions = {
-            error: subError instanceof Error ? subError.message : String(subError),
-          };
-        }
-        // Auto-write otpravkarr's group profiles into ECM's scope so event
-        // automation reaches subscribers. Runs AFTER subscription reconciliation
-        // so freshly created group profiles are included. Isolated like the rest.
-        let ecmScope: Awaited<ReturnType<typeof reconcileEcmScope>> | { error: string };
-        try {
-          ecmScope = await reconcileEcmScope(client);
-        } catch (ecmError) {
-          ecmScope = { error: ecmError instanceof Error ? ecmError.message : String(ecmError) };
-        }
+        // Full reconcile sequence (reconcileSync → quarantine → subscriptions →
+        // ECM), shared with the manual "Run Sync Now" route so the two paths
+        // can never diverge. reconcileSync owns the single sync.completed audit
+        // write, so the scheduler no longer writes its own (de-dupes
+        // ISSUE-006/007); this only emits the structured operational log.
+        const { report, quarantine, subscriptions, ecmScope } = await runFullReconcile(
+          client,
+          plexAdminToken,
+        );
         log("sync.completed", { report, quarantine, subscriptions, ecmScope });
-        try {
-          appendAuditLog({
-            action: AuditAction.SYNC_COMPLETED,
-            detail: { report },
-          });
-        } catch (auditError) {
-          log("audit.error", {
-            error: auditError instanceof Error ? auditError.message : String(auditError),
-          });
-        }
       } catch (error) {
         log("sync.error", {
           error: error instanceof Error ? error.message : String(error),

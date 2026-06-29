@@ -360,6 +360,9 @@ export const load = async ({ url, cookies }: RequestEvent) => {
   // admin). The anti-claim-stealing guard is intentional; surface WHY re-claim
   // is blocked and WHEN it reopens (the claim TTL) instead of leaving the Claim
   // step silently dead. No gate is relaxed.
+  // Note: this re-reads setup_claim_proof (claimActive above came from an earlier read).
+  // The extra decrypt is negligible; on the rare unreadable-proof path it just logs
+  // setup.claim_proof.unreadable twice — acceptable in that already-broken state.
   const claimRetryAtMs = !claimActive && !adminPresent ? await getActiveSetupClaimExpiry() : null;
 
   return {

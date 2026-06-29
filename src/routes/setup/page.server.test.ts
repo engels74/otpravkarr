@@ -372,9 +372,13 @@ describe("setup claim ownership", () => {
   it("does not throw when setup_claimed_at is corrupted out of Date range (returns null)", async () => {
     state.configValues.set(setupClaimedKey, "true");
     state.configValues.set(setupClaimProofKey, "proof-123");
-    // Finite but out-of-range: expiry exceeds the max JS Date (8.64e15 ms), so
-    // new Date(expiry).toISOString() would throw RangeError and 500 the page.
-    state.configValues.set(setupClaimedAtKey, "8640000000000001");
+    // Finite and <= now (passes the future guard), but a large NEGATIVE value whose
+    // expiry (claimTimestamp + TTL = -8_640_000_000_400_000) exceeds the max JS Date
+    // magnitude (8.64e15 ms). This targets the MAX_DATE_MS range guard specifically:
+    // new Date(expiry).toISOString() would throw RangeError and 500 the page without it.
+    // (A huge positive value would short-circuit at the future guard instead; that path
+    // is covered by the separate future-timestamp test.)
+    state.configValues.set(setupClaimedAtKey, String(-8_640_000_001_000_000));
     const { cookies } = createCookies(); // cookie lost, no admin yet → stranded
 
     const { load } = await import("./+page.server");

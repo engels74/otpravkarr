@@ -1,7 +1,7 @@
 // @vitest-environment node
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import * as ts from "typescript";
 import { describe, expect, it } from "vitest";
 
@@ -110,10 +110,10 @@ describe("ADMIN_OAUTH_COOKIE_OPTIONS single-call-site guard (ISSUE-001)", () => 
   );
 
   it("is referenced (outside its definition) only by the owner OAuth page server", () => {
-    const relative = usageFiles.map((file) =>
-      file.replaceAll("\\", "/").slice(file.replaceAll("\\", "/").indexOf("src/")),
+    const relativePaths = usageFiles.map((file) =>
+      relative(process.cwd(), file).replaceAll("\\", "/"),
     );
-    expect(relative).toEqual([ALLOWED_USAGE_FILE]);
+    expect(relativePaths).toEqual([ALLOWED_USAGE_FILE]);
   });
 
   it("is used as a cookies.set option exactly once", () => {

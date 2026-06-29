@@ -54,7 +54,11 @@ describe("ADMIN_OAUTH_COOKIE_OPTIONS single-call-site guard (ISSUE-001)", () => 
   it("is used as a cookies.set option exactly once", () => {
     const totalSetCalls = files.reduce((count, file) => {
       const content = readFileSync(file, "utf8");
-      const matches = content.match(/cookies\.set\([^)]*ADMIN_OAUTH_COOKIE_OPTIONS/g);
+      // Bound the scan at the statement terminator (`;`) rather than the first
+      // `)`, so a call whose earlier args contain a `)` (e.g. a function call like
+      // cookies.set(getName(), sessionId, ADMIN_OAUTH_COOKIE_OPTIONS)) is still
+      // counted instead of slipping past the guard.
+      const matches = content.match(/cookies\.set\([^;]*ADMIN_OAUTH_COOKIE_OPTIONS/g);
       return count + (matches?.length ?? 0);
     }, 0);
     expect(totalSetCalls).toBe(1);

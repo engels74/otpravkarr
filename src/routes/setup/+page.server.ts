@@ -145,7 +145,15 @@ async function getActiveSetupClaimProof(): Promise<string | null> {
   }
 
   const claimTimestamp = Number(claimTimestampRaw);
-  if (!Number.isFinite(claimTimestamp) || Date.now() >= claimTimestamp + SETUP_CLAIM_TTL_MS) {
+  // A future `setup_claimed_at` (clock skew or tampering) is untrusted: every write
+  // site stores String(Date.now()), so a legitimate timestamp is never ahead of now.
+  // Honoring a future value makes `Date.now() >= claimTimestamp + TTL` false for the
+  // whole now..future+TTL window, extending the 409 lockout well past the 10-min TTL.
+  if (
+    !Number.isFinite(claimTimestamp) ||
+    claimTimestamp > Date.now() ||
+    Date.now() >= claimTimestamp + SETUP_CLAIM_TTL_MS
+  ) {
     return null;
   }
 
@@ -160,6 +168,9 @@ async function getActiveSetupClaimProof(): Promise<string | null> {
  * requirement of a non-empty `setup_claim_proof`, so the guidance matches the
  * real re-claim gate: if the proof is missing/corrupt, claimInstance does NOT
  * block, so this returns null instead of falsely flagging claimHeldElsewhere.
+ * Future `setup_claimed_at` values are treated as untrusted (mirrors
+ * getActiveSetupClaimProof) so a skewed/tampered timestamp can't push the
+ * reported expiry past the real re-claim window.
  */
 async function getActiveSetupClaimExpiry(): Promise<number | null> {
   if (!(await isSetupClaimed())) {
@@ -175,7 +186,10 @@ async function getActiveSetupClaimExpiry(): Promise<number | null> {
   }
 
   const claimTimestamp = Number(claimTimestampRaw);
-  if (!Number.isFinite(claimTimestamp)) {
+  // Future timestamps are untrusted (see getActiveSetupClaimProof): a tampered or
+  // clock-skewed value would otherwise push `expiry` far beyond the 10-min TTL and
+  // strand the user past the real re-claim window the gate actually enforces.
+  if (!Number.isFinite(claimTimestamp) || claimTimestamp > Date.now()) {
     return null;
   }
 

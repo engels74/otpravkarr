@@ -37,6 +37,33 @@ function collectSourceFiles(dir: string, acc: string[] = []): string[] {
   return acc;
 }
 
+// Both guards in this suite are AST-based and scoped to `.ts` files. We parse
+// with the TypeScript compiler instead of scanning text so that comments,
+// strings, and template literals (e.g. the explanatory comment above the real
+// call site) can never be mistaken for a reference. `.svelte` files are not
+// scanned: ADMIN_OAUTH_COOKIE_OPTIONS lives in a `$lib/server/` module, so any
+// `.svelte` (client) import of it would be a SvelteKit build error — none exist
+// today and none legitimately could.
+
+// True iff the module references ADMIN_OAUTH_COOKIE_OPTIONS as code (an
+// `Identifier` node), not merely as a comment or string mention.
+function referencesAdminOauthCookieOptions(fileName: string, content: string): boolean {
+  const source = ts.createSourceFile(fileName, content, ts.ScriptTarget.Latest, true);
+  let found = false;
+
+  const visit = (node: ts.Node): void => {
+    if (found) return;
+    if (ts.isIdentifier(node) && node.text === "ADMIN_OAUTH_COOKIE_OPTIONS") {
+      found = true;
+      return;
+    }
+    ts.forEachChild(node, visit);
+  };
+
+  visit(source);
+  return found;
+}
+
 // Resolve the trailing identifier of a `.set(...)` receiver so both
 // `cookies.set(...)` and `event.cookies.set(...)` are recognised, while
 // unrelated `.set(...)` calls (Map, Set, etc.) are not.
@@ -47,12 +74,9 @@ function receiverIsCookies(expression: ts.Expression): boolean {
 }
 
 // Count `cookies.set(...)` calls whose argument list references
-// ADMIN_OAUTH_COOKIE_OPTIONS, using the TypeScript parser rather than a text
-// scan. Parsing structurally ignores comments, strings, and template literals,
-// so a documentation mention of `cookies.set(` (e.g. the explanatory comment
-// above the real call site) can never be miscounted as a call. We only parse
-// `.ts` files: the sensitive cookie code lives in server `.ts` modules, and the
-// file-scope guard above already covers `.svelte` files via a plain-string check.
+// ADMIN_OAUTH_COOKIE_OPTIONS. Parsing the AST (rather than scanning text) keeps
+// a documentation mention of `cookies.set(` from ever being miscounted as a
+// call.
 function countAdminOauthCookieSetCalls(fileName: string, content: string): number {
   const source = ts.createSourceFile(fileName, content, ts.ScriptTarget.Latest, true);
   let count = 0;
@@ -80,7 +104,8 @@ describe("ADMIN_OAUTH_COOKIE_OPTIONS single-call-site guard (ISSUE-001)", () => 
   const files = collectSourceFiles(SRC_ROOT);
   const usageFiles = files.filter(
     (file) =>
-      readFileSync(file, "utf8").includes("ADMIN_OAUTH_COOKIE_OPTIONS") &&
+      file.endsWith(".ts") &&
+      referencesAdminOauthCookieOptions(file, readFileSync(file, "utf8")) &&
       !file.replaceAll("\\", "/").endsWith(DEFINITION_FILE),
   );
 

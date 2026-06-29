@@ -92,7 +92,13 @@ export async function createSyncJob(defaultIntervalMs = DEFAULT_INTERVAL_MS): Pr
           client,
           plexAdminToken,
         );
-        log("sync.completed", { report, quarantine, subscriptions, ecmScope });
+        log("sync.completed", {
+          trigger: "scheduler",
+          report,
+          quarantine,
+          subscriptions,
+          ecmScope,
+        });
       } catch (error) {
         log("sync.error", {
           error: error instanceof Error ? error.message : String(error),

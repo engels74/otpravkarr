@@ -1,6 +1,6 @@
 // @vitest-environment node
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   requireAdminApi: vi.fn(),
@@ -70,6 +70,18 @@ function resetAll() {
   mocks.runFullReconcile.mockClear();
   mocks.runExclusive.mockClear();
 }
+
+// The success path emits a structured operational log (console.log(JSON.stringify(...)))
+// in +server.ts; stub it so test stdout stays clean (mirrors sync.test.ts).
+const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+afterEach(() => {
+  consoleSpy.mockClear();
+});
+
+afterAll(() => {
+  consoleSpy.mockRestore();
+});
 
 describe("POST /api/internal/sync", () => {
   beforeEach(() => {

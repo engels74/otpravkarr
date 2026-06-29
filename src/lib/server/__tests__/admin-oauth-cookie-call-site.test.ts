@@ -2,6 +2,7 @@
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+import * as ts from "typescript";
 import { describe, expect, it } from "vitest";
 
 // ISSUE-001 single-call-site guard. ADMIN_OAUTH_COOKIE_OPTIONS relaxes the admin
@@ -36,33 +37,42 @@ function collectSourceFiles(dir: string, acc: string[] = []): string[] {
   return acc;
 }
 
+// Resolve the trailing identifier of a `.set(...)` receiver so both
+// `cookies.set(...)` and `event.cookies.set(...)` are recognised, while
+// unrelated `.set(...)` calls (Map, Set, etc.) are not.
+function receiverIsCookies(expression: ts.Expression): boolean {
+  if (ts.isIdentifier(expression)) return expression.text === "cookies";
+  if (ts.isPropertyAccessExpression(expression)) return expression.name.text === "cookies";
+  return false;
+}
+
 // Count `cookies.set(...)` calls whose argument list references
-// ADMIN_OAUTH_COOKIE_OPTIONS. For each call site we track parenthesis depth to
-// capture the exact argument list (up to its matching `)`), then test that slice
-// for the marker. Bounding the scan by the structural close-paren — rather than a
-// lexical `;`, the first `)`, or a newline — keeps the guard correct regardless of
-// formatting: inner calls/object literals in earlier args don't truncate the scan,
-// and prose mentions of the option outside an argument list (an explanatory comment
-// above the call, or the import statement) are never miscounted.
-function countAdminOauthCookieSetCalls(content: string): number {
-  const marker = "cookies.set(";
+// ADMIN_OAUTH_COOKIE_OPTIONS, using the TypeScript parser rather than a text
+// scan. Parsing structurally ignores comments, strings, and template literals,
+// so a documentation mention of `cookies.set(` (e.g. the explanatory comment
+// above the real call site) can never be miscounted as a call. We only parse
+// `.ts` files: the sensitive cookie code lives in server `.ts` modules, and the
+// file-scope guard above already covers `.svelte` files via a plain-string check.
+function countAdminOauthCookieSetCalls(fileName: string, content: string): number {
+  const source = ts.createSourceFile(fileName, content, ts.ScriptTarget.Latest, true);
   let count = 0;
-  let index = content.indexOf(marker);
-  while (index !== -1) {
-    let depth = 1;
-    let cursor = index + marker.length;
-    const argsStart = cursor;
-    while (cursor < content.length && depth > 0) {
-      const char = content[cursor];
-      if (char === "(") depth += 1;
-      else if (char === ")") depth -= 1;
-      cursor += 1;
-    }
-    if (content.slice(argsStart, cursor - 1).includes("ADMIN_OAUTH_COOKIE_OPTIONS")) {
+
+  const visit = (node: ts.Node): void => {
+    if (
+      ts.isCallExpression(node) &&
+      ts.isPropertyAccessExpression(node.expression) &&
+      node.expression.name.text === "set" &&
+      receiverIsCookies(node.expression.expression) &&
+      node.arguments.some(
+        (arg) => ts.isIdentifier(arg) && arg.text === "ADMIN_OAUTH_COOKIE_OPTIONS",
+      )
+    ) {
       count += 1;
     }
-    index = content.indexOf(marker, cursor);
-  }
+    ts.forEachChild(node, visit);
+  };
+
+  visit(source);
   return count;
 }
 
@@ -83,7 +93,8 @@ describe("ADMIN_OAUTH_COOKIE_OPTIONS single-call-site guard (ISSUE-001)", () => 
 
   it("is used as a cookies.set option exactly once", () => {
     const totalSetCalls = files.reduce((count, file) => {
-      return count + countAdminOauthCookieSetCalls(readFileSync(file, "utf8"));
+      if (!file.endsWith(".ts")) return count;
+      return count + countAdminOauthCookieSetCalls(file, readFileSync(file, "utf8"));
     }, 0);
     expect(totalSetCalls).toBe(1);
   });

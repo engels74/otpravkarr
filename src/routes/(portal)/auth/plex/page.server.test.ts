@@ -120,6 +120,13 @@ vi.mock("$lib/server/auth", () => ({
     sameSite: "strict",
     maxAge: 3600,
   },
+  ADMIN_OAUTH_COOKIE_OPTIONS: {
+    path: "/",
+    httpOnly: true,
+    secure: false,
+    sameSite: "lax",
+    maxAge: 3600,
+  },
   ADMIN_SESSION_TTL: 3600,
   getConfiguredAdminAccount: mocks.getConfiguredAdminAccount,
   SESSION_COOKIE_NAME: "otpravkarr_session",
@@ -297,10 +304,29 @@ describe("plex OAuth callback — load", () => {
   it("logs the owner in as admin and redirects to /dashboard", async () => {
     state.accountId = 12345; // owner == identity
     const { load } = await importServer();
-    const { event } = loadEvent();
+    const { event, set } = loadEvent();
     await expect(load(event)).rejects.toMatchObject({ status: 303, location: "/dashboard" });
     expect(mocks.createSession).toHaveBeenCalledWith("admin", "admin", 3600);
     expect(mocks.provisionUser).not.toHaveBeenCalled();
+    // ISSUE-001: the owner-OAuth admin cookie must be SameSite=Lax so it survives
+    // the cross-site redirect to /dashboard. Strict would be withheld → /login.
+    expect(set).toHaveBeenCalledWith(
+      "otpravkarr_session",
+      "session-id",
+      expect.objectContaining({ sameSite: "lax" }),
+    );
+  });
+
+  it("issues the owner-OAuth admin cookie as SameSite=Lax, not Strict", async () => {
+    state.accountId = 12345; // owner == identity
+    const { load } = await importServer();
+    const { event, set } = loadEvent();
+    await expect(load(event)).rejects.toMatchObject({ status: 303, location: "/dashboard" });
+    const sessionSet = set.mock.calls.find((call: unknown[]) => call[0] === "otpravkarr_session");
+    expect(sessionSet).toBeDefined();
+    const options = sessionSet?.[2] as { sameSite?: string } | undefined;
+    expect(options?.sameSite).toBe("lax");
+    expect(options?.sameSite).not.toBe("strict");
   });
 
   it("throws 403 when the Plex account is not an accepted friend", async () => {

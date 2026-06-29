@@ -12,7 +12,7 @@ import { fetchFriends } from "$lib/plex/friends";
 import { completeOAuth, removePendingOAuth } from "$lib/plex/oauth";
 import { PlexAuthError, type PlexIdentity } from "$lib/plex/types";
 import {
-  ADMIN_COOKIE_OPTIONS,
+  ADMIN_OAUTH_COOKIE_OPTIONS,
   ADMIN_SESSION_TTL,
   getConfiguredAdminAccount,
   isSecure,
@@ -239,7 +239,10 @@ export const load: PageServerLoad = async ({ cookies, getClientAddress }) => {
       deleteSession(priorSessionId);
     }
     const sessionId = createSession(admin.username, "admin", ADMIN_SESSION_TTL);
-    cookies.set(SESSION_COOKIE_NAME, sessionId, ADMIN_COOKIE_OPTIONS);
+    // SameSite=Lax (ADMIN_OAUTH_COOKIE_OPTIONS) so the cookie survives the
+    // cross-site OAuth redirect to /dashboard; sessionResolver reconverges it to
+    // Strict on the next authenticated request. See auth.ts for the rationale.
+    cookies.set(SESSION_COOKIE_NAME, sessionId, ADMIN_OAUTH_COOKIE_OPTIONS);
 
     throw redirect(303, "/dashboard");
   }

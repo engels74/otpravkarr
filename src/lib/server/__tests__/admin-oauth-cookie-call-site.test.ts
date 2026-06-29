@@ -36,6 +36,36 @@ function collectSourceFiles(dir: string, acc: string[] = []): string[] {
   return acc;
 }
 
+// Count `cookies.set(...)` calls whose argument list references
+// ADMIN_OAUTH_COOKIE_OPTIONS. For each call site we track parenthesis depth to
+// capture the exact argument list (up to its matching `)`), then test that slice
+// for the marker. Bounding the scan by the structural close-paren — rather than a
+// lexical `;`, the first `)`, or a newline — keeps the guard correct regardless of
+// formatting: inner calls/object literals in earlier args don't truncate the scan,
+// and prose mentions of the option outside an argument list (an explanatory comment
+// above the call, or the import statement) are never miscounted.
+function countAdminOauthCookieSetCalls(content: string): number {
+  const marker = "cookies.set(";
+  let count = 0;
+  let index = content.indexOf(marker);
+  while (index !== -1) {
+    let depth = 1;
+    let cursor = index + marker.length;
+    const argsStart = cursor;
+    while (cursor < content.length && depth > 0) {
+      const char = content[cursor];
+      if (char === "(") depth += 1;
+      else if (char === ")") depth -= 1;
+      cursor += 1;
+    }
+    if (content.slice(argsStart, cursor - 1).includes("ADMIN_OAUTH_COOKIE_OPTIONS")) {
+      count += 1;
+    }
+    index = content.indexOf(marker, cursor);
+  }
+  return count;
+}
+
 describe("ADMIN_OAUTH_COOKIE_OPTIONS single-call-site guard (ISSUE-001)", () => {
   const files = collectSourceFiles(SRC_ROOT);
   const usageFiles = files.filter(
@@ -53,13 +83,7 @@ describe("ADMIN_OAUTH_COOKIE_OPTIONS single-call-site guard (ISSUE-001)", () => 
 
   it("is used as a cookies.set option exactly once", () => {
     const totalSetCalls = files.reduce((count, file) => {
-      const content = readFileSync(file, "utf8");
-      // Bound the scan at the statement terminator (`;`) rather than the first
-      // `)`, so a call whose earlier args contain a `)` (e.g. a function call like
-      // cookies.set(getName(), sessionId, ADMIN_OAUTH_COOKIE_OPTIONS)) is still
-      // counted instead of slipping past the guard.
-      const matches = content.match(/cookies\.set\([^;]*ADMIN_OAUTH_COOKIE_OPTIONS/g);
-      return count + (matches?.length ?? 0);
+      return count + countAdminOauthCookieSetCalls(readFileSync(file, "utf8"));
     }, 0);
     expect(totalSetCalls).toBe(1);
   });

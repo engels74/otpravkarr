@@ -131,13 +131,40 @@ async function isSetupClaimed(): Promise<boolean> {
   return claimed === SETUP_CLAIMED_VALUE;
 }
 
+/**
+ * Read the encrypted `setup_claim_proof`, tolerating decryption failures.
+ *
+ * `getConfig` calls `decrypt` for the encrypted proof row, which throws
+ * `DecryptionError` on a corrupt/tampered ciphertext or after an
+ * `OTPRAVKARR_SECRET` rotation (HKDF key change → GCM auth-tag mismatch).
+ * Letting that propagate would 500 GET /setup and POST ?/claimInstance instead
+ * of the documented "missing/corrupt proof → null" fallback. An unreadable proof
+ * cannot verify any claim, so treat it as "no active claim" and surface it for
+ * observability (matching the scheduler's structured-log style) rather than
+ * swallowing it silently.
+ */
+async function readSetupClaimProof(): Promise<string | null> {
+  try {
+    return await getConfig(SETUP_CLAIM_PROOF_CONFIG_KEY);
+  } catch (error) {
+    console.log(
+      JSON.stringify({
+        timestamp: new Date().toISOString(),
+        event: "setup.claim_proof.unreadable",
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    );
+    return null;
+  }
+}
+
 async function getActiveSetupClaimProof(): Promise<string | null> {
   if (!(await isSetupClaimed())) {
     return null;
   }
 
   const [expectedProof, claimTimestampRaw] = await Promise.all([
-    getConfig(SETUP_CLAIM_PROOF_CONFIG_KEY),
+    readSetupClaimProof(),
     getConfig(SETUP_CLAIMED_AT_CONFIG_KEY),
   ]);
   if (!expectedProof || !claimTimestampRaw) {
@@ -149,6 +176,9 @@ async function getActiveSetupClaimProof(): Promise<string | null> {
   // site stores String(Date.now()), so a legitimate timestamp is never ahead of now.
   // Honoring a future value makes `Date.now() >= claimTimestamp + TTL` false for the
   // whole now..future+TTL window, extending the 409 lockout well past the 10-min TTL.
+  // A backward clock step (e.g. NTP correction) can briefly make a legitimate claim
+  // look future and allow re-claiming early — accepted: re-claim still requires a
+  // valid bootstrap token, so erring toward re-claimability beats unbounded lockout.
   if (
     !Number.isFinite(claimTimestamp) ||
     claimTimestamp > Date.now() ||
@@ -178,7 +208,7 @@ async function getActiveSetupClaimExpiry(): Promise<number | null> {
   }
 
   const [expectedProof, claimTimestampRaw] = await Promise.all([
-    getConfig(SETUP_CLAIM_PROOF_CONFIG_KEY),
+    readSetupClaimProof(),
     getConfig(SETUP_CLAIMED_AT_CONFIG_KEY),
   ]);
   if (!expectedProof || !claimTimestampRaw) {

@@ -413,6 +413,95 @@ describe("setup claim ownership", () => {
     });
   });
 
+  it("does not 500 on load when the encrypted setup_claim_proof cannot be decrypted (returns null)", async () => {
+    state.configValues.set(setupClaimedKey, "true");
+    // Timestamp present + within TTL, but the encrypted proof row is corrupt /
+    // undecryptable (e.g. OTPRAVKARR_SECRET rotation → GCM auth-tag mismatch), so
+    // getConfig throws DecryptionError for it. load must fall back to "no active
+    // claim" (the documented "missing/corrupt proof → null" contract), not 500.
+    state.configValues.set(setupClaimedAtKey, String(Date.now()));
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    mocks.getConfig.mockImplementation(async (key: string) => {
+      if (key === setupClaimProofKey) {
+        throw new Error("Decryption failed: authentication tag mismatch or corrupted data");
+      }
+      return state.configValues.get(key) ?? null;
+    });
+    try {
+      const { cookies } = createCookies(); // cookie lost, no admin yet → would-be stranded
+
+      const { load } = await import("./+page.server");
+      const result = await load({
+        url: new URL("http://localhost/setup"),
+        cookies,
+      } as unknown as Parameters<typeof load>[0]);
+
+      expect(result).toMatchObject({
+        claimActive: false,
+        claimHeldElsewhere: false,
+        claimRetryAt: null,
+      });
+      // The decryption failure is surfaced for observability, not swallowed silently.
+      expect(logSpy).toHaveBeenCalledWith(expect.stringContaining("setup.claim_proof.unreadable"));
+    } finally {
+      logSpy.mockRestore();
+      mocks.getConfig.mockImplementation(
+        async (key: string) => state.configValues.get(key) ?? null,
+      );
+    }
+  });
+
+  it("lets a valid bootstrap token claim setup when the stored proof is undecryptable (not 500/409)", async () => {
+    const claimProof = "55555555-5555-5555-5555-555555555555";
+    const randomUuidSpy = vi.spyOn(crypto, "randomUUID").mockReturnValue(claimProof);
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    mocks.getConfig.mockImplementation(async (key: string) => {
+      if (key === setupClaimProofKey) {
+        throw new Error("Decryption failed: authentication tag mismatch or corrupted data");
+      }
+      return state.configValues.get(key) ?? null;
+    });
+    try {
+      state.configValues.set(setupClaimedKey, "true");
+      state.configValues.set(setupClaimedAtKey, String(Date.now()));
+      const { cookies, setCalls } = createCookies(); // no matching claim cookie
+
+      const body = new FormData();
+      body.set("token", "valid-token");
+      const request = new Request("http://localhost/setup", { method: "POST", body });
+
+      const { actions } = await import("./+page.server");
+      const claimInstance = actions.claimInstance;
+      if (!claimInstance) {
+        throw new Error("claimInstance action is undefined");
+      }
+
+      // An undecryptable proof cannot verify any claim, so claimInstance must treat
+      // it as no active claim and proceed to token validation — not 500 (throw) or
+      // 409 (falsely blocked by a "claim" it can't even read).
+      const result = await claimInstance({
+        request,
+        getClientAddress: () => "127.0.0.1",
+        cookies,
+      } as unknown as Parameters<typeof claimInstance>[0]);
+
+      expect(result).toEqual({ success: true });
+      expect(mocks.validateBootstrapToken).toHaveBeenCalledWith("valid-token");
+      expect(setCalls).toContainEqual(
+        expect.objectContaining({
+          name: setupClaimCookie,
+          value: claimProof,
+        }),
+      );
+    } finally {
+      randomUuidSpy.mockRestore();
+      logSpy.mockRestore();
+      mocks.getConfig.mockImplementation(
+        async (key: string) => state.configValues.get(key) ?? null,
+      );
+    }
+  });
+
   it("resumes at Plex step when an admin already exists", async () => {
     mocks.adminExists.mockReturnValue(true);
     state.configValues.set(setupClaimedKey, "true");

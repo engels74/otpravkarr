@@ -54,14 +54,25 @@ let syncIntervalError = $derived(
   sectionMessage.sync?.type === "error" ? sectionMessage.sync.text : "",
 );
 
-function makeEnhance(section: string) {
+function makeEnhance(section: string, { reset = true }: { reset?: boolean } = {}) {
   return () => {
     sectionSubmitting[section] = true;
     delete sectionMessage[section];
-    return async ({ result, update }: { result: ActionResult; update: () => Promise<void> }) => {
+    return async ({
+      result,
+      update,
+    }: {
+      result: ActionResult;
+      update: (options?: { reset?: boolean; invalidateAll?: boolean }) => Promise<void>;
+    }) => {
       sectionSubmitting[section] = false;
       if (result.type === "success") {
-        await update();
+        // ISSUE-008: the security form's Allowed Origins is an uncontrolled
+        // textarea. The default reset:true runs form.reset() and blanks it after
+        // save. Pass reset:false for that section so the saved value sticks. The
+        // Plex/Dispatcharr "leave blank to keep current" password fields keep the
+        // default reset so an entered secret is cleared from the DOM after save.
+        await update({ reset });
         const msg =
           (result.data as { message?: string } | undefined)?.message ??
           "Settings saved successfully.";
@@ -285,7 +296,11 @@ function makeEnhance(section: string) {
       <Card.Title class="text-base">Security</Card.Title>
       <Card.Description>Configure CORS and origin validation.</Card.Description>
     </Card.Header>
-    <form method="POST" action="?/updateSecurity" use:enhance={makeEnhance("security")}>
+    <form
+      method="POST"
+      action="?/updateSecurity"
+      use:enhance={makeEnhance("security", { reset: false })}
+    >
       <Card.Content class="grid gap-4">
         <div class="grid gap-1.5">
           <Label for="allowed_origins">Allowed origins</Label>

@@ -72,7 +72,7 @@ function clearFiltered(): void {
       {selected.size} selected · {groups.length} available
     </p>
     {#if !disabled}
-      <div class="flex gap-2">
+      <div class="flex flex-wrap gap-2">
         <Button type="button" variant="outline" size="sm" onclick={selectFiltered}>
           Select {normalizedQuery ? "filtered" : "all"}
         </Button>

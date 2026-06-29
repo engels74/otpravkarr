@@ -618,7 +618,7 @@ async function copyOneTimePassword() {
               </span>
             </span>
           </label>
-          <div class="mt-2 flex justify-end">
+          <div class="mt-2 flex flex-wrap justify-end">
             <Button type="submit" variant="outline" size="sm" disabled={submitting}>
               {submitting ? "Saving..." : "Save lock"}
             </Button>

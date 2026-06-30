@@ -226,6 +226,18 @@ describe("portal page server", () => {
   // ── load ──
 
   describe("load", () => {
+    it("redirects an authenticated admin to /dashboard", async () => {
+      const { load } = await import("./+page.server");
+      const { cookies } = createCookies();
+
+      await expect(
+        load({
+          locals: { admin: { id: 1, username: "admin" } },
+          cookies,
+        } as unknown as Parameters<typeof load>[0]),
+      ).rejects.toMatchObject({ status: 303, location: "/dashboard" });
+    });
+
     it("returns unauthenticated when no user in locals", async () => {
       const { load } = await import("./+page.server");
       const { cookies } = createCookies();

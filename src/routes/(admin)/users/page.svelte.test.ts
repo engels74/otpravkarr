@@ -38,9 +38,13 @@ vi.mock("$app/forms", () => ({
   ) => {
     const onSubmit = async (event: Event) => {
       event.preventDefault();
-      const callback = submit?.();
+      // Only drive the enhance handler when a result is queued; otherwise leave
+      // the form untouched so we never trigger the component's synchronous
+      // `submitting = true` side effect without also resolving it back to false.
       const result = state.queuedResults.shift();
-      if (!callback || !result) return;
+      if (!result) return;
+      const callback = submit?.();
+      if (!callback) return;
       await callback({
         result,
         update: async (options?: { reset?: boolean; invalidateAll?: boolean }) => {

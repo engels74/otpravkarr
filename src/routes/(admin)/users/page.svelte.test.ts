@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/svelte";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { UserMapping } from "$lib/db/types";
 
@@ -74,7 +74,9 @@ function mockFetch(response: Response | Promise<Response>) {
 async function renderAndClickRotate() {
   render(UsersPage, { props: { data: defaultData } });
   await fireEvent.click(screen.getByRole("button", { name: "Open actions for testuser" }));
-  await fireEvent.click(await screen.findByText("Rotate Credentials"));
+  await fireEvent.click(await screen.findByRole("menuitem", { name: /Rotate Credentials/ }));
+  const dialog = await screen.findByRole("dialog");
+  await fireEvent.click(within(dialog).getByRole("button", { name: /Rotate now/ }));
 }
 
 describe("admin users page", () => {
@@ -134,6 +136,26 @@ describe("admin users page", () => {
     await waitFor(() => {
       expect(mocks.toastError).toHaveBeenCalledWith("Failed to rotate credentials.");
     });
+    expect(mocks.toastSuccess).not.toHaveBeenCalled();
+    expect(mocks.invalidateAll).not.toHaveBeenCalled();
+  });
+
+  it("gates rotation behind the confirm dialog and does not rotate on cancel", async () => {
+    const fetchMock = mockFetch(Response.json({ ok: true }));
+
+    render(UsersPage, { props: { data: defaultData } });
+    await fireEvent.click(screen.getByRole("button", { name: "Open actions for testuser" }));
+    await fireEvent.click(await screen.findByRole("menuitem", { name: /Rotate Credentials/ }));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByRole("button", { name: /Rotate now/ })).toBeTruthy();
+    // Opening the dialog must not rotate yet.
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    await fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+
+    // Cancelling must leave the rotate fetch untouched.
+    expect(fetchMock).not.toHaveBeenCalled();
     expect(mocks.toastSuccess).not.toHaveBeenCalled();
     expect(mocks.invalidateAll).not.toHaveBeenCalled();
   });

@@ -181,16 +181,36 @@ function makeEnhanceHandler() {
 function makeGroupLockEnhanceHandler() {
   return () => {
     submitting = true;
-    return async ({ result, update }: { result: ActionResult; update: () => Promise<void> }) => {
+    return async ({
+      result,
+      update,
+    }: {
+      result: ActionResult;
+      update: (options?: { reset?: boolean; invalidateAll?: boolean }) => Promise<void>;
+    }) => {
       try {
         if (result.type === "success") {
           toast.success("Lock updated.");
-          await update();
+          // ISSUE-001: this lock <form> stays open after save (the handler does
+          // not close the dialog), so the default reset:true would run form.reset()
+          // and visibly revert the just-toggled `locked` checkbox to unchecked.
+          // The form only holds persisted state, so reset:false keeps the saved
+          // value (which equals what setGroupLock persisted verbatim).
+          await update({ reset: false });
         } else if (result.type === "failure") {
           toast.error(
             (result.data as { error?: string } | undefined)?.error ?? "Failed to update lock.",
           );
-          await update();
+          await update({ reset: false });
+          // On a rejected save the attempted toggle was NOT persisted, so restore
+          // the authoritative stored value instead of leaving the optimistic toggle
+          // (or letting form.reset() force it unchecked). update() above keeps the
+          // default invalidateAll, so data.mappings has just been reloaded from the
+          // server — read the live row (not the once-captured openGroupDialog
+          // snapshot) so this stays correct even after an earlier successful save in
+          // the same still-open dialog.
+          lockEnabled =
+            data.mappings.find((mm) => mm.id === selectedMapping?.id)?.group_selection_locked === 1;
         } else {
           await applyAction(result);
         }

@@ -250,4 +250,37 @@ describe("admin settings page", () => {
 
     expect(apiKeyInput.value).toBe("");
   });
+
+  it("keeps the self-select checkbox toggled after a successful save (ISSUE-001)", async () => {
+    state.queuedResults.push({
+      type: "success",
+      data: { message: "Settings saved successfully." },
+    });
+
+    // Start from the unchecked default so a stray form.reset() would visibly
+    // revert the toggle (defaultChecked === false), making this discriminating.
+    const { container } = render(SettingsPage, {
+      props: {
+        data: {
+          ...defaultData,
+          subscription: { ...defaultData.subscription, allowSelfSelect: false },
+        },
+      },
+    });
+    const subscriptionForm = container.querySelector<HTMLFormElement>(
+      'form[action="?/updateDefaultProvisioning"]',
+    );
+    if (!subscriptionForm) throw new Error("Subscription form not found");
+    const checkbox = subscriptionForm.querySelector<HTMLInputElement>('input[type="checkbox"]');
+    if (!checkbox) throw new Error("Self-select checkbox not found");
+
+    await fireEvent.click(checkbox);
+    expect(checkbox.checked).toBe(true);
+
+    await fireEvent.submit(subscriptionForm);
+
+    // reset:false → the just-toggled checkbox keeps the saved value instead of
+    // being reverted to its unchecked HTML default by form.reset().
+    expect(checkbox.checked).toBe(true);
+  });
 });

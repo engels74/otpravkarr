@@ -246,7 +246,9 @@ const csrfValidator: Handle = async ({ event, resolve }) => {
   ) {
     // Internal admin/portal APIs without a session should report 401 (auth required)
     // rather than 403 (origin rejected) — the absence of credentials is a more useful
-    // signal than the origin allowlist outcome to a developer.
+    // signal than the origin allowlist outcome to a developer. This no-session 401 is
+    // distinct from the authz layer (requireAdminApi): once a session exists, that layer
+    // returns 403 for an authenticated non-admin and 401 for missing/stale credentials.
     const isInternalApi = event.url.pathname.startsWith("/api/internal/");
     const hasSession = event.locals.admin !== null || event.locals.user !== null;
     if (isInternalApi && !hasSession) {

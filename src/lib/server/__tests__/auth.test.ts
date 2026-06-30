@@ -355,7 +355,7 @@ describe("auth guards", () => {
       expect(deleteSpy).not.toHaveBeenCalled();
     });
 
-    it("throws error(401) when session type is 'user' not 'admin'", async () => {
+    it("throws error(403) when session type is 'user' not 'admin'", async () => {
       mockSession = { ...validUserSession };
       const { event, deleteSpy } = createMockEvent("sess-user-1");
 
@@ -365,8 +365,8 @@ describe("auth guards", () => {
       } catch (e: unknown) {
         const err = e as { type: string; status: number; body: { message: string } };
         expect(err.type).toBe("error");
-        expect(err.status).toBe(401);
-        expect(err.body).toEqual({ message: "Unauthorized" });
+        expect(err.status).toBe(403);
+        expect(err.body).toEqual({ message: "Forbidden" });
       }
 
       expect(deleteSpy).not.toHaveBeenCalled();

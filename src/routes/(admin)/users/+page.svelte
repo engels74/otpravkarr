@@ -49,12 +49,14 @@ let profileDialogOpen = $state(false);
 let detailDialogOpen = $state(false);
 let passwordDialogOpen = $state(false);
 let disableDialogOpen = $state(false);
+let rotateDialogOpen = $state(false);
 let deleteDialogOpen = $state(false);
 let selectedMapping = $state<UserMapping | null>(null);
 let selectedGroupSet = $state(new Set<number>());
 let lockEnabled = $state(false);
 let selectedProfileId = $state<number | null>(null);
 let disablingMapping = $state<UserMapping | null>(null);
+let rotatingMapping = $state<UserMapping | null>(null);
 let deletingMapping = $state<UserMapping | null>(null);
 let oneTimePassword = $state("");
 let passwordCopyStatus = $state<"idle" | "copied" | "failed">("idle");
@@ -65,6 +67,14 @@ let searchTimeout: ReturnType<typeof setTimeout> | undefined;
 let searchValue = $state(data.filters.search);
 $effect(() => {
   searchValue = data.filters.search;
+});
+
+// Clear the pending rotate target whenever the confirm dialog closes (confirm,
+// cancel, or dismiss) so a stale mapping never leaks into a later dialog.
+$effect(() => {
+  if (!rotateDialogOpen) {
+    rotatingMapping = null;
+  }
 });
 
 function formatRelativeTime(isoString: string | null): string {
@@ -360,6 +370,7 @@ async function rotateMappingCredentials(id: number) {
     toast.error("Failed to rotate credentials.");
   } finally {
     submitting = false;
+    rotateDialogOpen = false;
   }
 }
 
@@ -505,7 +516,10 @@ async function copyOneTimePassword() {
                     {#if m.provisioning_mode === "automatic" && m.dispatcharr_user_id != null}
                       <DropdownMenu.Item
                         disabled={submitting}
-                        onclick={() => rotateMappingCredentials(m.id)}
+                        onclick={() => {
+                          rotatingMapping = m;
+                          rotateDialogOpen = true;
+                        }}
                       >
                         <KeyRoundIcon class="h-3.5 w-3.5" />
                         Rotate Credentials
@@ -813,6 +827,31 @@ async function copyOneTimePassword() {
     {/if}
   </Dialog.Content>
 </Dialog.Root>
+
+<!-- Rotate Credentials Confirmation Dialog -->
+<ConfirmDialog
+  bind:open={rotateDialogOpen}
+  title={rotatingMapping
+    ? `Rotate credentials for ${rotatingMapping.plex_username}?`
+    : "Rotate credentials?"}
+  description="This generates a new password and invalidates the user's current M3U / playlist URL. They will need the new URL to keep streaming."
+>
+  {#snippet confirm()}
+    {#if rotatingMapping}
+      <Button
+        variant="destructive"
+        disabled={submitting}
+        onclick={() => {
+          const target = rotatingMapping;
+          if (!target) return;
+          void rotateMappingCredentials(target.id);
+        }}
+      >
+        {submitting ? "Rotating…" : "Rotate now"}
+      </Button>
+    {/if}
+  {/snippet}
+</ConfirmDialog>
 
 <!-- Disable User Confirmation Dialog -->
 <ConfirmDialog

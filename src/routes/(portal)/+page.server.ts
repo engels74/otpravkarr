@@ -58,6 +58,13 @@ interface PlatformEntry {
 }
 
 export const load = async ({ locals, cookies }: RequestEvent) => {
+  // Authenticated admins have no portal account (locals.user stays null), so
+  // mirror /login and /welcome and send them to the admin dashboard instead of
+  // the signed-out "Sign in with Plex" card.
+  if (locals.admin) {
+    throw redirect(303, "/dashboard");
+  }
+
   // Revoked (inactive) users see a different view. sessionResolver routes
   // inactive mappings to locals.revokedUser, keeping locals.user active-only.
   if (locals.revokedUser) {

@@ -67,9 +67,12 @@ function makeEnhance(section: string, { reset = true }: { reset?: boolean } = {}
     }) => {
       sectionSubmitting[section] = false;
       if (result.type === "success") {
-        // ISSUE-008: the security form's Allowed Origins is an uncontrolled
-        // textarea. The default reset:true runs form.reset() and blanks it after
-        // save. Pass reset:false for that section so the saved value sticks. The
+        // ISSUE-008/ISSUE-001: forms whose fields reflect persisted (non-secret)
+        // state must opt out of the default reset:true. form.reset() reverts bound
+        // inputs to their HTML defaults after save — blanking the security form's
+        // uncontrolled Allowed Origins textarea, and unchecking the subscription
+        // form's allow_user_self_select checkbox — even though the server saved the
+        // new value. Those sections pass reset:false so the saved value sticks. The
         // Plex/Dispatcharr "leave blank to keep current" password fields keep the
         // default reset so an entered secret is cleared from the DOM after save.
         await update({ reset });
@@ -385,7 +388,7 @@ function makeEnhance(section: string, { reset = true }: { reset?: boolean } = {}
       <form
         method="POST"
         action="?/updateDefaultProvisioning"
-        use:enhance={makeEnhance("subscription")}
+        use:enhance={makeEnhance("subscription", { reset: false })}
       >
         <input type="hidden" name="allow_user_self_select" value={String(allowSelfSelect)} />
         <input type="hidden" name="default_selectable_groups" value={selectableGroupsJson} />

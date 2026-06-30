@@ -4,6 +4,16 @@ import type { UserMapping } from "$lib/db/types";
 
 import UsersPage from "./+page.svelte";
 
+type MockActionResult = {
+  type: "success" | "failure" | "error";
+  data?: { error?: string };
+  error?: Error;
+};
+
+const state = vi.hoisted(() => ({
+  queuedResults: [] as MockActionResult[],
+}));
+
 const mocks = vi.hoisted(() => ({
   applyAction: vi.fn(async () => undefined),
   goto: vi.fn(async () => undefined),
@@ -13,7 +23,40 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("$app/forms", () => ({
-  enhance: () => ({ destroy() {} }),
+  // Settings-style harness: invoke the returned enhance callback with a queued
+  // result and a mock update() that mirrors SvelteKit's reset behaviour
+  // (form.reset() unless { reset: false }). Forms without a queued result are
+  // left untouched, so the existing dropdown/dialog tests are unaffected.
+  enhance: (
+    node: HTMLFormElement,
+    submit?: () =>
+      | ((args: {
+          result: MockActionResult;
+          update: (options?: { reset?: boolean; invalidateAll?: boolean }) => Promise<void>;
+        }) => Promise<void>)
+      | void,
+  ) => {
+    const onSubmit = async (event: Event) => {
+      event.preventDefault();
+      const callback = submit?.();
+      const result = state.queuedResults.shift();
+      if (!callback || !result) return;
+      await callback({
+        result,
+        update: async (options?: { reset?: boolean; invalidateAll?: boolean }) => {
+          if (options?.reset !== false) {
+            node.reset();
+          }
+        },
+      });
+    };
+    node.addEventListener("submit", onSubmit);
+    return {
+      destroy() {
+        node.removeEventListener("submit", onSubmit);
+      },
+    };
+  },
   applyAction: mocks.applyAction,
 }));
 
@@ -79,9 +122,22 @@ async function renderAndClickRotate() {
   await fireEvent.click(within(dialog).getByRole("button", { name: /Rotate now/ }));
 }
 
+async function openChangeGroupLockForm(data: typeof defaultData) {
+  render(UsersPage, { props: { data } });
+  await fireEvent.click(screen.getByRole("button", { name: "Open actions for testuser" }));
+  await fireEvent.click(await screen.findByRole("menuitem", { name: /Change Group/ }));
+  const dialog = await screen.findByRole("dialog");
+  const lockForm = dialog.querySelector<HTMLFormElement>('form[action="?/setGroupLock"]');
+  if (!lockForm) throw new Error("Lock form not found");
+  const checkbox = lockForm.querySelector<HTMLInputElement>('input[type="checkbox"]');
+  if (!checkbox) throw new Error("Lock checkbox not found");
+  return { lockForm, checkbox };
+}
+
 describe("admin users page", () => {
   beforeEach(() => {
     vi.unstubAllGlobals();
+    state.queuedResults = [];
     mocks.applyAction.mockClear();
     mocks.goto.mockClear();
     mocks.invalidateAll.mockClear();
@@ -244,5 +300,50 @@ describe("admin users page", () => {
     await fireEvent.click(screen.getByLabelText("Sports profile"));
 
     expect(saveButton.disabled).toBe(false);
+  });
+
+  it("keeps the lock checkbox checked after a successful Save lock (ISSUE-001)", async () => {
+    const { lockForm, checkbox } = await openChangeGroupLockForm({
+      ...defaultData,
+      groups: [{ id: 1, name: "Group A", channelCount: 5 }],
+    });
+
+    // Default mapping is unlocked → checkbox starts unchecked (defaultChecked
+    // false), so a stray form.reset() would revert the toggle: discriminating.
+    expect(checkbox.checked).toBe(false);
+    await fireEvent.click(checkbox);
+    expect(checkbox.checked).toBe(true);
+
+    state.queuedResults.push({ type: "success" });
+    await fireEvent.submit(lockForm);
+
+    // reset:false → no form.reset(); the just-toggled checkbox stays checked.
+    await waitFor(() => expect(checkbox.checked).toBe(true));
+    expect(mocks.toastSuccess).toHaveBeenCalledWith("Lock updated.");
+  });
+
+  it("restores the lock checkbox to the stored value after a failed Save lock (ISSUE-001)", async () => {
+    // Locked fixture: the checkbox starts CHECKED. Toggling it OFF then failing
+    // must restore it to checked (ground truth) — not leave the optimistic
+    // unlock and not force-uncheck via form.reset(). With the default unlocked
+    // fixture, ground-truth-restore and an erroneous reset both yield
+    // "unchecked", so this locked fixture is what makes the test discriminating.
+    const { lockForm, checkbox } = await openChangeGroupLockForm({
+      ...defaultData,
+      mappings: [{ ...mapping, group_selection_locked: 1 }],
+      groups: [{ id: 1, name: "Group A", channelCount: 5 }],
+    });
+
+    expect(checkbox.checked).toBe(true);
+    await fireEvent.click(checkbox); // attempt to unlock
+    expect(checkbox.checked).toBe(false);
+
+    state.queuedResults.push({ type: "failure", data: { error: "Failed to update lock." } });
+    await fireEvent.submit(lockForm);
+
+    // Rejected save → reflect the authoritative stored value (locked), not the
+    // un-persisted optimistic toggle.
+    await waitFor(() => expect(checkbox.checked).toBe(true));
+    expect(mocks.toastError).toHaveBeenCalledWith("Failed to update lock.");
   });
 });

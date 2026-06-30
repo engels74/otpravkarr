@@ -68,8 +68,10 @@ export const load: PageServerLoad = async (event) => {
   await requireAdmin(event);
   const { url } = event;
   const status = url.searchParams.get("status") ?? "all";
-  // Validate against the known modes; an unrecognized value (e.g. the hyphenated
-  // "self-managed") must fall back to "all" rather than silently mis-filtering.
+  // Validate against the known modes; an unrecognized value from a hand-crafted
+  // or invalid URL (e.g. the hyphenated "self-managed") must fall back to "all"
+  // rather than silently mis-filtering. The UI only ever emits the canonical
+  // "self_managed", so this fallback never affects normal navigation (ISSUE-002).
   const KNOWN_MODES = new Set(["all", "automatic", "self_managed", "staff"]);
   const modeParam = url.searchParams.get("mode") ?? "all";
   const mode = KNOWN_MODES.has(modeParam) ? modeParam : "all";

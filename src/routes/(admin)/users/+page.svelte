@@ -370,6 +370,7 @@ async function rotateMappingCredentials(id: number) {
     toast.error("Failed to rotate credentials.");
   } finally {
     submitting = false;
+    rotateDialogOpen = false;
   }
 }
 
@@ -843,7 +844,6 @@ async function copyOneTimePassword() {
         onclick={() => {
           const target = rotatingMapping;
           if (!target) return;
-          rotateDialogOpen = false;
           void rotateMappingCredentials(target.id);
         }}
       >

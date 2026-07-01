@@ -31,12 +31,18 @@ export interface GroupSubscriptionOutcome {
   groupIds: number[];
 }
 
-/** Parse a stored `dispatcharr_group_ids` JSON string into a safe number[]. */
+/**
+ * Parse a stored `dispatcharr_group_ids` JSON string into a normalized number[]:
+ * positive safe integers only, deduped and sorted. Mirrors the boundary check at
+ * the `changeGroup` input path and keeps the audit `before_group_ids` payload
+ * consistent with the (already deduped/sorted) `group_ids` "after" state.
+ */
 function parseStoredGroupIds(raw: string): number[] {
   try {
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter((v): v is number => Number.isInteger(v));
+    const ids = parsed.filter((v): v is number => Number.isSafeInteger(v) && v > 0);
+    return [...new Set(ids)].sort((a, b) => a - b);
   } catch {
     return [];
   }

@@ -103,7 +103,7 @@ function clearFiltered(): void {
                 onchange={() => toggle(group.id)}
                 {disabled}
               />
-              <span class="flex-1 truncate text-sm text-foreground">{group.name}</span>
+              <span class="min-w-0 flex-1 truncate text-sm text-foreground">{group.name}</span>
               {#if group.channelCount != null}
                 <span class="shrink-0 text-xs text-muted-foreground">
                   {group.channelCount}

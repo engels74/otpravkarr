@@ -24,4 +24,14 @@ describe("GroupPicker responsive layout (ISSUE-003)", () => {
     const count = screen.getByText("0 channels");
     expect(count.className).toContain("shrink-0");
   });
+
+  // ISSUE-004: `flex-1` alone leaves min-width:auto, so a long name can't shrink
+  // below its content and `truncate` never engages (overflowing the dialog at
+  // 390px). `min-w-0` is the effective fix; assert it alongside `truncate`.
+  it("lets long group names truncate via min-w-0", () => {
+    render(GroupPicker, { props: { groups, selected: new Set<number>() } });
+    const nameSpan = screen.getByText("Sports");
+    expect(nameSpan.className).toContain("min-w-0");
+    expect(nameSpan.className).toContain("truncate");
+  });
 });

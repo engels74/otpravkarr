@@ -16,7 +16,8 @@ function parseStoredGroupIds(raw: string): number[] {
   try {
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter((v): v is number => Number.isInteger(v));
+    const ids = parsed.filter((v): v is number => Number.isSafeInteger(v) && v > 0);
+    return [...new Set(ids)].sort((a, b) => a - b);
   } catch {
     return [];
   }
@@ -125,10 +126,28 @@ export const actions: Actions = {
       return fail(400, { error: "Invalid selection." });
     }
 
+    // Preserve admin-pinned groups that sit OUTSIDE the self-select catalog.
+    // The admin `changeGroup` action can assign any non-quarantine group, even
+    // ones not offered here; passing only the picker's ids to the bridge (which
+    // full-replaces the assignment) would silently drop those pins. Merge them
+    // back from the stored assignment. `preserved` is DB-derived, not
+    // client-supplied, so the `⊆ offeredIds` check above still fully guards the
+    // client picks. Quarantine ids come from the SAME live list as `offeredIds`,
+    // so they are never resurrected. Accepted last-writer-wins TOCTOU
+    // (pre-existing): the stored read here → bridge write spans awaited
+    // Dispatcharr round-trips, so a concurrent admin change on the same mapping
+    // can be clobbered — the prior full-replace already had this race.
+    const quarantineIds = new Set(
+      groupsResult.data.filter((g) => isQuarantineGroup(g.name)).map((g) => g.id),
+    );
+    const storedGroupIds = parseStoredGroupIds(mapping.dispatcharr_group_ids);
+    const preserved = storedGroupIds.filter((id) => !offeredIds.has(id) && !quarantineIds.has(id));
+    const finalGroupIds = [...new Set([...groupIds, ...preserved])];
+
     // applyGroupSubscription enforces on Dispatcharr (a zero-group selection
     // resolves to the empty profile — no channels, never the full catalog),
     // persists the selection, and writes the audit entry.
-    const result = await applyGroupSubscription(client, mapping.id, groupIds, {
+    const result = await applyGroupSubscription(client, mapping.id, finalGroupIds, {
       actor: user.plex_username,
       ipAddress: event.getClientAddress(),
     });

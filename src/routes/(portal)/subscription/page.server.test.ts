@@ -211,4 +211,113 @@ describe("subscription save action", () => {
     expect(result).toMatchObject({ status: 400 });
     expect(mocks.applyGroupSubscription).not.toHaveBeenCalled();
   });
+
+  // ISSUE-002: a self-service save must NOT drop admin-pinned groups that live
+  // outside the self-select catalog. The route merges those DB-derived ids back
+  // into the set passed to the bridge, without loosening the trust check on the
+  // client's own picks.
+  it("preserves admin-pinned out-of-catalog groups on save", async () => {
+    // Stored assignment includes group 5, which is not in the offered catalog
+    // ({1,2}) — an admin pinned it via changeGroup.
+    mocks.getUserMappingById.mockReturnValue(makeMapping({ dispatcharr_group_ids: "[1,2,5]" }));
+    const { actions } = await import("./+page.server");
+    const body = new FormData();
+    body.set("group_ids", JSON.stringify([1]));
+
+    let redirected: { status: number; location: string } | null = null;
+    try {
+      await actions.save?.(actionEvent(body) as unknown as Parameters<typeof actions.save>[0]);
+    } catch (e) {
+      redirected = e as { status: number; location: string };
+    }
+
+    expect(mocks.applyGroupSubscription).toHaveBeenCalledWith(expect.anything(), 1, [1, 5], {
+      actor: "alice",
+      ipAddress: "127.0.0.1",
+    });
+    expect(redirected?.status).toBe(303);
+    expect(redirected?.location).toBe("/subscription?saved=1");
+  });
+
+  it("never resurrects a quarantine group via the preserve merge", async () => {
+    // Stored includes 3=Graveyard (quarantine) and 5 (admin pin). Only 5 is
+    // preserved; the quarantine id is excluded via the same live list.
+    mocks.getUserMappingById.mockReturnValue(makeMapping({ dispatcharr_group_ids: "[1,5,3]" }));
+    const { actions } = await import("./+page.server");
+    const body = new FormData();
+    body.set("group_ids", JSON.stringify([1]));
+
+    try {
+      await actions.save?.(actionEvent(body) as unknown as Parameters<typeof actions.save>[0]);
+    } catch {
+      // redirect thrown on success — irrelevant to this assertion
+    }
+
+    expect(mocks.applyGroupSubscription).toHaveBeenCalledWith(
+      expect.anything(),
+      1,
+      [1, 5],
+      expect.anything(),
+    );
+  });
+
+  it("passes a stale preserved id through to the bridge (bridge drops the dead group)", async () => {
+    // Group 8 is stored but no longer exists in Dispatcharr's live list. The
+    // route does NOT liveness-filter preserved ids — dropping dead groups is the
+    // bridge's job (subscriptions.ts). So `final` still carries 8.
+    mocks.getUserMappingById.mockReturnValue(makeMapping({ dispatcharr_group_ids: "[1,8]" }));
+    const { actions } = await import("./+page.server");
+    const body = new FormData();
+    body.set("group_ids", JSON.stringify([2]));
+
+    try {
+      await actions.save?.(actionEvent(body) as unknown as Parameters<typeof actions.save>[0]);
+    } catch {
+      // redirect thrown on success
+    }
+
+    expect(mocks.applyGroupSubscription).toHaveBeenCalledWith(
+      expect.anything(),
+      1,
+      [2, 8],
+      expect.anything(),
+    );
+  });
+
+  it("rejects a client pick outside the offered catalog even with pins present", async () => {
+    mocks.getUserMappingById.mockReturnValue(makeMapping({ dispatcharr_group_ids: "[1,2,5]" }));
+    const { actions } = await import("./+page.server");
+    const body = new FormData();
+    // 5 is stored/pinned but NOT offered — the client must not be able to
+    // re-select it directly.
+    body.set("group_ids", JSON.stringify([5]));
+
+    const result = await actions.save?.(
+      actionEvent(body) as unknown as Parameters<typeof actions.save>[0],
+    );
+
+    expect(result).toMatchObject({ status: 400 });
+    expect(mocks.applyGroupSubscription).not.toHaveBeenCalled();
+  });
+
+  it("clearing all with no pins resolves to an empty selection", async () => {
+    // Stored ids are all inside the offered catalog, so nothing is preserved.
+    mocks.getUserMappingById.mockReturnValue(makeMapping({ dispatcharr_group_ids: "[1,2]" }));
+    const { actions } = await import("./+page.server");
+    const body = new FormData();
+    body.set("group_ids", JSON.stringify([]));
+
+    try {
+      await actions.save?.(actionEvent(body) as unknown as Parameters<typeof actions.save>[0]);
+    } catch {
+      // redirect thrown on success
+    }
+
+    expect(mocks.applyGroupSubscription).toHaveBeenCalledWith(
+      expect.anything(),
+      1,
+      [],
+      expect.anything(),
+    );
+  });
 });

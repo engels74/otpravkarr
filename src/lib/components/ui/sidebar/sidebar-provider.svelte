@@ -1,5 +1,6 @@
 <script lang="ts">
 import type { HTMLAttributes } from "svelte/elements";
+import { afterNavigate } from "$app/navigation";
 import * as Tooltip from "$lib/components/ui/tooltip/index.js";
 import { cn, type WithElementRef } from "$lib/utils.js";
 import { SIDEBAR_COOKIE_MAX_AGE, SIDEBAR_COOKIE_NAME } from "./constants.js";
@@ -26,6 +27,14 @@ const _sidebar = setSidebar({
     // biome-ignore lint/suspicious/noDocumentCookie: shadcn sidebar state persistence
     document.cookie = `${SIDEBAR_COOKIE_NAME}=${open}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`;
   },
+});
+
+// Auto-close the mobile drawer after in-drawer navigation. Must live in the
+// provider: it owns the sidebar context (set during its own render), so nav
+// links rendered by AdminSidebar's <script> cannot reach useSidebar(). Desktop
+// is a no-op (isMobile is false). Only the (admin) group uses this provider.
+afterNavigate(() => {
+  if (_sidebar.isMobile) _sidebar.setOpenMobile(false);
 });
 </script>
 

@@ -45,7 +45,7 @@ const _sidebar = useSidebar();
 			data-slot="sidebar"
 			data-mobile="true"
 			class={cn(
-				"bg-sidebar text-sidebar-foreground sidebar-mobile-width w-[var(--sidebar-width)] p-0 [&>button]:hidden",
+				"bg-sidebar text-sidebar-foreground sidebar-mobile-width w-[var(--sidebar-width)] p-0",
 				className
 			)}
 			{side}

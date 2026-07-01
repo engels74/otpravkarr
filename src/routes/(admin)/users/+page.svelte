@@ -610,7 +610,7 @@ async function copyOneTimePassword() {
 
 <!-- Change Group Dialog -->
 <Dialog.Root bind:open={groupDialogOpen}>
-  <Dialog.Content class="sm:max-w-lg">
+  <Dialog.Content class="sm:max-w-lg max-h-[calc(100dvh-2rem)] overflow-y-auto overflow-x-hidden">
     <Dialog.Header>
       <Dialog.Title>
         {data.groups.length === 0 ? "Add groups in Dispatcharr first" : "Change Group"}
@@ -685,7 +685,7 @@ async function copyOneTimePassword() {
 
 <!-- Change Profile Dialog -->
 <Dialog.Root bind:open={profileDialogOpen}>
-  <Dialog.Content class="sm:max-w-md">
+  <Dialog.Content class="sm:max-w-md max-h-[calc(100dvh-2rem)] overflow-y-auto overflow-x-hidden">
     <Dialog.Header>
       <Dialog.Title>
         {data.profiles.length === 0 ? "Add channel profiles in Dispatcharr first" : "Change Profile"}

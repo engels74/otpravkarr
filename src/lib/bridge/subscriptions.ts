@@ -32,6 +32,23 @@ export interface GroupSubscriptionOutcome {
 }
 
 /**
+ * Parse a stored `dispatcharr_group_ids` JSON string into a normalized number[]:
+ * positive safe integers only, deduped and sorted. Mirrors the boundary check at
+ * the `changeGroup` input path and keeps the audit `before_group_ids` payload
+ * consistent with the (already deduped/sorted) `group_ids` "after" state.
+ */
+function parseStoredGroupIds(raw: string): number[] {
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    const ids = parsed.filter((v): v is number => Number.isSafeInteger(v) && v > 0);
+    return [...new Set(ids)].sort((a, b) => a - b);
+  } catch {
+    return [];
+  }
+}
+
+/**
  * The single path that writes a user's channel-group subscription.
  *
  * Resolves the selected groups to otpravkarr-owned Channel Profiles (Model A),
@@ -66,6 +83,11 @@ export async function applyGroupSubscription(
     };
   }
   const dispatcharrUserId = mapping.dispatcharr_user_id;
+
+  // Snapshot the pre-write group assignment for the audit trail. `mapping` is
+  // read once above and never re-read, so this is the true "before" state even
+  // though the local mirror is only written near the end of this function.
+  const beforeGroupIds = parseStoredGroupIds(mapping.dispatcharr_group_ids);
 
   // Refuse to scope an admin-level user (profile filtering would not apply).
   const userResult = await retryResult(
@@ -162,6 +184,7 @@ export async function applyGroupSubscription(
       action: AuditAction.USER_GROUP_CHANGED,
       detail: {
         mapping_id: mappingId,
+        before_group_ids: beforeGroupIds,
         group_ids: sortedGroupIds,
         profile_ids: resolvedProfileIds,
       },

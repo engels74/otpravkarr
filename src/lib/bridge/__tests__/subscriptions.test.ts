@@ -164,6 +164,22 @@ describe("applyGroupSubscription", () => {
     );
   });
 
+  it("records the before/after group ids in the USER_GROUP_CHANGED audit entry", async () => {
+    // ISSUE-002: the audit trail must surface what the assignment WAS so an admin
+    // can see when a self-service save changed the pinned set.
+    vi.mocked(getUserMappingById).mockReturnValue(makeMapping({ dispatcharr_group_ids: "[2]" }));
+
+    const result = await applyGroupSubscription(client, 1, [1]);
+
+    expect(result.ok).toBe(true);
+    expect(appendAuditLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "user.group_changed",
+        detail: expect.objectContaining({ before_group_ids: [2], group_ids: [1] }),
+      }),
+    );
+  });
+
   it("assigns the UNION of profiles for multiple groups", async () => {
     const result = await applyGroupSubscription(client, 1, [1, 2]);
 

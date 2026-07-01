@@ -460,7 +460,7 @@ async function copyOneTimePassword() {
     <Input
       placeholder="Search users by username…"
       aria-label="Search users by username…"
-      class="w-[200px] text-foreground"
+      class="w-[260px] text-foreground"
       value={searchValue}
       oninput={onSearchInput}
     />

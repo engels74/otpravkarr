@@ -222,7 +222,7 @@ function formatDateLabel(value: DateValue | undefined): string {
         id="audit-actor-filter"
         aria-label="Filter by actor or user"
         placeholder="Filter by actor or user…"
-        class="h-8 w-40"
+        class="h-8 w-56"
         value={actorSearchValue}
         oninput={(e) => {
           const val = (e.currentTarget as HTMLInputElement).value;

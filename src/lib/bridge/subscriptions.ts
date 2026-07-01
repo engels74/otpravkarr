@@ -31,6 +31,17 @@ export interface GroupSubscriptionOutcome {
   groupIds: number[];
 }
 
+/** Parse a stored `dispatcharr_group_ids` JSON string into a safe number[]. */
+function parseStoredGroupIds(raw: string): number[] {
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((v): v is number => Number.isInteger(v));
+  } catch {
+    return [];
+  }
+}
+
 /**
  * The single path that writes a user's channel-group subscription.
  *
@@ -66,6 +77,11 @@ export async function applyGroupSubscription(
     };
   }
   const dispatcharrUserId = mapping.dispatcharr_user_id;
+
+  // Snapshot the pre-write group assignment for the audit trail. `mapping` is
+  // read once above and never re-read, so this is the true "before" state even
+  // though the local mirror is only written near the end of this function.
+  const beforeGroupIds = parseStoredGroupIds(mapping.dispatcharr_group_ids);
 
   // Refuse to scope an admin-level user (profile filtering would not apply).
   const userResult = await retryResult(
@@ -162,6 +178,7 @@ export async function applyGroupSubscription(
       action: AuditAction.USER_GROUP_CHANGED,
       detail: {
         mapping_id: mappingId,
+        before_group_ids: beforeGroupIds,
         group_ids: sortedGroupIds,
         profile_ids: resolvedProfileIds,
       },

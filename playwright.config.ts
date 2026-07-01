@@ -44,6 +44,7 @@ export default defineConfig({
         "admin-dashboard.spec.ts",
         "admin-users.spec.ts",
         "admin-audit-pagination.spec.ts",
+        "mobile-sidebar.spec.ts",
       ],
       dependencies: ["auth"],
       use: { storageState: ADMIN_STORAGE_STATE },

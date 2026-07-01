@@ -16,7 +16,8 @@ function parseStoredGroupIds(raw: string): number[] {
   try {
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter((v): v is number => Number.isInteger(v));
+    const ids = parsed.filter((v): v is number => Number.isSafeInteger(v) && v > 0);
+    return [...new Set(ids)].sort((a, b) => a - b);
   } catch {
     return [];
   }

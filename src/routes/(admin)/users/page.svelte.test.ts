@@ -6,7 +6,7 @@ import UsersPage from "./+page.svelte";
 
 type MockActionResult = {
   type: "success" | "failure" | "error";
-  data?: { error?: string };
+  data?: { error?: string; initialPassword?: string; reprovisioned?: boolean };
   error?: Error;
 };
 
@@ -324,6 +324,51 @@ describe("admin users page", () => {
     // reset:false → no form.reset(); the just-toggled checkbox stays checked.
     await waitFor(() => expect(checkbox.checked).toBe(true));
     expect(mocks.toastSuccess).toHaveBeenCalledWith("Lock updated.");
+  });
+
+  it("shows 'provisioned' (not 're-provisioned') OTP copy after an owner subscribe (ISSUE-002)", async () => {
+    render(UsersPage, { props: { data: defaultData } });
+
+    const ownerForm = document.querySelector<HTMLFormElement>('form[action="?/subscribeOwner"]');
+    if (!ownerForm) throw new Error("subscribeOwner form not found");
+
+    state.queuedResults.push({ type: "success", data: { initialPassword: "owner-pw" } });
+    await fireEvent.submit(ownerForm);
+
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText(/was provisioned with a new account/)).toBeTruthy();
+    expect(within(dialog).queryByText(/was re-provisioned/)).toBeNull();
+  });
+
+  it("resets OTP copy to 'provisioned' when an owner subscribe follows a re-enable (ISSUE-002 no stale flag)", async () => {
+    render(UsersPage, {
+      props: { data: { ...defaultData, mappings: [{ ...mapping, is_active: 0 }] } },
+    });
+
+    // Re-enable first → OTP dialog must read "re-provisioned".
+    await fireEvent.click(screen.getByRole("button", { name: "Open actions for testuser" }));
+    const enableForm = document.querySelector<HTMLFormElement>('form[action="?/enableUser"]');
+    if (!enableForm) throw new Error("enableUser form not found");
+    state.queuedResults.push({
+      type: "success",
+      data: { initialPassword: "reenable-pw", reprovisioned: true },
+    });
+    await fireEvent.submit(enableForm);
+
+    let dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText(/was re-provisioned with a new account/)).toBeTruthy();
+
+    // Then an owner subscribe in the same session must NOT inherit the stale flag.
+    const ownerForm = document.querySelector<HTMLFormElement>('form[action="?/subscribeOwner"]');
+    if (!ownerForm) throw new Error("subscribeOwner form not found");
+    state.queuedResults.push({ type: "success", data: { initialPassword: "owner-pw" } });
+    await fireEvent.submit(ownerForm);
+
+    dialog = await screen.findByRole("dialog");
+    await waitFor(() =>
+      expect(within(dialog).getByText(/was provisioned with a new account/)).toBeTruthy(),
+    );
+    expect(within(dialog).queryByText(/was re-provisioned/)).toBeNull();
   });
 
   it("restores the lock checkbox to the stored value after a failed Save lock (ISSUE-001)", async () => {

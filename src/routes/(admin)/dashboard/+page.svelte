@@ -368,10 +368,15 @@ async function runSyncNow() {
             All accepted friends are already mapped.
           </p>
         {:else}
-          <p class="mb-3 text-sm text-muted-foreground">
-            Friends listed here will be automatically provisioned when they sign in to the portal via Plex.
-          </p>
-          <ul class="space-y-3">
+          <div class="mb-3 flex items-start justify-between gap-2">
+            <p class="text-sm text-muted-foreground">
+              Friends listed here will be automatically provisioned when they sign in to the portal via Plex.
+            </p>
+            <span class="shrink-0 rounded-md bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+              {data.availableFriends.length}
+            </span>
+          </div>
+          <ul class="max-h-[20rem] space-y-3 overflow-y-auto pr-1">
             {#each data.availableFriends as friend (friend.id)}
               <li class="flex items-center gap-3">
                 <Avatar.Root size="sm">

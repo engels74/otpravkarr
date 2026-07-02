@@ -1,5 +1,9 @@
 import { getGroupProfile } from "$lib/db/repositories/channel-group-profiles";
-import { getAllUserMappings, updateUserMapping } from "$lib/db/repositories/users";
+import {
+  getAllUserMappings,
+  updateLastSynced,
+  updateUserMapping,
+} from "$lib/db/repositories/users";
 import type { UserMapping } from "$lib/db/types";
 import type { DispatcharrClient } from "$lib/dispatcharr/client";
 import { listChannelGroups } from "$lib/dispatcharr/endpoints/channel-groups";
@@ -174,7 +178,14 @@ export async function reconcileSubscriptions(
       needsRepatch = sanitized || ids.some((id) => recreatedGroupIds.has(id));
     }
 
-    if (!needsRepatch) continue;
+    if (!needsRepatch) {
+      // Steady-state: profiles already match (no PATCH) but the reconcile verified
+      // them — stamp so "Last Synced" is correct. This is the owner-subscriber's
+      // only stamp source (reconcileSync excludes owners for friend-reaping), and
+      // it trades the job's "typically zero per-user writes" property.
+      updateLastSynced(m.id);
+      continue;
+    }
 
     // Never down-scope an admin-level account: PATCHing user_level here would
     // strip its privileges. Skip and record it so the omission is observable.
@@ -199,6 +210,9 @@ export async function reconcileSubscriptions(
       continue;
     }
     report.usersRepatched++;
+    // Converged via a successful PATCH → stamp. The admin-skip and patch-failure
+    // branches above `continue` before reaching here, so neither is stamped.
+    updateLastSynced(m.id);
     try {
       const sortedGroupIds = [...ids].sort((a, b) => a - b);
       updateUserMapping(m.id, {

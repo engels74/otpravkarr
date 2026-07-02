@@ -306,6 +306,52 @@ describe("admin users page", () => {
     expect(saveButton.disabled).toBe(false);
   });
 
+  it("blocks Change Profile for grouped subscribers with a derived-from-groups notice (ISSUE-004)", async () => {
+    render(UsersPage, {
+      props: {
+        data: {
+          ...defaultData,
+          mappings: [{ ...mapping, dispatcharr_group_ids: "[1]" }],
+          profiles: [{ id: 7, name: "Sports profile" }],
+        },
+      },
+    });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Open actions for testuser" }));
+    await fireEvent.click(await screen.findByText("Change Profile"));
+
+    // The admin is told the profile is derived from groups (not silently overwritten).
+    expect(screen.getByText(/channels come from their group/i)).toBeTruthy();
+
+    // The foot-gun is disabled: neither the profile radios nor Save can act.
+    const saveButton = screen.getByRole("button", { name: "Save" }) as HTMLButtonElement;
+    expect(saveButton.disabled).toBe(true);
+    const radio = screen.getByLabelText("Sports profile") as HTMLInputElement;
+    expect(radio.disabled).toBe(true);
+  });
+
+  it("renders every Change Group control and keeps horizontal overflow reachable on mobile (ISSUE-006)", async () => {
+    render(UsersPage, {
+      props: { data: { ...defaultData, groups: [{ id: 1, name: "Group A", channelCount: 5 }] } },
+    });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Open actions for testuser" }));
+    await fireEvent.click(await screen.findByRole("menuitem", { name: /Change Group/ }));
+    const dialog = await screen.findByRole("dialog");
+
+    // All three controls the 390px dogfood found clipped must be present.
+    expect(within(dialog).getByRole("button", { name: "Select all" })).toBeTruthy();
+    expect(within(dialog).getByRole("button", { name: "Clear all" })).toBeTruthy();
+    expect(within(dialog).getByRole("button", { name: /Save lock/ })).toBeTruthy();
+    expect(within(dialog).getByRole("button", { name: /^Save$/ })).toBeTruthy();
+
+    // Guard the fix: overflow-x-hidden (which clipped the controls with no scroll
+    // path) must not return. overflow-x-auto keeps them reachable at narrow widths
+    // without adding a desktop scrollbar (content fits >=640px).
+    expect(dialog.className).not.toContain("overflow-x-hidden");
+    expect(dialog.className).toContain("overflow-x-auto");
+  });
+
   it("keeps the lock checkbox checked after a successful Save lock (ISSUE-001)", async () => {
     const { lockForm, checkbox } = await openChangeGroupLockForm({
       ...defaultData,

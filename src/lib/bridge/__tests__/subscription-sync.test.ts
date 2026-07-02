@@ -12,6 +12,7 @@ vi.mock("$lib/db/repositories/channel-group-profiles", () => ({
 vi.mock("$lib/db/repositories/users", () => ({
   getAllUserMappings: vi.fn(),
   updateUserMapping: vi.fn(),
+  updateLastSynced: vi.fn(),
 }));
 
 vi.mock("$lib/dispatcharr/endpoints/channel-groups", () => ({ listChannelGroups: vi.fn() }));
@@ -39,7 +40,9 @@ vi.mock("$lib/utils/retry", async (importOriginal) => {
 });
 
 const { getGroupProfile } = await import("$lib/db/repositories/channel-group-profiles");
-const { getAllUserMappings, updateUserMapping } = await import("$lib/db/repositories/users");
+const { getAllUserMappings, updateUserMapping, updateLastSynced } = await import(
+  "$lib/db/repositories/users"
+);
 const { listChannelGroups } = await import("$lib/dispatcharr/endpoints/channel-groups");
 const { listAllChannels } = await import("$lib/dispatcharr/endpoints/channels");
 const { updateUser } = await import("$lib/dispatcharr/endpoints/users");
@@ -85,6 +88,7 @@ function ch(id: number, groupId: number): DispatcharrChannel {
 beforeEach(() => {
   vi.mocked(getAllUserMappings).mockReset().mockReturnValue([makeMapping()]);
   vi.mocked(updateUserMapping).mockReset();
+  vi.mocked(updateLastSynced).mockReset();
   vi.mocked(getGroupProfile).mockReset().mockReturnValue(null);
   vi.mocked(listAllChannels)
     .mockReset()
@@ -247,6 +251,8 @@ describe("reconcileSubscriptions", () => {
     expect(report.errors).toHaveLength(1);
     expect(report.usersRepatched).toBe(0);
     expect(updateUser).not.toHaveBeenCalled();
+    // ISSUE-005: a group-resolve failure is a non-converged exit — never stamped.
+    expect(updateLastSynced).not.toHaveBeenCalled();
   });
 
   it("no-ops when there are no active subscribers", async () => {
@@ -274,5 +280,113 @@ describe("reconcileSubscriptions", () => {
 
     expect(report.errors[0]).toContain("Failed to list channels");
     expect(reconcileGroupProfile).not.toHaveBeenCalled();
+  });
+
+  // ISSUE-005: "Last Synced" must reflect a converged reconcile for EVERY active
+  // subscriber (the owner-subscriber is excluded by reconcileSync, so this is its
+  // only stamp source). The stamp lands on the two converged paths only, never on
+  // a non-converged exit.
+  it("stamps last_synced_at for a steady-state (no-repatch) subscriber incl. the owner (ISSUE-005)", async () => {
+    vi.mocked(getAllUserMappings).mockReturnValue([
+      makeMapping({ id: 7, dispatcharr_user_id: 42, dispatcharr_group_ids: "[1]", is_owner: 1 }),
+    ]);
+    // Profile already mapped and reconcile returns the SAME id → not recreated →
+    // needsRepatch === false (the steady-state path).
+    vi.mocked(getGroupProfile).mockReturnValue({
+      group_id: 1,
+      profile_id: 100,
+      profile_name: "otpravkarr:g1:Sports",
+      created_at: "",
+      updated_at: "",
+    });
+    vi.mocked(reconcileGroupProfile).mockResolvedValue(ok(100));
+
+    const report = await reconcileSubscriptions(client);
+
+    expect(report.usersRepatched).toBe(0);
+    expect(updateUser).not.toHaveBeenCalled();
+    expect(updateLastSynced).toHaveBeenCalledWith(7);
+  });
+
+  it("stamps last_synced_at after a successful repatch (ISSUE-005)", async () => {
+    vi.mocked(getGroupProfile).mockReturnValue({
+      group_id: 1,
+      profile_id: 100,
+      profile_name: "old",
+      created_at: "",
+      updated_at: "",
+    });
+    vi.mocked(reconcileGroupProfile).mockResolvedValue(ok(200)); // recreated → repatch
+
+    const report = await reconcileSubscriptions(client);
+
+    expect(report.usersRepatched).toBe(1);
+    expect(updateLastSynced).toHaveBeenCalledWith(1);
+  });
+
+  it("does NOT stamp last_synced_at when the repatch PATCH fails (ISSUE-005)", async () => {
+    vi.mocked(getGroupProfile).mockReturnValue({
+      group_id: 1,
+      profile_id: 100,
+      profile_name: "old",
+      created_at: "",
+      updated_at: "",
+    });
+    vi.mocked(reconcileGroupProfile).mockResolvedValue(ok(200)); // recreated → repatch
+    // Non-transient so retryResult fails fast (server_error/network_error would
+    // retry with real backoff and flake the test) — the assertion only needs the
+    // PATCH to fail, not the specific error class.
+    vi.mocked(updateUser).mockResolvedValue({
+      ok: false,
+      error: "auth_failure",
+      message: "boom",
+    } as never);
+
+    const report = await reconcileSubscriptions(client);
+
+    expect(report.usersRepatched).toBe(0);
+    expect(report.errors.length).toBeGreaterThan(0);
+    expect(updateLastSynced).not.toHaveBeenCalled();
+  });
+
+  it("does NOT stamp last_synced_at when a repatch is admin-skipped (ISSUE-005)", async () => {
+    vi.mocked(getGroupProfile).mockReturnValue({
+      group_id: 1,
+      profile_id: 100,
+      profile_name: "old",
+      created_at: "",
+      updated_at: "",
+    });
+    vi.mocked(reconcileGroupProfile).mockResolvedValue(ok(200)); // recreated → repatch
+    // Remote user_level >= ADMIN_USER_LEVEL (10) → admin-skip branch, no PATCH.
+    vi.mocked(fetchAllPages).mockResolvedValue(
+      ok([{ id: 42, username: "alice", user_level: 10 }]) as never,
+    );
+
+    const report = await reconcileSubscriptions(client);
+
+    expect(report.usersRepatched).toBe(0);
+    expect(updateUser).not.toHaveBeenCalled();
+    expect(report.errors.some((e) => e.includes("skipped repatch"))).toBe(true);
+    expect(updateLastSynced).not.toHaveBeenCalled();
+  });
+
+  it("does NOT stamp last_synced_at when the empty profile is unavailable (ISSUE-005)", async () => {
+    // Zero-group subscriber whose empty profile can't be ensured → the empty-
+    // profile-unavailable continue (a non-converged exit) fires before any stamp.
+    vi.mocked(getAllUserMappings).mockReturnValue([
+      makeMapping({ id: 1, dispatcharr_user_id: 42, dispatcharr_group_ids: "[]" }),
+    ]);
+    vi.mocked(ensureEmptyProfile).mockResolvedValue({
+      ok: false,
+      error: "server_error",
+      message: "boom",
+    });
+
+    const report = await reconcileSubscriptions(client);
+
+    expect(report.usersRepatched).toBe(0);
+    expect(updateUser).not.toHaveBeenCalled();
+    expect(updateLastSynced).not.toHaveBeenCalled();
   });
 });

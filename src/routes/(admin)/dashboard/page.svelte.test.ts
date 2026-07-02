@@ -54,6 +54,28 @@ describe("admin dashboard page", () => {
     vi.unstubAllGlobals();
   });
 
+  it("bounds the Available Plex Friends list with an internal scroll container (ISSUE-001)", () => {
+    const friends = Array.from({ length: 25 }, (_, i) => ({
+      id: i + 1,
+      username: `friend${i + 1}`,
+      email: `friend${i + 1}@example.com`,
+      status: "accepted",
+    }));
+
+    render(DashboardPage, { props: { data: { ...data, availableFriends: friends } } });
+
+    // Every friend still renders (no truncation of the data)...
+    expect(screen.getByText("friend1")).toBeTruthy();
+    expect(screen.getByText("friend25")).toBeTruthy();
+
+    // ...but inside a height-bounded, vertically scrollable list so a long friends
+    // list can't grow the card unbounded.
+    const list = screen.getByText("friend25").closest("ul");
+    expect(list).not.toBeNull();
+    expect(list?.className).toContain("overflow-y-auto");
+    expect(list?.className).toMatch(/max-h-/);
+  });
+
   it("shows Running in the sync status card while manual sync is pending", async () => {
     const pendingSync = new Promise<Response>(() => {});
     vi.stubGlobal(

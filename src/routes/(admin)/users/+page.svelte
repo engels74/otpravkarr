@@ -55,6 +55,20 @@ let selectedMapping = $state<UserMapping | null>(null);
 let selectedGroupSet = $state(new Set<number>());
 let lockEnabled = $state(false);
 let selectedProfileId = $state<number | null>(null);
+// Grouped subscribers (>=1 channel group) derive their Dispatcharr scope from
+// those groups: subscription-sync nulls dispatcharr_profile_id for them, so a
+// concrete profile set via changeProfile is reverted on the next sync/group op.
+// The Change Profile control is therefore a foot-gun for them — surfaced and
+// disabled below rather than silently overwritten (ISSUE-004).
+let selectedMappingGroupCount = $derived.by(() => {
+  if (!selectedMapping) return 0;
+  try {
+    const parsed: unknown = JSON.parse(selectedMapping.dispatcharr_group_ids);
+    return Array.isArray(parsed) ? parsed.filter((v) => typeof v === "number").length : 0;
+  } catch {
+    return 0;
+  }
+});
 let disablingMapping = $state<UserMapping | null>(null);
 let rotatingMapping = $state<UserMapping | null>(null);
 let deletingMapping = $state<UserMapping | null>(null);
@@ -616,7 +630,7 @@ async function copyOneTimePassword() {
 
 <!-- Change Group Dialog -->
 <Dialog.Root bind:open={groupDialogOpen}>
-  <Dialog.Content class="sm:max-w-lg max-h-[calc(100dvh-2rem)] overflow-y-auto overflow-x-hidden">
+  <Dialog.Content class="sm:max-w-lg max-h-[calc(100dvh-2rem)] overflow-y-auto overflow-x-auto">
     <Dialog.Header>
       <Dialog.Title>
         {data.groups.length === 0 ? "Add groups in Dispatcharr first" : "Change Group"}
@@ -645,7 +659,7 @@ async function copyOneTimePassword() {
           method="POST"
           action="?/setGroupLock"
           use:enhance={makeGroupLockEnhanceHandler()}
-          class="mb-3 rounded-md border border-border p-3"
+          class="mb-3 min-w-0 rounded-md border border-border p-3"
         >
           <input type="hidden" name="id" value={selectedMapping.id} />
           <input type="hidden" name="locked" value={String(lockEnabled)} />
@@ -665,7 +679,7 @@ async function copyOneTimePassword() {
           </div>
         </form>
 
-        <form method="POST" action="?/changeGroup" use:enhance={makeEnhanceHandler()}>
+        <form method="POST" action="?/changeGroup" use:enhance={makeEnhanceHandler()} class="min-w-0">
           <input type="hidden" name="id" value={selectedMapping.id} />
           <input type="hidden" name="group_ids" value={JSON.stringify([...selectedGroupSet])} />
           {#if selectedGroupSet.size === 0}
@@ -719,7 +733,16 @@ async function copyOneTimePassword() {
           <input type="hidden" name="id" value={selectedMapping.id} />
           <input type="hidden" name="profile_id" value={selectedProfileId == null ? "" : String(selectedProfileId)} />
           <div class="grid gap-2 py-2">
-            {#if selectedProfileId == null}
+            {#if selectedMappingGroupCount > 0}
+              <p
+                class="rounded-md border border-amber-500/40 bg-amber-500/15 px-3 py-2 text-xs text-amber-700 dark:text-amber-400"
+              >
+                This subscriber's channels come from their {selectedMappingGroupCount === 1
+                  ? "group"
+                  : "groups"}, not a fixed profile. A profile set here is reverted on the next sync
+                or group change, so saving is disabled — use Change Group instead.
+              </p>
+            {:else if selectedProfileId == null}
               <p class="rounded-md border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
                 Choose a channel profile to enable saving. Unrestricted profile clearing is not
                 available for managed subscribers.
@@ -731,6 +754,7 @@ async function copyOneTimePassword() {
                   type="radio"
                   name="profile_radio"
                   checked={selectedProfileId === profile.id}
+                  disabled={selectedMappingGroupCount > 0}
                   onchange={() => (selectedProfileId = profile.id)}
                 />
                 {profile.name}
@@ -738,7 +762,11 @@ async function copyOneTimePassword() {
             {/each}
           </div>
           <Dialog.Footer>
-            <Button type="submit" disabled={submitting || selectedProfileId == null} size="sm">
+            <Button
+              type="submit"
+              disabled={submitting || selectedProfileId == null || selectedMappingGroupCount > 0}
+              size="sm"
+            >
               {submitting ? "Saving..." : "Save"}
             </Button>
           </Dialog.Footer>

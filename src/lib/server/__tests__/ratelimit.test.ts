@@ -85,6 +85,35 @@ describe("createRateLimiter", () => {
     expect(r3.resetAt).toBe(1000 + 60_000);
   });
 
+  it("slides the window: recovery arrives when the OLDEST attempt ages out, not the newest (dogfood observation)", () => {
+    // Regression note for the 2026-07-02 dogfood "countdown vs. actual recovery"
+    // observation: the limiter is a SLIDING window, and resetAt tracks the oldest
+    // surviving attempt. When a full window contains older attempts, recovery
+    // (and the countdown target) lands well before newest-attempt + windowMs.
+    vi.setSystemTime(0);
+    const limiter = createRateLimiter({ windowMs: 60_000, maxRequests: 3 });
+
+    limiter.check("ip-1"); // attempt 1 @ t=0 (the oldest)
+    vi.setSystemTime(50_000);
+    limiter.check("ip-1"); // attempt 2 @ t=50s
+    vi.setSystemTime(55_000);
+    limiter.check("ip-1"); // attempt 3 @ t=55s → window now full
+
+    const denied = limiter.check("ip-1"); // attempt 4 @ t=55s → denied
+    expect(denied.allowed).toBe(false);
+    // Countdown target = oldest attempt (t=0) + window, i.e. 60s — NOT the newest
+    // attempt (t=55s) + window (=115s). This is why recovery feels "early".
+    expect(denied.resetAt).toBe(60_000);
+
+    // Just after the oldest attempt ages out, a slot frees and requests resume —
+    // even though newest-attempt + windowMs (=115s) is far away.
+    vi.setSystemTime(60_001);
+    const recovered = limiter.check("ip-1");
+    expect(recovered.allowed).toBe(true);
+    // resetAt has now advanced to the next-oldest surviving attempt (t=50s) + window.
+    expect(recovered.resetAt).toBe(50_000 + 60_000);
+  });
+
   it("reset(key) clears only that key's state", () => {
     const limiter = createRateLimiter({ windowMs: 60_000, maxRequests: 1 });
 

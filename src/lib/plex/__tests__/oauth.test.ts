@@ -179,7 +179,7 @@ describe("oauth", () => {
       expect(getPendingOAuth(id)).toBe(false);
     });
 
-    it("evicts completed cache so a subsequent completeOAuth call fails after eviction", async () => {
+    it("retains the completed cache so a duplicate/racing callback replays the identity (ISSUE-005)", async () => {
       const fakeWebLogin = { id: 1, code: "abc", uri: "https://plex.tv/auth#abc" };
       mockGetWebLogin.mockResolvedValue(fakeWebLogin);
       mockWebLoginCheck.mockResolvedValue({
@@ -195,11 +195,18 @@ describe("oauth", () => {
       const identity = await completeOAuth(id);
       expect(identity.id).toBe(42);
 
-      // Evict — simulates portal single-use enforcement.
+      // The portal callback consumes the single-use oauth_id and evicts the
+      // PENDING entry — but the completed cache is retained for its window.
       removePendingOAuth(id);
+      // Pending is gone…
+      expect(getPendingOAuth(id)).toBe(false);
 
-      // Second completeOAuth must fail: both pending and completed are gone.
-      await expect(completeOAuth(id)).rejects.toThrow("OAuth session not found or expired");
+      // …yet a second, racing callback for the same oauth_id (the popup-vs-
+      // same-tab double navigation) replays the cached identity instead of
+      // 400ing on "session not found", and does NOT re-invoke webLoginCheck.
+      const replay = await completeOAuth(id);
+      expect(replay).toEqual(identity);
+      expect(mockWebLoginCheck).toHaveBeenCalledTimes(1);
     });
 
     it("setup two-step semantics: completeOAuth twice without eviction returns same identity", async () => {

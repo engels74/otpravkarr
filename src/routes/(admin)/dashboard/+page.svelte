@@ -82,11 +82,21 @@ function friendInitials(f: PlexFriend): string {
 let triggeringSync = $state(false);
 let syncRunning = $derived(triggeringSync || (data.syncJob?.running ?? false));
 
+// ISSUE-010: bound the sync request so a slow/severed POST (e.g. the quarantine
+// step calling the hung plugins endpoint, then severed by the adapter idle
+// timeout) can't strand the button on "Syncing…" for 90s+.
+const SYNC_ABORT_MS = 30_000;
+
 async function runSyncNow() {
   if (triggeringSync) return;
   triggeringSync = true;
+  const controller = new AbortController();
+  const abortTimer = setTimeout(() => controller.abort(), SYNC_ABORT_MS);
   try {
-    const response = await fetch("/api/internal/sync", { method: "POST" });
+    const response = await fetch("/api/internal/sync", {
+      method: "POST",
+      signal: controller.signal,
+    });
     const body = (await response.json().catch(() => null)) as {
       error?: string;
       message?: string;
@@ -103,13 +113,24 @@ async function runSyncNow() {
     } else {
       toast.success("Sync completed.");
     }
-  } catch {
-    toast.error("Sync request failed.");
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      // The POST is still running server-side; we just stopped waiting on it.
+      toast.warning("Sync is still running in the background — refresh shortly.");
+    } else {
+      toast.error("Sync request failed.");
+    }
   } finally {
+    clearTimeout(abortTimer);
     // invalidate first so data.syncJob.running reflects the post-sync state
     // before we re-enable the button — otherwise a fast double-click could
-    // fire a second POST in the brief window between flag flip and reload.
-    await invalidateAll();
+    // fire a second POST in the brief window between flag flip and reload. A
+    // failed reload must not strand the button, so guard it.
+    try {
+      await invalidateAll();
+    } catch {
+      // Ignore — resetting the flag below is what matters.
+    }
     triggeringSync = false;
   }
 }

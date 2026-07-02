@@ -12,7 +12,14 @@ vi.mock("ofetch", () => ({
 }));
 
 // Import after mocking
-const { DispatcharrClient } = await import("../client");
+const {
+  DispatcharrClient,
+  createInteractiveClient,
+  createRobustClient,
+  computeInteractiveTimeoutMs,
+  INTERACTIVE_TIMEOUT_MS,
+  IDLE_TIMEOUT_MS,
+} = await import("../client");
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -449,5 +456,104 @@ describe("DispatcharrClient.request", () => {
       expect.any(String),
       expect.objectContaining({ retry: 0 }),
     );
+  });
+
+  it("honors a per-request timeoutMs override", async () => {
+    mockOfetch.mockResolvedValueOnce({});
+    const client = createClient();
+
+    await client.request("GET", "/api/resource/", { timeoutMs: 2_500 });
+
+    expect(mockOfetch).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ timeout: 2_500 }),
+    );
+  });
+
+  it("honors a per-request retries override (0 on an idempotent GET)", async () => {
+    mockOfetch.mockResolvedValueOnce({});
+    const client = createClient();
+
+    await client.request("GET", "/api/resource/", { retries: 0 });
+
+    expect(mockOfetch).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ retry: 0 }),
+    );
+  });
+
+  it("surfaces an aborted request as network_error (fail-fast path)", async () => {
+    const abort = new Error("The operation was aborted due to timeout");
+    abort.name = "AbortError";
+    mockOfetch.mockRejectedValueOnce(abort);
+    const client = createClient();
+
+    const result = await client.request("GET", "/api/slow/", { timeoutMs: 100 });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBe("network_error");
+    }
+  });
+});
+
+describe("client factories", () => {
+  it("createRobustClient keeps the 15s timeout + idempotent retry", async () => {
+    mockOfetch.mockResolvedValueOnce({});
+    const client = createRobustClient("https://dispatch.example.com", "key");
+
+    await client.request("GET", "/api/resource/");
+
+    expect(mockOfetch).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ timeout: 15_000, retry: 1 }),
+    );
+  });
+
+  it("createInteractiveClient uses INTERACTIVE_TIMEOUT_MS and no retries", async () => {
+    mockOfetch.mockResolvedValueOnce({});
+    const client = createInteractiveClient("https://dispatch.example.com", "key");
+
+    await client.request("GET", "/api/resource/");
+
+    expect(mockOfetch).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ timeout: INTERACTIVE_TIMEOUT_MS, retry: 0 }),
+    );
+  });
+
+  it("interactive client fast-profiles even mutating requests to 0 retries", async () => {
+    mockOfetch.mockResolvedValueOnce({});
+    const client = createInteractiveClient("https://dispatch.example.com", "key");
+
+    await client.request("POST", "/api/resource/", { body: {} });
+
+    expect(mockOfetch).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ timeout: INTERACTIVE_TIMEOUT_MS, retry: 0 }),
+    );
+  });
+});
+
+describe("interactive timeout invariant", () => {
+  it("the default INTERACTIVE_TIMEOUT_MS is strictly below the adapter idle window", () => {
+    expect(INTERACTIVE_TIMEOUT_MS).toBeLessThan(IDLE_TIMEOUT_MS);
+    // Default IDLE_TIMEOUT is 10s → interactive caps at 6s.
+    expect(IDLE_TIMEOUT_MS).toBe(10_000);
+    expect(INTERACTIVE_TIMEOUT_MS).toBe(6_000);
+  });
+
+  it("computeInteractiveTimeoutMs stays below idle for every sane tuning", () => {
+    for (const idleSeconds of [2, 3, 5, 8, 10, 20, 60]) {
+      const interactive = computeInteractiveTimeoutMs(idleSeconds);
+      expect(interactive).toBeGreaterThan(0);
+      expect(interactive).toBeLessThan(idleSeconds * 1000);
+    }
+  });
+
+  it("computeInteractiveTimeoutMs falls back to the 10s default on invalid input", () => {
+    expect(computeInteractiveTimeoutMs(0)).toBe(6_000);
+    expect(computeInteractiveTimeoutMs(Number.NaN)).toBe(6_000);
+    expect(computeInteractiveTimeoutMs(-5)).toBe(6_000);
   });
 });

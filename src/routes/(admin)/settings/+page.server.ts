@@ -2,7 +2,7 @@ import { fail } from "@sveltejs/kit";
 import { appendAuditLog } from "$lib/db/repositories/audit";
 import { getConfig, invalidateConfigCache, setConfig } from "$lib/db/repositories/config";
 import { AuditAction } from "$lib/db/types";
-import { DispatcharrClient } from "$lib/dispatcharr/client";
+import { createInteractiveClient } from "$lib/dispatcharr/client";
 import { listChannelGroups } from "$lib/dispatcharr/endpoints/channel-groups";
 import { createHealthEndpoints } from "$lib/dispatcharr/endpoints/health";
 import { validateServerToken } from "$lib/plex/client";
@@ -69,7 +69,10 @@ export const load: PageServerLoad = async (event) => {
   let channelGroups: { id: number; name: string; channelCount: number | null }[] = [];
   if (dispatcharrUrl && dispatcharrApiKey) {
     try {
-      const client = new DispatcharrClient(dispatcharrUrl, dispatcharrApiKey);
+      // Interactive client: a single fast-fail call so a slow/unreachable
+      // Dispatcharr degrades to an empty group list (rendered as the empty
+      // state) before the adapter severs the socket (ISSUE-002/003).
+      const client = createInteractiveClient(dispatcharrUrl, dispatcharrApiKey);
       const groupsResult = await listChannelGroups(client);
       if (groupsResult.ok) {
         channelGroups = groupsResult.data
@@ -219,7 +222,10 @@ export const actions: Actions = {
     const normalizedUrl = validation.data.dispatcharrUrl;
     const normalizedExternalUrl = validation.data.dispatcharrExternalUrl ?? "";
 
-    const client = new DispatcharrClient(normalizedUrl, effectiveKey);
+    // Interactive client: the connection test must fail fast (a wrong key on a
+    // responsive server -> "invalid key" quickly; a blackholed URL -> unreachable
+    // in ~one interactive timeout) rather than the 15s+retry storm (ISSUE-006).
+    const client = createInteractiveClient(normalizedUrl, effectiveKey);
     const healthResult = await createHealthEndpoints(client).checkHealth();
     if (!healthResult.ok) {
       return fail(400, { error: "Could not connect to Dispatcharr" });

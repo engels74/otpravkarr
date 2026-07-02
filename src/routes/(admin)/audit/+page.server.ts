@@ -35,13 +35,24 @@ export const load: PageServerLoad = async (event) => {
   if (effectiveAfter) filters.after = effectiveAfter;
   if (effectiveBefore) filters.before = effectiveBefore;
 
-  const { entries, total } = queryAuditLog(filters);
+  const initial = queryAuditLog(filters);
+  let entries = initial.entries;
+  const total = initial.total;
   const totalPages = Math.max(1, Math.ceil(total / limit));
+
+  // ISSUE-013: clamp an out-of-range page to the last page so the labels never
+  // read "Showing 51–50 of 50" / "Page 6 of 5". Re-query only on the rare
+  // clamped path; page is already floored to 1 above.
+  let clampedPage = page;
+  if (page > totalPages) {
+    clampedPage = totalPages;
+    entries = queryAuditLog({ ...filters, offset: (clampedPage - 1) * limit }).entries;
+  }
 
   return {
     entries,
     total,
-    filters: { action, actor, after, before, page, limit },
+    filters: { action, actor, after, before, page: clampedPage, limit },
     totalPages,
     auditActions: Object.values(AuditAction),
   };

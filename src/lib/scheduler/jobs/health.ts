@@ -20,6 +20,34 @@ const currentHealth: HealthStatus = {
   database: { status: "unhealthy", lastChecked: null },
 };
 
+// ISSUE-007: a single transient Dispatcharr probe failure (e.g. one timeout)
+// must not hard-flip the public dashboard/`/api/health` to "disconnected" while
+// an authenticated sync still works. Require two consecutive unreachable probes
+// before flipping; a lone failure keeps the last-known-good reachable/authValid.
+// The per-probe HEALTH_CHECK_FAILED audit log is still emitted every time, so
+// the signal is never suppressed for operators — only the coarse public flip is
+// debounced.
+const DISPATCHARR_FAILURE_THRESHOLD = 2;
+let dispatcharrConsecutiveFailures = 0;
+
+/** A reachable probe (success, or 401 with reachable=true) resets hysteresis. */
+function publishDispatcharrReachable(authValid: boolean, now: string): void {
+  dispatcharrConsecutiveFailures = 0;
+  currentHealth.dispatcharr = { reachable: true, authValid, lastChecked: now };
+}
+
+/** An unreachable probe only flips the public state after the threshold. */
+function publishDispatcharrUnreachable(now: string): void {
+  dispatcharrConsecutiveFailures += 1;
+  if (dispatcharrConsecutiveFailures >= DISPATCHARR_FAILURE_THRESHOLD) {
+    currentHealth.dispatcharr = { reachable: false, authValid: false, lastChecked: now };
+  } else {
+    // Single transient failure: keep the last-known-good reachable/authValid,
+    // only advance the timestamp.
+    currentHealth.dispatcharr = { ...currentHealth.dispatcharr, lastChecked: now };
+  }
+}
+
 export function getHealthStatus(): HealthStatus {
   return structuredClone(currentHealth);
 }
@@ -34,6 +62,7 @@ export function seedInitialHealth(): void {
   currentHealth.plex = { status: "healthy", lastChecked: now };
   currentHealth.dispatcharr = { reachable: true, authValid: true, lastChecked: now };
   currentHealth.database = { status: "healthy", lastChecked: now };
+  dispatcharrConsecutiveFailures = 0;
 }
 
 /** @internal — for testing only */
@@ -41,6 +70,7 @@ export function resetHealthState(): void {
   currentHealth.plex = { status: "unreachable", lastChecked: null };
   currentHealth.dispatcharr = { reachable: false, authValid: false, lastChecked: null };
   currentHealth.database = { status: "unhealthy", lastChecked: null };
+  dispatcharrConsecutiveFailures = 0;
 }
 
 function log(event: string, extra?: Record<string, unknown>): void {
@@ -130,16 +160,23 @@ export function createHealthJob(defaultIntervalMs = 5 * 60 * 1000): Job {
 
       if (dispatcharrUrl && dispatcharrApiKey) {
         try {
+          // Robust client (15s + retry) on purpose: a background probe has no
+          // idle-socket deadline, and a fast-fail profile would make a single
+          // network blip *more* likely to read as a failure. The hysteresis
+          // below debounces the public flip instead (ISSUE-007).
           const client = new DispatcharrClient(dispatcharrUrl, dispatcharrApiKey);
           const endpoints = createHealthEndpoints(client);
           const result = await endpoints.checkHealth();
 
           if (result.ok) {
-            currentHealth.dispatcharr = {
-              reachable: result.data.reachable,
-              authValid: result.data.authValid,
-              lastChecked: now,
-            };
+            if (result.data.reachable) {
+              // Reachable (auth may still be invalid = a definitive 401):
+              // publish immediately and reset the transient-failure counter.
+              publishDispatcharrReachable(result.data.authValid, now);
+            } else {
+              // Unreachable: debounce the public flip via hysteresis.
+              publishDispatcharrUnreachable(now);
+            }
 
             if (!result.data.reachable || !result.data.authValid) {
               log("dispatcharr.unhealthy", {
@@ -164,7 +201,7 @@ export function createHealthJob(defaultIntervalMs = 5 * 60 * 1000): Job {
           } else {
             // Defensive: checkHealth() currently always returns ok:true, but this
             // handles a potential future API change where ok:false is returned.
-            currentHealth.dispatcharr = { reachable: false, authValid: false, lastChecked: now };
+            publishDispatcharrUnreachable(now);
             const errorDetail = result.message || result.error || "Unknown error";
             log("dispatcharr.error", { error: errorDetail });
             try {
@@ -179,7 +216,7 @@ export function createHealthJob(defaultIntervalMs = 5 * 60 * 1000): Job {
             }
           }
         } catch (error) {
-          currentHealth.dispatcharr = { reachable: false, authValid: false, lastChecked: now };
+          publishDispatcharrUnreachable(now);
           log("dispatcharr.error", {
             error: error instanceof Error ? error.message : String(error),
           });
@@ -198,6 +235,7 @@ export function createHealthJob(defaultIntervalMs = 5 * 60 * 1000): Job {
           }
         }
       } else {
+        dispatcharrConsecutiveFailures = 0;
         currentHealth.dispatcharr = { reachable: false, authValid: false, lastChecked: null };
       }
 

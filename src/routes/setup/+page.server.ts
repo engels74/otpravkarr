@@ -12,7 +12,7 @@ import { appendAuditLog } from "$lib/db/repositories/audit";
 import { getConfig, setConfig } from "$lib/db/repositories/config";
 import { createSession, deleteSession } from "$lib/db/repositories/sessions";
 import { AuditAction } from "$lib/db/types";
-import { DispatcharrClient } from "$lib/dispatcharr/client";
+import { createInteractiveClient } from "$lib/dispatcharr/client";
 import { listChannelGroups } from "$lib/dispatcharr/endpoints/channel-groups";
 import { createHealthEndpoints } from "$lib/dispatcharr/endpoints/health";
 import { listProfiles } from "$lib/dispatcharr/endpoints/profiles";
@@ -69,6 +69,17 @@ const PLEX_SETUP_KEYS = ["plex_server_url", "plex_admin_token", "plex_machine_id
 const DISPATCHARR_SETUP_KEYS = ["dispatcharr_url", "dispatcharr_api_key"] as const;
 const SETUP_CONNECTION_RETRY: RetryOptions = {
   maxRetries: 4,
+  baseDelayMs: 1_000,
+  maxDelayMs: 5_000,
+  jitter: 0.5,
+};
+// The Dispatcharr connection test uses the interactive client (fast-fail per
+// call), so it needs no retry-storm on top: a blackholed URL resolves in ~one
+// interactive timeout instead of the 25–86s the 4× backoff produced, and a
+// wrong key on a responsive server fails sub-second (ISSUE-006). A single
+// attempt keeps the human-initiated test snappy; the operator retries if needed.
+const DISPATCHARR_CONNECTION_RETRY: RetryOptions = {
+  maxRetries: 0,
   baseDelayMs: 1_000,
   maxDelayMs: 5_000,
   jitter: 0.5,
@@ -324,7 +335,7 @@ async function loadDispatcharrSetupPayload(phase: SetupResumePhase): Promise<Set
   }
 
   try {
-    const client = new DispatcharrClient(dispatcharrUrl, dispatcharrApiKey);
+    const client = createInteractiveClient(dispatcharrUrl, dispatcharrApiKey);
     const [groupsResult, profilesResult] = await Promise.all([
       listChannelGroups(client),
       listProfiles(client),
@@ -708,7 +719,7 @@ export const actions: Actions = {
     }
 
     const { dispatcharrUrl, dispatcharrApiKey, dispatcharrExternalUrl } = dcResult.data;
-    const client = new DispatcharrClient(dispatcharrUrl, dispatcharrApiKey);
+    const client = createInteractiveClient(dispatcharrUrl, dispatcharrApiKey);
 
     let healthData: { reachable: boolean; authValid: boolean };
     try {
@@ -729,12 +740,12 @@ export const actions: Actions = {
           return result.data;
         },
         (err) => err instanceof Error && err.message === "Dispatcharr server is unreachable",
-        SETUP_CONNECTION_RETRY,
+        DISPATCHARR_CONNECTION_RETRY,
       );
     } catch (err: unknown) {
       const detail = err instanceof Error ? err.message : String(err);
-      console.error(`[setup] Dispatcharr connection failed after retries: ${detail}`);
-      return fail(400, { error: "Could not connect to Dispatcharr after multiple attempts" });
+      console.error(`[setup] Dispatcharr connection failed: ${detail}`);
+      return fail(400, { error: "Could not connect to Dispatcharr" });
     }
 
     if (!healthData.authValid) {

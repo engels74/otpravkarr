@@ -3,7 +3,7 @@ import {
   getAllGroupProfiles,
 } from "$lib/db/repositories/channel-group-profiles";
 import { getConfig } from "$lib/db/repositories/config";
-import { DispatcharrClient } from "$lib/dispatcharr/client";
+import { createInteractiveClient } from "$lib/dispatcharr/client";
 import { listPlugins } from "$lib/dispatcharr/endpoints/plugins";
 import { describePlugins } from "$lib/dispatcharr/plugins/registry";
 import type { DetectedPlugin } from "$lib/dispatcharr/plugins/types";
@@ -31,7 +31,10 @@ export const load: PageServerLoad = async (event) => {
   let plugins: DetectedPlugin[] = [];
   let reachable = false;
   try {
-    const client = new DispatcharrClient(url, key);
+    // Interactive client: the plugins endpoint is the genuinely-hung one, so a
+    // fast-fail lets the documented "Couldn't reach the Dispatcharr plugins API"
+    // state render instead of an ERR_EMPTY_RESPONSE interstitial (ISSUE-009).
+    const client = createInteractiveClient(url, key);
     const result = await listPlugins(client);
     if (result.ok) {
       reachable = true;

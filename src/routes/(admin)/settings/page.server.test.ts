@@ -86,6 +86,10 @@ vi.mock("$lib/plex/types", () => ({
 
 vi.mock("$lib/dispatcharr/client", () => ({
   DispatcharrClient: mocks.DispatcharrClient,
+  // The route now builds its clients via the factories; delegate to the same
+  // mocked constructor so `DispatcharrClient` call assertions still hold.
+  createInteractiveClient: (url: string, key: string) => new mocks.DispatcharrClient(url, key),
+  createRobustClient: (url: string, key: string) => new mocks.DispatcharrClient(url, key),
 }));
 
 vi.mock("$lib/dispatcharr/endpoints/health", () => ({

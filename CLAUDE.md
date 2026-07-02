@@ -16,7 +16,7 @@ file via `bun:sqlite`, encrypts all third-party credentials at rest, and ships a
 | Install | `bun install` | |
 | Dev server | `bun --bun run dev` | Needs `OTPRAVKARR_SECRET`; binds `PORT` (default 3000, `strictPort`) |
 | Build | `bun --bun run build` | `vite build` then copies migrations into `build/server/migrations` |
-| Run prod build | `bun ./build/index.js` | |
+| Run prod build | `NODE_ENV=production bun ./build/index.js` | `NODE_ENV=production` is required — the adapter/Kit runtime 500s on every SSR route without it |
 | Lint + format check | `bun run check` | Biome — lint/format only, **not** types |
 | Auto-format | `bun run format` | |
 | Type check | `bunx tsc --noEmit` and `bunx svelte-check --threshold warning` | Both run as pre-commit gates |

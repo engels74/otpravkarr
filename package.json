@@ -7,7 +7,7 @@
     "dev": "bun --bun vite dev",
     "build": "bun --bun vite build && rm -rf build/server/migrations && cp -r src/lib/db/migrations build/server/migrations",
     "preview": "vite preview",
-    "start": "bun ./build/index.js",
+    "start": "NODE_ENV=production bun ./build/index.js",
     "prepare": "svelte-kit sync || echo ''",
     "check": "biome check .",
     "format": "biome format --write .",

@@ -32,7 +32,9 @@ let {
 		{#if childrenProp}
 			{@render childrenProp({ selected, highlighted })}
 		{:else}
-			{label || value}
+			<!-- ISSUE-014: render the label in a shrinkable, truncating span so its
+			leading glyphs aren't clipped and long labels ellipsize on the right. -->
+			<span class="min-w-0 flex-1 truncate">{label || value}</span>
 		{/if}
 	{/snippet}
 </SelectPrimitive.Item>

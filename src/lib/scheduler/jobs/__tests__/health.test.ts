@@ -341,6 +341,72 @@ describe("health check fn", () => {
     expect(health.database.status).toBe("healthy");
   });
 
+  it("single transient dispatcharr failure keeps last-known-good; two consecutive flip", async () => {
+    mockGetConfig.mockImplementation(configMap());
+    mockCheckServerHealth.mockResolvedValue("healthy");
+
+    // 1) A healthy probe establishes reachable:true.
+    mockCheckHealth.mockResolvedValueOnce({ ok: true, data: { reachable: true, authValid: true } });
+    await createHealthJob().fn();
+    expect(getHealthStatus().dispatcharr.reachable).toBe(true);
+
+    // 2) A single failed probe must NOT flip the public state (debounced), but
+    // must still emit the audit signal for operators.
+    mockAppendAuditLog.mockClear();
+    mockCheckHealth.mockResolvedValueOnce({
+      ok: true,
+      data: { reachable: false, authValid: false },
+    });
+    await createHealthJob().fn();
+    expect(getHealthStatus().dispatcharr.reachable).toBe(true);
+    expect(mockAppendAuditLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "health.check_failed",
+        detail: { check: "dispatcharr", reachable: false, authValid: false },
+      }),
+    );
+
+    // 3) A second consecutive failure flips it to unreachable.
+    mockCheckHealth.mockResolvedValueOnce({
+      ok: true,
+      data: { reachable: false, authValid: false },
+    });
+    await createHealthJob().fn();
+    expect(getHealthStatus().dispatcharr.reachable).toBe(false);
+  });
+
+  it("a successful probe resets the dispatcharr failure counter", async () => {
+    mockGetConfig.mockImplementation(configMap());
+    mockCheckServerHealth.mockResolvedValue("healthy");
+
+    // healthy → fail(1, debounced, still true) → healthy(reset) → fail(1, still true)
+    mockCheckHealth
+      .mockResolvedValueOnce({ ok: true, data: { reachable: true, authValid: true } })
+      .mockResolvedValueOnce({ ok: true, data: { reachable: false, authValid: false } })
+      .mockResolvedValueOnce({ ok: true, data: { reachable: true, authValid: true } })
+      .mockResolvedValueOnce({ ok: true, data: { reachable: false, authValid: false } });
+
+    await createHealthJob().fn();
+    await createHealthJob().fn();
+    expect(getHealthStatus().dispatcharr.reachable).toBe(true);
+    await createHealthJob().fn();
+    expect(getHealthStatus().dispatcharr.reachable).toBe(true);
+    // Fourth probe is only the FIRST failure since the reset — still debounced.
+    await createHealthJob().fn();
+    expect(getHealthStatus().dispatcharr.reachable).toBe(true);
+  });
+
+  it("a definitive 401 (reachable:true, authValid:false) publishes immediately, no hysteresis", async () => {
+    mockGetConfig.mockImplementation(configMap());
+    mockCheckServerHealth.mockResolvedValue("healthy");
+    mockCheckHealth.mockResolvedValue({ ok: true, data: { reachable: true, authValid: false } });
+
+    await createHealthJob().fn();
+    const health = getHealthStatus();
+    expect(health.dispatcharr.reachable).toBe(true);
+    expect(health.dispatcharr.authValid).toBe(false);
+  });
+
   it("individual check failure does not abort other checks", async () => {
     mockGetConfig.mockImplementation(configMap());
     mockCheckServerHealth.mockRejectedValue(new Error("plex down"));

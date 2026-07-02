@@ -60,6 +60,10 @@ let rotatingMapping = $state<UserMapping | null>(null);
 let deletingMapping = $state<UserMapping | null>(null);
 let oneTimePassword = $state("");
 let passwordCopyStatus = $state<"idle" | "copied" | "failed">("idle");
+// Drives the OTP dialog copy: false = first-time provisioning (owner subscribe /
+// automatic), true = re-provisioning (disable→enable). Set in BOTH enhance handlers
+// so a prior re-enable can't leave a stale `true` for a later owner subscribe (ISSUE-002).
+let passwordReprovisioned = $state(false);
 
 // Search debounce
 let searchTimeout: ReturnType<typeof setTimeout> | undefined;
@@ -255,6 +259,7 @@ function makeOwnerEnhance() {
           if (d?.initialPassword) {
             oneTimePassword = d.initialPassword;
             passwordCopyStatus = "idle";
+            passwordReprovisioned = false;
             passwordDialogOpen = true;
           } else {
             toast.success("Subscriber account created.");
@@ -313,6 +318,7 @@ function makeEnableEnhance() {
           if (d?.initialPassword) {
             oneTimePassword = d.initialPassword;
             passwordCopyStatus = "idle";
+            passwordReprovisioned = true;
             passwordDialogOpen = true;
           } else if (d?.reprovisioned) {
             toast.success("User re-enabled. New credentials will rotate on next sync.");
@@ -460,7 +466,7 @@ async function copyOneTimePassword() {
     <Input
       placeholder="Search users by username…"
       aria-label="Search users by username…"
-      class="w-[200px] text-foreground"
+      class="w-[260px] text-foreground"
       value={searchValue}
       oninput={onSearchInput}
     />
@@ -819,7 +825,9 @@ async function copyOneTimePassword() {
     <Dialog.Header>
       <Dialog.Title>One-Time Password</Dialog.Title>
       <Dialog.Description>
-        This user was re-provisioned with a new account. Save this password — it will not be shown again.
+        {passwordReprovisioned
+          ? "This user was re-provisioned with a new account. Save this password — it will not be shown again."
+          : "This user was provisioned with a new account. Save this password — it will not be shown again."}
       </Dialog.Description>
     </Dialog.Header>
     <div class="rounded-md bg-muted p-3 font-mono text-sm select-all">

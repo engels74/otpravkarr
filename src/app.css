@@ -21,8 +21,11 @@
   --popover: 1 0 0;
   --popover-foreground: 0.2101 0.0318 264.6645;
 
-  /* Brand */
-  --primary: 0.6716 0.1368 48.513;
+  /* Brand
+   * --primary L lowered 0.6716 -> 0.565 (keep C/H) so white --primary-foreground
+   * reaches WCAG AA on button/badge text: ~4.82:1 resting (ISSUE-001). Dark theme
+   * uses dark-on-orange and is intentionally left untouched. */
+  --primary: 0.565 0.1368 48.513;
   --primary-foreground: 1 0 0;
   --secondary: 0.536 0.0398 196.028;
   --secondary-foreground: 1 0 0;
@@ -40,7 +43,7 @@
   /* Form */
   --border: 0.9276 0.0058 264.5313;
   --input: 0.9276 0.0058 264.5313;
-  --ring: 0.6716 0.1368 48.513;
+  --ring: 0.565 0.1368 48.513;
 
   /* Charts */
   --chart-1: 0.594 0.0443 196.0233;
@@ -52,12 +55,12 @@
   /* Sidebar */
   --sidebar: 0.967 0.0029 264.5419;
   --sidebar-foreground: 0.2101 0.0318 264.6645;
-  --sidebar-primary: 0.6716 0.1368 48.513;
+  --sidebar-primary: 0.565 0.1368 48.513;
   --sidebar-primary-foreground: 1 0 0;
   --sidebar-accent: 1 0 0;
   --sidebar-accent-foreground: 0.2101 0.0318 264.6645;
   --sidebar-border: 0.9276 0.0058 264.5313;
-  --sidebar-ring: 0.6716 0.1368 48.513;
+  --sidebar-ring: 0.565 0.1368 48.513;
 
   --radius: 0.75rem;
 

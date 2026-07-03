@@ -52,6 +52,12 @@ let plexServerInfo = $state<{
 } | null>(null);
 let dispatcharrGroups = $state<Array<{ id: number; name: string }>>(initialDispatcharrGroups);
 let dispatcharrProfiles = $state<Array<{ id: number; name: string }>>(initialDispatcharrProfiles);
+// Bound to the connection inputs so the typed values survive the step
+// unmount/remount when the wizard navigates Back from Origin (ISSUE-003).
+// In-memory only — no hydration, no persistence, no logging; posted verbatim.
+let dispatcharrUrl = $state("");
+let dispatcharrExternalUrl = $state("");
+let dispatcharrApiKey = $state("");
 let xcProbeResult = $state<{ found: boolean; template?: string } | null>(null);
 let currentOrigin = $state("");
 
@@ -1140,6 +1146,7 @@ function enhanceHandler(nextStep?: number) {
                   name="dispatcharrUrl"
                   type="url"
                   placeholder="http://localhost:5001"
+                  bind:value={dispatcharrUrl}
                   required
                 />
               </div>
@@ -1150,6 +1157,7 @@ function enhanceHandler(nextStep?: number) {
                   name="dispatcharrExternalUrl"
                   type="url"
                   placeholder="https://tv.example.com"
+                  bind:value={dispatcharrExternalUrl}
                 />
                 <p class="text-xs text-muted-foreground">
                   Only needed if generated playlist URLs should point to a different address than the connection URL above (e.g., a public-facing reverse proxy).
@@ -1164,6 +1172,7 @@ function enhanceHandler(nextStep?: number) {
                   placeholder="Your Dispatcharr API key"
                   autocomplete="off"
                   class="font-mono text-sm"
+                  bind:value={dispatcharrApiKey}
                   required
                 />
               </div>

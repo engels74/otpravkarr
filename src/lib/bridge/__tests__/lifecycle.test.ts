@@ -17,10 +17,12 @@ vi.mock("$lib/utils/retry", () => ({
 
 const mockUpdateUser = vi.fn();
 const mockGetUser = vi.fn();
+const mockFindUserByUsername = vi.fn();
 const mockDeleteUser = vi.fn();
 vi.mock("$lib/dispatcharr/endpoints/users", () => ({
   updateUser: (...args: unknown[]) => mockUpdateUser(...args),
   getUser: (...args: unknown[]) => mockGetUser(...args),
+  findUserByUsername: (...args: unknown[]) => mockFindUserByUsername(...args),
   deleteUser: (...args: unknown[]) => mockDeleteUser(...args),
 }));
 
@@ -144,6 +146,11 @@ beforeEach(() => {
   mockGetUserMappingsByDispatcharrId.mockImplementation((dispatcharrUserId: number) => [
     makeMapping({ dispatcharr_user_id: dispatcharrUserId }),
   ]);
+  mockFindUserByUsername.mockResolvedValue({
+    ok: false,
+    error: "network_error",
+    message: "username lookup unavailable",
+  });
   mockUpdateXcPasswordForMapping.mockReturnValue(true);
 });
 
@@ -163,12 +170,40 @@ describe("rotateCredentials", () => {
     await rotateCredentials(mockClient, mapping);
 
     expect(mockGenerateXcPassword).toHaveBeenCalledOnce();
-    expect(mockUpdateUser).toHaveBeenCalledWith(mockClient, 10, {
-      password: "new-xc-password",
-      custom_properties: { device_fingerprint: "abc", xc_password: "new-xc-password" },
-    });
+    expect(mockUpdateUser).toHaveBeenCalledWith(
+      mockClient,
+      10,
+      {
+        password: "new-xc-password",
+        custom_properties: { device_fingerprint: "abc", xc_password: "new-xc-password" },
+      },
+      8000,
+    );
     expect(mockEncrypt).toHaveBeenCalledWith("new-xc-password", "credential-encryption");
     expect(mockUpdateXcPasswordForMapping).toHaveBeenCalledWith(1, 10, "encrypted:value");
+  });
+
+  it("uses username lookup before the slow Dispatcharr detail endpoint when available", async () => {
+    const mapping = makeMapping();
+    mockFindUserByUsername.mockResolvedValueOnce({
+      ok: true,
+      data: makeDispatcharrUserWithProps({ xc_password: "old", device_fingerprint: "abc" }),
+    });
+    mockUpdateUser.mockResolvedValueOnce({ ok: true, data: makeDispatcharrUser() });
+
+    await rotateCredentials(mockClient, mapping);
+
+    expect(mockFindUserByUsername).toHaveBeenCalledWith(mockClient, "dispuser");
+    expect(mockGetUser).not.toHaveBeenCalled();
+    expect(mockUpdateUser).toHaveBeenCalledWith(
+      mockClient,
+      10,
+      {
+        password: "new-xc-password",
+        custom_properties: { device_fingerprint: "abc", xc_password: "new-xc-password" },
+      },
+      8000,
+    );
   });
 
   it("reloads mapping by ID before rotating credentials", async () => {
@@ -184,7 +219,7 @@ describe("rotateCredentials", () => {
     await rotateCredentialsForMappingId(mockClient, 7);
 
     expect(mockGetUserMappingById).toHaveBeenCalledWith(7);
-    expect(mockUpdateUser).toHaveBeenCalledWith(mockClient, 70, expect.any(Object));
+    expect(mockUpdateUser).toHaveBeenCalledWith(mockClient, 70, expect.any(Object), 8000);
     expect(mockUpdateXcPasswordForMapping).toHaveBeenCalledWith(7, 70, "encrypted:value");
   });
 

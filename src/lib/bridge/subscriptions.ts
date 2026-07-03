@@ -1,11 +1,17 @@
 import { appendAuditLog } from "$lib/db/repositories/audit";
+import {
+  EMPTY_PROFILE_GROUP_ID,
+  getGroupProfile,
+  getGroupProfilesByGroupIds,
+} from "$lib/db/repositories/channel-group-profiles";
 import { getUserMappingById, updateUserMapping } from "$lib/db/repositories/users";
 import { AuditAction } from "$lib/db/types";
 import type { DispatcharrClient } from "$lib/dispatcharr/client";
 import { listChannelGroups } from "$lib/dispatcharr/endpoints/channel-groups";
 import { listAllChannels } from "$lib/dispatcharr/endpoints/channels";
-import { getUser, updateUser } from "$lib/dispatcharr/endpoints/users";
+import { findUserByUsername, getUser, updateUser } from "$lib/dispatcharr/endpoints/users";
 import type { DispatcharrResult } from "$lib/dispatcharr/types";
+import { withDeadline } from "$lib/utils/deadline";
 import { isTransientResultError, retryResult } from "$lib/utils/retry";
 import { buildGroupChannelMap, ensureEmptyProfile, reconcileGroupProfile } from "./group-profiles";
 import type { ActorContext } from "./lifecycle";
@@ -23,6 +29,7 @@ export const ADMIN_USER_LEVEL = 10;
  * visibility without granting the profile-filter bypass.
  */
 export const PROVISIONED_USER_LEVEL = 1;
+const INTERACTIVE_MUTATION_DEADLINE_MS = 8_000;
 
 export interface GroupSubscriptionOutcome {
   /** The Dispatcharr channel profile IDs now assigned to the user (>= 1). */
@@ -46,6 +53,33 @@ function parseStoredGroupIds(raw: string): number[] {
   } catch {
     return [];
   }
+}
+
+async function getMappedDispatcharrUser(
+  client: DispatcharrClient,
+  mapping: NonNullable<ReturnType<typeof getUserMappingById>>,
+) {
+  if (mapping.dispatcharr_username) {
+    const lookup = await retryResult(
+      () => findUserByUsername(client, mapping.dispatcharr_username as string),
+      isTransientResultError,
+    );
+    if (lookup.ok && lookup.data?.id === mapping.dispatcharr_user_id) {
+      return { ok: true as const, data: lookup.data };
+    }
+    if (lookup.ok && lookup.data == null) {
+      return {
+        ok: false as const,
+        error: "not_found" as const,
+        message: `Dispatcharr user ${mapping.dispatcharr_username} not found`,
+      };
+    }
+  }
+
+  return retryResult(
+    () => getUser(client, mapping.dispatcharr_user_id as number),
+    isTransientResultError,
+  );
 }
 
 /**
@@ -90,10 +124,11 @@ export async function applyGroupSubscription(
   const beforeGroupIds = parseStoredGroupIds(mapping.dispatcharr_group_ids);
 
   // Refuse to scope an admin-level user (profile filtering would not apply).
-  const userResult = await retryResult(
-    () => getUser(client, dispatcharrUserId),
-    isTransientResultError,
-  );
+  const userResult = await withDeadline(getMappedDispatcharrUser(client, mapping), 8_000, {
+    ok: false,
+    error: "network_error",
+    message: "Timed out verifying Dispatcharr user",
+  });
   if (!userResult.ok) {
     return { ok: false, error: userResult.error, message: userResult.message };
   }
@@ -108,44 +143,82 @@ export async function applyGroupSubscription(
   }
 
   // Live channel + group state is the source of truth.
-  const channelsResult = await retryResult(() => listAllChannels(client), isTransientResultError);
-  if (!channelsResult.ok) {
-    return { ok: false, error: channelsResult.error, message: channelsResult.message };
-  }
-  const groupChannelMap = buildGroupChannelMap(channelsResult.data);
-
-  const groupsResult = await retryResult(() => listChannelGroups(client), isTransientResultError);
-  if (!groupsResult.ok) {
-    return { ok: false, error: groupsResult.error, message: groupsResult.message };
-  }
-  const groupNameById = new Map(groupsResult.data.map((g) => [g.id, g.name] as const));
-
-  // Drop duplicates and any group that no longer exists in Dispatcharr.
-  const requestedGroupIds = [...new Set(groupIds)].filter((id) => groupNameById.has(id));
-
+  const requestedGroupIds = [...new Set(groupIds)].sort((a, b) => a - b);
   const resolvedProfileIds: number[] = [];
   if (requestedGroupIds.length === 0) {
-    const empty = await ensureEmptyProfile(client);
-    if (!empty.ok) return { ok: false, error: empty.error, message: empty.message };
-    resolvedProfileIds.push(empty.data);
+    const cachedEmptyProfileId = getGroupProfile(EMPTY_PROFILE_GROUP_ID)?.profile_id ?? null;
+    if (cachedEmptyProfileId != null) {
+      resolvedProfileIds.push(cachedEmptyProfileId);
+    } else {
+      const empty = await ensureEmptyProfile(client);
+      if (!empty.ok) return { ok: false, error: empty.error, message: empty.message };
+      resolvedProfileIds.push(empty.data);
+    }
   } else {
+    const cachedProfiles = getGroupProfilesByGroupIds(requestedGroupIds);
+    const cachedProfileIds: number[] = [];
     for (const groupId of requestedGroupIds) {
-      const groupName = groupNameById.get(groupId) ?? `group ${groupId}`;
-      const desired = new Set(groupChannelMap.get(groupId) ?? []);
-      const profile = await reconcileGroupProfile(client, groupId, groupName, desired);
-      if (!profile.ok) return { ok: false, error: profile.error, message: profile.message };
-      resolvedProfileIds.push(profile.data);
+      const cached = cachedProfiles.get(groupId);
+      if (cached) cachedProfileIds.push(cached.profile_id);
+    }
+    if (cachedProfileIds.length === requestedGroupIds.length) {
+      resolvedProfileIds.push(...cachedProfileIds);
+    } else {
+      const channelsResult = await retryResult(
+        () => listAllChannels(client),
+        isTransientResultError,
+      );
+      if (!channelsResult.ok) {
+        return { ok: false, error: channelsResult.error, message: channelsResult.message };
+      }
+      const groupChannelMap = buildGroupChannelMap(channelsResult.data);
+
+      const groupsResult = await retryResult(
+        () => listChannelGroups(client),
+        isTransientResultError,
+      );
+      if (!groupsResult.ok) {
+        return { ok: false, error: groupsResult.error, message: groupsResult.message };
+      }
+      const groupNameById = new Map(groupsResult.data.map((g) => [g.id, g.name] as const));
+
+      if (!requestedGroupIds.every((id) => groupNameById.has(id))) {
+        return { ok: false, error: "validation_error", message: "Invalid group IDs" };
+      }
+
+      for (const groupId of requestedGroupIds) {
+        const groupName = groupNameById.get(groupId) ?? `group ${groupId}`;
+        const desired = new Set(groupChannelMap.get(groupId) ?? []);
+        const profile = await reconcileGroupProfile(client, groupId, groupName, desired);
+        if (!profile.ok) return { ok: false, error: profile.error, message: profile.message };
+        resolvedProfileIds.push(profile.data);
+      }
     }
   }
 
   // Enforce on Dispatcharr. resolvedProfileIds is always non-empty here.
-  const patch = await retryResult(
-    () =>
-      updateUser(client, dispatcharrUserId, {
-        channel_profiles: resolvedProfileIds,
-        user_level: PROVISIONED_USER_LEVEL,
-      }),
-    isTransientResultError,
+  const patch = await withDeadline(
+    retryResult(
+      () =>
+        updateUser(
+          client,
+          dispatcharrUserId,
+          {
+            channel_profiles: resolvedProfileIds,
+            user_level: PROVISIONED_USER_LEVEL,
+          },
+          // Bound the request to the wrapping deadline so a late PATCH is aborted,
+          // not orphaned (which would desync remote vs. local subscription state).
+          INTERACTIVE_MUTATION_DEADLINE_MS,
+        ),
+      isTransientResultError,
+    ),
+    INTERACTIVE_MUTATION_DEADLINE_MS,
+    {
+      ok: false,
+      error: "network_error",
+      message: "Timed out updating Dispatcharr channel profiles",
+    },
   );
   if (!patch.ok) {
     return { ok: false, error: patch.error, message: patch.message };
@@ -154,7 +227,7 @@ export async function applyGroupSubscription(
   // Persist intent locally. dispatcharr_profile_id holds the empty profile id
   // for a zero-group subscription (single profile), otherwise null — assigned
   // profiles are derivable from dispatcharr_group_ids + channel_group_profiles.
-  const sortedGroupIds = [...requestedGroupIds].sort((a, b) => a - b);
+  const sortedGroupIds = requestedGroupIds;
 
   // The Dispatcharr patch already landed. If the local mirror write throws
   // (constraint/schema/DB error) report a structured failure rather than let it

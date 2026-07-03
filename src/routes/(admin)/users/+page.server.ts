@@ -7,6 +7,7 @@ import { db } from "$lib/db/connection";
 import { appendAuditLog } from "$lib/db/repositories/audit";
 import {
   EMPTY_PROFILE_GROUP_ID,
+  getAllGroupProfiles,
   getGroupProfile,
   getGroupProfilesByGroupIds,
 } from "$lib/db/repositories/channel-group-profiles";
@@ -63,6 +64,21 @@ function parseStoredGroupIds(rawGroupIds: string): number[] {
   }
 }
 
+type ModeFilter = "all" | "automatic" | "self-managed" | "staff";
+
+function normalizeModeFilter(rawMode: string | null): {
+  filter: ModeFilter;
+  provisioningMode: ProvisioningMode | null;
+} {
+  if (rawMode === "automatic" || rawMode === "staff") {
+    return { filter: rawMode, provisioningMode: rawMode };
+  }
+  if (rawMode === "self-managed" || rawMode === "self_managed") {
+    return { filter: "self-managed", provisioningMode: "self_managed" };
+  }
+  return { filter: "all", provisioningMode: null };
+}
+
 async function resolveDispatcharrCredentials(): Promise<[url: string, key: string]> {
   const url = await getConfig("dispatcharr_url");
   const key = await getConfig("dispatcharr_api_key");
@@ -103,17 +119,16 @@ const USERS_DRIFT_DEADLINE_MS = Math.max(
   Math.min(6_000, USERS_DISPATCHARR_DEADLINE_MS - 1_000),
 );
 
+// Deadline for single-shot interactive admin mutations (changeProfile). Passed as
+// the updateUser request timeout too, so ofetch aborts the in-flight PATCH at the
+// deadline instead of orphaning it — mirrors the bridge mutation sites.
+const INTERACTIVE_MUTATION_DEADLINE_MS = 8_000;
+
 export const load: PageServerLoad = async (event) => {
   await requireAdmin(event);
   const { url } = event;
   const status = url.searchParams.get("status") ?? "all";
-  // Validate against the known modes; an unrecognized value from a hand-crafted
-  // or invalid URL (e.g. the hyphenated "self-managed") must fall back to "all"
-  // rather than silently mis-filtering. The UI only ever emits the canonical
-  // "self_managed", so this fallback never affects normal navigation (ISSUE-002).
-  const KNOWN_MODES = new Set(["all", "automatic", "self_managed", "staff"]);
-  const modeParam = url.searchParams.get("mode") ?? "all";
-  const mode = KNOWN_MODES.has(modeParam) ? modeParam : "all";
+  const { filter: mode, provisioningMode } = normalizeModeFilter(url.searchParams.get("mode"));
   const search = url.searchParams.get("search") ?? "";
 
   const ownerPlexAccountId = await tryResolveConfiguredPlexOwnerAccountId();
@@ -129,8 +144,8 @@ export const load: PageServerLoad = async (event) => {
     });
   }
 
-  if (mode !== "all") {
-    mappings = mappings.filter((m) => m.provisioning_mode === (mode as ProvisioningMode));
+  if (provisioningMode != null) {
+    mappings = mappings.filter((m) => m.provisioning_mode === provisioningMode);
   }
 
   if (search.trim()) {
@@ -269,7 +284,19 @@ export const actions: Actions = {
         actor: admin.username,
         ipAddress: event.getClientAddress(),
       });
-      return { success: true };
+      const updated = getUserMappingById(id);
+      return {
+        success: true,
+        mappingId: updated?.id ?? mapping.id,
+        isActive: updated?.is_active ?? 1,
+        dispatcharrUserId: updated?.dispatcharr_user_id ?? null,
+        dispatcharrUsername: updated?.dispatcharr_username ?? null,
+        groupIds: parseStoredGroupIds(
+          updated?.dispatcharr_group_ids ?? mapping.dispatcharr_group_ids,
+        ),
+        profileId: updated?.dispatcharr_profile_id ?? null,
+        reprovisioned: false,
+      };
     } catch (err) {
       return fail(500, {
         error: err instanceof Error ? err.message : "Failed to rotate credentials",
@@ -369,9 +396,28 @@ export const actions: Actions = {
       }
       // Surface the one-time password so the admin can communicate it.
       if (result.status === "provisioned" && result.initialPassword) {
-        return { success: true, reprovisioned: true, initialPassword: result.initialPassword };
+        return {
+          success: true,
+          mappingId: result.mapping.id,
+          reprovisioned: true,
+          initialPassword: result.initialPassword,
+          isActive: result.mapping.is_active,
+          dispatcharrUserId: result.mapping.dispatcharr_user_id,
+          dispatcharrUsername: result.mapping.dispatcharr_username,
+          groupIds: parseStoredGroupIds(result.mapping.dispatcharr_group_ids),
+          profileId: result.mapping.dispatcharr_profile_id,
+        };
       }
-      return { success: true, reprovisioned: true };
+      return {
+        success: true,
+        mappingId: result.mapping.id,
+        reprovisioned: true,
+        isActive: result.mapping.is_active,
+        dispatcharrUserId: result.mapping.dispatcharr_user_id,
+        dispatcharrUsername: result.mapping.dispatcharr_username,
+        groupIds: parseStoredGroupIds(result.mapping.dispatcharr_group_ids),
+        profileId: result.mapping.dispatcharr_profile_id,
+      };
     } catch (err) {
       return fail(500, { error: err instanceof Error ? err.message : "Failed to enable user" });
     }
@@ -413,22 +459,6 @@ export const actions: Actions = {
       });
     }
 
-    // applyGroupSubscription filters submitted ids by LIVE EXISTENCE only, so a
-    // crafted request could assign a quarantine group (Graveyard/Slow/Black
-    // Screens) the admin UI hides everywhere. Reject any id that isn't a live,
-    // non-quarantine group. Fail closed if the live list is unavailable. An empty
-    // selection still passes ([].every is true) and resolves to the empty profile.
-    const groupsResult = await retryResult(() => listChannelGroups(client), isTransientResultError);
-    if (!groupsResult.ok) {
-      return fail(502, { error: "Unable to fetch channel groups. Please try again." });
-    }
-    const liveNonQuarantineIds = new Set(
-      groupsResult.data.filter((g) => !isQuarantineGroup(g.name)).map((g) => g.id),
-    );
-    if (!groupIds.every((id) => liveNonQuarantineIds.has(id))) {
-      return fail(400, { error: "Invalid group IDs" });
-    }
-
     // applyGroupSubscription is the single path that enforces the subscription
     // on Dispatcharr (Model A), persists the group set, and writes the audit
     // entry. An empty selection resolves to the empty profile (zero channels),
@@ -438,10 +468,18 @@ export const actions: Actions = {
       ipAddress: event.getClientAddress(),
     });
     if (!result.ok) {
-      return fail(502, { error: result.message });
+      // A validation_error here means client-supplied group IDs were rejected
+      // (e.g. stale/unknown IDs resolved against Dispatcharr) — a 4xx, not an
+      // upstream outage. Every other error kind is a genuine 502.
+      return fail(result.error === "validation_error" ? 400 : 502, { error: result.message });
     }
 
-    return { success: true };
+    return {
+      success: true,
+      groupIds: result.data.groupIds,
+      profileIds: result.data.profileIds,
+      profileId: result.data.groupIds.length === 0 ? (result.data.profileIds[0] ?? null) : null,
+    };
   },
 
   setGroupLock: async (event) => {
@@ -518,15 +556,22 @@ export const actions: Actions = {
       });
     }
 
-    // Default the owner to every admin-offered group. Fail closed if the live
-    // group list is unavailable: a silent empty result would provision the owner
-    // to the empty profile (zero channels) and report success.
     const defaults = await getSubscriptionDefaults();
-    const groupsResult = await retryResult(() => listChannelGroups(client), isTransientResultError);
-    if (!groupsResult.ok) {
-      return fail(502, { error: "Unable to fetch channel groups. Please try again." });
+    let groupIds = defaults.selectableGroupIds;
+    if (groupIds == null) {
+      const groupsResult = await withDeadline(
+        retryResult(() => listChannelGroups(client), isTransientResultError),
+        2_000,
+        { ok: false, error: "network_error", message: "Channel group lookup timed out" } as const,
+      );
+      if (groupsResult.ok) {
+        groupIds = defaultSelectedGroupIds(computeOfferedGroups(groupsResult.data, defaults));
+      } else {
+        groupIds = getAllGroupProfiles()
+          .filter((profile) => profile.group_id !== EMPTY_PROFILE_GROUP_ID)
+          .map((profile) => profile.group_id);
+      }
     }
-    const groupIds = defaultSelectedGroupIds(computeOfferedGroups(groupsResult.data, defaults));
 
     const result = await provisionUser(
       client,
@@ -576,6 +621,7 @@ export const actions: Actions = {
       success: true,
       ownerSubscribed: true,
       dispatcharrUsername: result.mapping.dispatcharr_username,
+      mapping: { ...result.mapping, dispatcharr_xc_password_enc: null },
       initialPassword: initialPassword ?? null,
     };
   },
@@ -602,9 +648,22 @@ export const actions: Actions = {
 
     try {
       const client = await getClient();
-      const updateRes = await updateUser(client, mapping.dispatcharr_user_id, {
-        channel_profiles: [profileId],
-      });
+      const updateRes = await withDeadline(
+        updateUser(
+          client,
+          mapping.dispatcharr_user_id,
+          {
+            channel_profiles: [profileId],
+          },
+          INTERACTIVE_MUTATION_DEADLINE_MS,
+        ),
+        INTERACTIVE_MUTATION_DEADLINE_MS,
+        {
+          ok: false,
+          error: "network_error",
+          message: "Timed out updating Dispatcharr profile",
+        },
+      );
       if (!updateRes.ok) return fail(500, { error: updateRes.message });
       updateUserMapping(id, { dispatcharr_profile_id: profileId });
     } catch (err) {
@@ -632,7 +691,7 @@ export const actions: Actions = {
       );
     }
 
-    return { success: true };
+    return { success: true, profileId };
   },
 
   deleteMapping: async (event) => {

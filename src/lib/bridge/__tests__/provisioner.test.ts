@@ -20,6 +20,7 @@ vi.mock("$lib/db/repositories/audit", () => ({
 
 vi.mock("$lib/dispatcharr/endpoints/users", () => ({
   createUser: vi.fn(),
+  findUserByUsername: vi.fn(),
   getUser: vi.fn(),
   updateUser: vi.fn(),
   deleteUser: vi.fn(),
@@ -57,7 +58,7 @@ vi.mock("$lib/utils/retry", async (importOriginal) => {
 const { getUserMappingByPlexId, createUserMapping, updateUserMapping, getAllUserMappings } =
   await import("$lib/db/repositories/users");
 const { appendAuditLog } = await import("$lib/db/repositories/audit");
-const { createUser, getUser, updateUser, deleteUser } = await import(
+const { createUser, findUserByUsername, getUser, updateUser, deleteUser } = await import(
   "$lib/dispatcharr/endpoints/users"
 );
 const { fetchAllPages } = await import("$lib/dispatcharr/pagination");
@@ -131,6 +132,7 @@ beforeEach(() => {
   vi.mocked(getAllUserMappings).mockReset();
   vi.mocked(appendAuditLog).mockReset();
   vi.mocked(createUser).mockReset();
+  vi.mocked(findUserByUsername).mockReset().mockResolvedValue({ ok: true, data: null });
   vi.mocked(getUser).mockReset();
   vi.mocked(updateUser).mockReset();
   vi.mocked(deleteUser).mockReset().mockResolvedValue({ ok: true, data: undefined });
@@ -159,7 +161,8 @@ beforeEach(() => {
     .mockReset()
     .mockResolvedValue({ ok: true, data: { profileIds: [10], groupIds: [1, 2] } });
 
-  // Default: remote fetch fails (no client.baseUrl in mockClient), matching pre-existing behavior
+  // Legacy remote full-list mock retained for older tests; username selection now
+  // uses targeted findUserByUsername probes by default.
   vi.mocked(fetchAllPages).mockResolvedValue({
     ok: false,
     error: "network_error" as const,
@@ -866,11 +869,13 @@ describe("provisionUser — username deduplication", () => {
     // No local collisions
     vi.mocked(getAllUserMappings).mockReturnValue([]);
 
-    // Remote Dispatcharr already has "testuser"
-    vi.mocked(fetchAllPages).mockResolvedValue({
-      ok: true,
-      data: [makeDispatcharrUser({ id: 900, username: "testuser" })],
-    });
+    // Remote Dispatcharr already has "testuser", but not "testuser_2".
+    vi.mocked(findUserByUsername)
+      .mockResolvedValueOnce({
+        ok: true,
+        data: makeDispatcharrUser({ id: 900, username: "testuser" }),
+      })
+      .mockResolvedValueOnce({ ok: true, data: null });
 
     const dispatcharrUser = makeDispatcharrUser({ id: 50, username: "testuser_2" });
     const newMapping = makeMapping({
@@ -888,12 +893,8 @@ describe("provisionUser — username deduplication", () => {
       groupIds: [1],
     });
 
-    // Should have called fetchAllPages to get remote usernames
-    expect(fetchAllPages).toHaveBeenCalledWith(
-      mockClient,
-      "/api/accounts/users/",
-      expect.anything(),
-    );
+    expect(findUserByUsername).toHaveBeenCalledWith(mockClient, "testuser");
+    expect(findUserByUsername).toHaveBeenCalledWith(mockClient, "testuser_2");
 
     // Username should be suffixed due to remote collision
     expect(createUser).toHaveBeenCalledWith(

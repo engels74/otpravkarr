@@ -223,4 +223,31 @@ describe("POST /api/internal/rotate-credentials/[id]", () => {
       message: "Dispatcharr API down",
     });
   });
+
+  it("returns 504 when credential rotation times out", async () => {
+    const { POST } = await import("./+server");
+
+    mocks.requireAdminApi.mockResolvedValue({ id: 1, username: "admin" });
+    mocks.getUserMappingById.mockReturnValue(MAPPING);
+    mocks.getConfig.mockImplementation(async (key: string) => {
+      if (key === "dispatcharr_url") return "http://dispatcharr.local";
+      if (key === "dispatcharr_api_key") return "api-key-123";
+      return null;
+    });
+    mocks.DispatcharrClient.mockImplementation(function (this: { baseUrl: string }, url: string) {
+      this.baseUrl = url;
+    });
+    mocks.rotateCredentialsForMappingId.mockRejectedValue(
+      new Error("Timed out rotating credentials on Dispatcharr"),
+    );
+
+    const response = await POST(makeEvent("5"));
+
+    expect(response.status).toBe(504);
+    expect(await response.json()).toEqual({
+      ok: false,
+      error: "dispatcharr_timeout",
+      message: "Timed out rotating credentials on Dispatcharr",
+    });
+  });
 });

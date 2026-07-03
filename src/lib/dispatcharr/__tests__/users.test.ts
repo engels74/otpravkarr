@@ -12,7 +12,7 @@ vi.mock("ofetch", () => ({
 
 // Import after mocking
 const { DispatcharrClient } = await import("../client");
-const { listUsers, createUser, getUser, updateUser, deleteUser } = await import(
+const { listUsers, findUserByUsername, createUser, getUser, updateUser, deleteUser } = await import(
   "../endpoints/users"
 );
 
@@ -105,6 +105,34 @@ describe("listUsers", () => {
 
     expect(mockOfetch).toHaveBeenCalledWith(
       "https://dispatch.example.com/api/accounts/users/?page=2&page_size=25",
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
+
+  it("normalizes flat array responses even when query params are present", async () => {
+    const user = makeUser({ username: "alice" });
+    mockOfetch.mockResolvedValueOnce([user]);
+    const client = createClient();
+
+    const result = await listUsers(client, 1, 100);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.results).toEqual([user]);
+      expect(result.data.count).toBe(1);
+    }
+  });
+
+  it("finds an exact user from Dispatcharr username search results", async () => {
+    const user = makeUser({ username: "alice" });
+    mockOfetch.mockResolvedValueOnce([makeUser({ username: "alice_2" }), user]);
+    const client = createClient();
+
+    const result = await findUserByUsername(client, "alice");
+
+    expect(result).toEqual({ ok: true, data: user });
+    expect(mockOfetch).toHaveBeenCalledWith(
+      "https://dispatch.example.com/api/accounts/users/?username=alice&page_size=100",
       expect.objectContaining({ method: "GET" }),
     );
   });

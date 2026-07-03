@@ -32,6 +32,16 @@ export const POST: RequestHandler = async (event) => {
       return Response.json({ ok: false, error: "not_found" }, { status: 404 });
     }
     const message = err instanceof Error ? err.message : String(err);
+    if (message.toLowerCase().includes("timed out")) {
+      return Response.json(
+        {
+          ok: false,
+          error: "dispatcharr_timeout",
+          message,
+        },
+        { status: 504 },
+      );
+    }
     return Response.json(
       {
         ok: false,

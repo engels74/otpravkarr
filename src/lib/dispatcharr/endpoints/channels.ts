@@ -15,7 +15,11 @@ const PaginatedChannelsSchema = paginatedSchema(DispatcharrChannelSchema);
 export async function listAllChannels(
   client: DispatcharrClient,
 ): Promise<DispatcharrResult<DispatcharrChannel[]>> {
-  return fetchAllPages(client, "/api/channels/channels/", DispatcharrChannelSchema);
+  // Dispatcharr's default channel page size can be very small on some builds;
+  // dogfood found the bare endpoint timing out before the first page completed.
+  // Request a large, still conservative page size so group/profile convergence
+  // remains interactive while fetchAllPages still follows `next` if needed.
+  return fetchAllPages(client, "/api/channels/channels/?page_size=500", DispatcharrChannelSchema);
 }
 
 export function createChannelEndpoints(client: DispatcharrClient) {
@@ -37,7 +41,11 @@ export function createChannelEndpoints(client: DispatcharrClient) {
     },
 
     async getAllChannels(): Promise<DispatcharrResult<DispatcharrChannel[]>> {
-      return fetchAllPages(client, "/api/channels/channels/", DispatcharrChannelSchema);
+      return fetchAllPages(
+        client,
+        "/api/channels/channels/?page_size=500",
+        DispatcharrChannelSchema,
+      );
     },
 
     async getChannelStreams(channelId: number): Promise<DispatcharrResult<unknown[]>> {

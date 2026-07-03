@@ -13,7 +13,12 @@ import {
 import type { UserMapping } from "$lib/db/types";
 import { AuditAction } from "$lib/db/types";
 import type { DispatcharrClient } from "$lib/dispatcharr/client";
-import { deleteUser, getUser, updateUser } from "$lib/dispatcharr/endpoints/users";
+import {
+  deleteUser,
+  findUserByUsername,
+  getUser,
+  updateUser,
+} from "$lib/dispatcharr/endpoints/users";
 import { getAccount } from "$lib/plex/client";
 import { fetchFriends } from "$lib/plex/friends";
 import type { PlexFriend } from "$lib/plex/types";
@@ -22,6 +27,7 @@ import {
   getPlexOwnerAccountIdFromAccount,
   rememberPlexOwnerAccountId,
 } from "$lib/server/plex-owner";
+import { withDeadline } from "$lib/utils/deadline";
 import {
   isTransientPlexError,
   isTransientResultError,
@@ -31,10 +37,38 @@ import {
 import { type SyncReport, UserMappingNotFoundError } from "./types";
 
 const CREDENTIAL_PURPOSE = "credential-encryption";
+const INTERACTIVE_MUTATION_DEADLINE_MS = 8_000;
 
 export interface ActorContext {
   actor: string;
   ipAddress: string;
+}
+
+async function getMappedDispatcharrUser(
+  client: DispatcharrClient,
+  mapping: UserMapping,
+): ReturnType<typeof getUser> {
+  if (mapping.dispatcharr_username) {
+    const lookup = await retryResult(
+      () => findUserByUsername(client, mapping.dispatcharr_username as string),
+      isTransientResultError,
+    );
+    if (lookup.ok && lookup.data?.id === mapping.dispatcharr_user_id) {
+      return { ok: true, data: lookup.data };
+    }
+    if (lookup.ok && lookup.data == null) {
+      return {
+        ok: false,
+        error: "not_found",
+        message: `Dispatcharr user ${mapping.dispatcharr_username} not found`,
+      };
+    }
+  }
+
+  return retryResult(
+    () => getUser(client, mapping.dispatcharr_user_id as number),
+    isTransientResultError,
+  );
 }
 
 /**
@@ -67,10 +101,11 @@ export async function rotateCredentials(
   // Encrypt before pushing to Dispatcharr — if encrypt fails, remote state is unchanged
   const encryptedPassword = await encrypt(newPassword, CREDENTIAL_PURPOSE);
 
-  const getResult = await retryResult(
-    () => getUser(client, dispatcharrUserId),
-    isTransientResultError,
-  );
+  const getResult = await withDeadline(getMappedDispatcharrUser(client, mapping), 8_000, {
+    ok: false,
+    error: "network_error",
+    message: "Timed out verifying Dispatcharr user",
+  });
   if (!getResult.ok) {
     if (getResult.error === "not_found") {
       try {
@@ -99,13 +134,28 @@ export async function rotateCredentials(
       ? (getResult.data.custom_properties as Record<string, unknown>)
       : {};
 
-  const result = await retryResult(
-    () =>
-      updateUser(client, dispatcharrUserId, {
-        password: newPassword,
-        custom_properties: { ...existingCustomProps, xc_password: newPassword },
-      }),
-    isTransientResultError,
+  const result = await withDeadline(
+    retryResult(
+      () =>
+        updateUser(
+          client,
+          dispatcharrUserId,
+          {
+            password: newPassword,
+            custom_properties: { ...existingCustomProps, xc_password: newPassword },
+          },
+          // Bound the request to the wrapping deadline so a late PATCH is aborted,
+          // not orphaned (which would desync remote vs. local credentials on retry).
+          INTERACTIVE_MUTATION_DEADLINE_MS,
+        ),
+      isTransientResultError,
+    ),
+    INTERACTIVE_MUTATION_DEADLINE_MS,
+    {
+      ok: false,
+      error: "network_error",
+      message: "Timed out rotating credentials on Dispatcharr",
+    },
   );
   if (!result.ok) {
     if (result.error === "not_found") {
@@ -250,10 +300,11 @@ export async function enableUser(client: DispatcharrClient, mapping: UserMapping
   const dispatcharrUserId = mapping.dispatcharr_user_id;
 
   // Verify user still exists on Dispatcharr
-  const result = await retryResult(
-    () => getUser(client, dispatcharrUserId),
-    isTransientResultError,
-  );
+  const result = await withDeadline(getMappedDispatcharrUser(client, mapping), 8_000, {
+    ok: false,
+    error: "network_error",
+    message: "Timed out verifying Dispatcharr user",
+  });
   if (!result.ok) {
     if (result.error === "not_found") {
       // Dispatcharr user was deleted externally — clear stale fields

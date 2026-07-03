@@ -92,9 +92,16 @@ async function getInteractiveClient(): Promise<DispatcharrClient> {
 // pagination — the likeliest long pole — gets a tighter inner bound so
 // groups/profiles still render when only drift is slow. Both derive from
 // IDLE_TIMEOUT (like INTERACTIVE_TIMEOUT_MS) so the load stays bounded even if a
-// deployer tunes it below the 8s default; at the default 10s they are 8s / 6s.
-const USERS_DISPATCHARR_DEADLINE_MS = Math.min(8_000, IDLE_TIMEOUT_MS - 1_000);
-const USERS_DRIFT_DEADLINE_MS = Math.min(6_000, USERS_DISPATCHARR_DEADLINE_MS - 1_000);
+// deployer tunes it below the 8s default; at the default 10s they are 8s / 6s. A
+// 500ms floor (matching computeInteractiveTimeoutMs in client.ts) keeps both
+// positive if IDLE_TIMEOUT is tuned to 1-2s, where the subtractions would
+// otherwise cross zero and make withDeadline fire immediately — masking a
+// healthy Dispatcharr as unreachable.
+const USERS_DISPATCHARR_DEADLINE_MS = Math.max(500, Math.min(8_000, IDLE_TIMEOUT_MS - 1_000));
+const USERS_DRIFT_DEADLINE_MS = Math.max(
+  500,
+  Math.min(6_000, USERS_DISPATCHARR_DEADLINE_MS - 1_000),
+);
 
 export const load: PageServerLoad = async (event) => {
   await requireAdmin(event);

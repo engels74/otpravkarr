@@ -538,9 +538,13 @@ describe("client factories", () => {
 describe("interactive timeout invariant", () => {
   it("the default INTERACTIVE_TIMEOUT_MS is strictly below the adapter idle window", () => {
     expect(INTERACTIVE_TIMEOUT_MS).toBeLessThan(IDLE_TIMEOUT_MS);
-    // Default IDLE_TIMEOUT is 10s → interactive caps at 6s.
-    expect(IDLE_TIMEOUT_MS).toBe(10_000);
-    expect(INTERACTIVE_TIMEOUT_MS).toBe(6_000);
+    // The constants are baked from process.env.IDLE_TIMEOUT at module-load time,
+    // so only assert the exact default values when the env is untuned.
+    if (process.env.IDLE_TIMEOUT === undefined) {
+      // Default IDLE_TIMEOUT is 10s → interactive caps at 6s.
+      expect(IDLE_TIMEOUT_MS).toBe(10_000);
+      expect(INTERACTIVE_TIMEOUT_MS).toBe(6_000);
+    }
   });
 
   it("computeInteractiveTimeoutMs stays below idle for every sane tuning", () => {

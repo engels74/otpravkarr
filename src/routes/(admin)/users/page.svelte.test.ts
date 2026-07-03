@@ -352,6 +352,31 @@ describe("admin users page", () => {
     expect(dialog.className).toContain("overflow-x-auto");
   });
 
+  it("keeps Change Group Save reachable via a sticky footer + single scroll region (ISSUE-001)", async () => {
+    render(UsersPage, {
+      props: { data: { ...defaultData, groups: [{ id: 1, name: "Group A", channelCount: 5 }] } },
+    });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Open actions for testuser" }));
+    await fireEvent.click(await screen.findByRole("menuitem", { name: /Change Group/ }));
+    const dialog = await screen.findByRole("dialog");
+
+    // The Save action lives in a footer pinned to the bottom of the scrolling
+    // dialog, so it stays on-screen at 390px without JS scrolling.
+    const saveButton = within(dialog).getByRole("button", { name: /^Save$/ });
+    const footer = saveButton.closest('[data-slot="dialog-footer"]');
+    expect(footer?.className).toContain("sticky");
+    expect(footer?.className).toContain("bottom-0");
+
+    // scrollList=false at this call site → the picker list must NOT impose its
+    // own inner scroll, leaving the dialog as the single scroll region. Target a
+    // GroupPicker row checkbox (not the separate lock-form checkbox).
+    const groupCheckbox = within(dialog).getByRole("checkbox", { name: /Group A/ });
+    const listContainer = groupCheckbox.closest("ul")?.parentElement;
+    expect(listContainer?.className).not.toContain("overflow-y-auto");
+    expect(listContainer?.className).not.toContain("max-h-[28rem]");
+  });
+
   it("keeps the lock checkbox checked after a successful Save lock (ISSUE-001)", async () => {
     const { lockForm, checkbox } = await openChangeGroupLockForm({
       ...defaultData,

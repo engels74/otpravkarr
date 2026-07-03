@@ -707,10 +707,13 @@ async function copyOneTimePassword() {
               Zero groups means this user will see no channels.
             </p>
           {/if}
+          <!-- scrollList=false: the picker grows and the dialog is the single
+               scroll region, so the sticky footer below keeps Save reachable at
+               390px without JS scrolling (ISSUE-001). Only this call site. -->
           <div class="py-2">
-            <GroupPicker groups={data.groups} bind:selected={selectedGroupSet} />
+            <GroupPicker groups={data.groups} bind:selected={selectedGroupSet} scrollList={false} />
           </div>
-          <Dialog.Footer>
+          <Dialog.Footer class="sticky bottom-0 z-10 bg-popover">
             <Button type="submit" disabled={submitting} size="sm">
               {submitting ? "Saving..." : "Save"}
             </Button>

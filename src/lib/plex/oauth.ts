@@ -130,8 +130,16 @@ export function getPendingOAuth(id: string): boolean {
 }
 
 export function removePendingOAuth(id: string): void {
+  // ISSUE-005: delete ONLY the pending entry. The completed cache is retained
+  // for its EXPIRY_MS window so a duplicate/racing callback for the same
+  // oauth_id (the popup-vs-same-tab double navigation) replays the cached
+  // identity via completeOAuth's cache-hit path instead of 400ing on a
+  // "session not found" miss. Replay is safe: provisionUser is idempotent by
+  // plex_account_id, and the oauth_id cookie is single-use, httpOnly, and
+  // Secure, so there is no later attacker-replay surface — only an in-flight
+  // duplicate callback. Expired completed entries are still swept by
+  // cleanExpiredOAuth / the opportunistic cleanup in initiateOAuth.
   pending.delete(id);
-  completed.delete(id);
 }
 
 export function cleanExpiredOAuth(): void {

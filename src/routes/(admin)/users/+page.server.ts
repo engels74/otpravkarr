@@ -1,9 +1,9 @@
 import { fail } from "@sveltejs/kit";
+import type { z } from "zod";
 import { disableUser, enableUser, rotateCredentialsForMappingId } from "$lib/bridge/lifecycle";
 import { provisionUser } from "$lib/bridge/provisioner";
 import { applyGroupSubscription } from "$lib/bridge/subscriptions";
 import { db } from "$lib/db/connection";
-
 import { appendAuditLog } from "$lib/db/repositories/audit";
 import {
   EMPTY_PROFILE_GROUP_ID,
@@ -19,12 +19,17 @@ import {
   updateUserMapping,
 } from "$lib/db/repositories/users";
 import { AuditAction, type ProvisioningMode } from "$lib/db/types";
-import { DispatcharrClient } from "$lib/dispatcharr/client";
+import {
+  createInteractiveClient,
+  DispatcharrClient,
+  IDLE_TIMEOUT_MS,
+} from "$lib/dispatcharr/client";
 import { listChannelGroups } from "$lib/dispatcharr/endpoints/channel-groups";
 import { listProfiles } from "$lib/dispatcharr/endpoints/profiles";
 import { updateUser } from "$lib/dispatcharr/endpoints/users";
 import { fetchAllPages } from "$lib/dispatcharr/pagination";
 import { DispatcharrUserSchema } from "$lib/dispatcharr/schemas";
+import type { DispatcharrResult } from "$lib/dispatcharr/types";
 import { getAccount } from "$lib/plex/client";
 import type { PlexIdentity } from "$lib/plex/types";
 import { requireAdmin } from "$lib/server/auth";
@@ -38,6 +43,7 @@ import {
   getSubscriptionDefaults,
   isQuarantineGroup,
 } from "$lib/server/subscription-config";
+import { withDeadline } from "$lib/utils/deadline";
 import { isTransientResultError, retryResult } from "$lib/utils/retry";
 import type { Actions, PageServerLoad } from "./$types";
 
@@ -57,12 +63,45 @@ function parseStoredGroupIds(rawGroupIds: string): number[] {
   }
 }
 
-async function getClient(): Promise<DispatcharrClient> {
+async function resolveDispatcharrCredentials(): Promise<[url: string, key: string]> {
   const url = await getConfig("dispatcharr_url");
   const key = await getConfig("dispatcharr_api_key");
   if (!url || !key) throw new Error("Dispatcharr not configured");
+  return [url, key];
+}
+
+// Robust client (15s + idempotent retry) for the mutating actions
+// (provisioning, credential rotation, group changes) — these are not on an
+// idle-socket deadline and must not fast-fail.
+async function getClient(): Promise<DispatcharrClient> {
+  const [url, key] = await resolveDispatcharrCredentials();
   return new DispatcharrClient(url, key);
 }
+
+// Interactive client (short timeout, no retry) for the page LOAD only, so each
+// underlying request also fails fast within the aggregate deadline below.
+async function getInteractiveClient(): Promise<DispatcharrClient> {
+  const [url, key] = await resolveDispatcharrCredentials();
+  return createInteractiveClient(url, key);
+}
+
+// The /users Dispatcharr block is multi-phase (parallel groups+profiles, then a
+// sequential paginated users fetch for drift), which a per-request timeout can't
+// bound. An aggregate deadline degrades the whole block to empty so the page
+// renders its DB rows inside the adapter idle window (ISSUE-002); the drift
+// pagination — the likeliest long pole — gets a tighter inner bound so
+// groups/profiles still render when only drift is slow. Both derive from
+// IDLE_TIMEOUT (like INTERACTIVE_TIMEOUT_MS) so the load stays bounded even if a
+// deployer tunes it below the 8s default; at the default 10s they are 8s / 6s. A
+// 500ms floor (matching computeInteractiveTimeoutMs in client.ts) keeps both
+// positive if IDLE_TIMEOUT is tuned to 1-2s, where the subtractions would
+// otherwise cross zero and make withDeadline fire immediately — masking a
+// healthy Dispatcharr as unreachable.
+const USERS_DISPATCHARR_DEADLINE_MS = Math.max(500, Math.min(8_000, IDLE_TIMEOUT_MS - 1_000));
+const USERS_DRIFT_DEADLINE_MS = Math.max(
+  500,
+  Math.min(6_000, USERS_DISPATCHARR_DEADLINE_MS - 1_000),
+);
 
 export const load: PageServerLoad = async (event) => {
   await requireAdmin(event);
@@ -105,30 +144,56 @@ export const load: PageServerLoad = async (event) => {
 
   // Fetch live Dispatcharr CHANNEL groups (the subscribable unit) + channel
   // profiles. Quarantine groups (Graveyard/Slow/Black Screens) are excluded.
-  let groups: { id: number; name: string; channelCount: number | null }[] = [];
-  let profiles: { id: number; name: string }[] = [];
   // Per-mapping drift: does Dispatcharr's actual channel_profiles for the user
   // match the otpravkarr-owned profiles its stored group selection resolves to?
-  const driftByMappingId: Record<number, boolean> = {};
+  type DispatcharrData = {
+    groups: { id: number; name: string; channelCount: number | null }[];
+    profiles: { id: number; name: string }[];
+    driftByMappingId: Record<number, boolean>;
+  };
+  const EMPTY_DISPATCHARR_DATA: DispatcharrData = {
+    groups: [],
+    profiles: [],
+    driftByMappingId: {},
+  };
 
-  try {
-    const client = await getClient();
+  const loadDispatcharrData = async (): Promise<DispatcharrData> => {
+    let client: DispatcharrClient;
+    try {
+      client = await getInteractiveClient();
+    } catch {
+      // Dispatcharr may not be configured yet — degrade to empty.
+      return EMPTY_DISPATCHARR_DATA;
+    }
+
     const [groupsResult, profilesResult] = await Promise.all([
       listChannelGroups(client),
       listProfiles(client),
     ]);
-    if (groupsResult.ok) {
-      groups = groupsResult.data
-        .filter((g) => !isQuarantineGroup(g.name))
-        .map((g) => ({ id: g.id, name: g.name, channelCount: g.channel_count ?? null }));
-    }
-    if (profilesResult.ok) {
-      profiles = profilesResult.data.map((p) => ({ id: p.id, name: p.name }));
-    }
+    const groups = groupsResult.ok
+      ? groupsResult.data
+          .filter((g) => !isQuarantineGroup(g.name))
+          .map((g) => ({ id: g.id, name: g.name, channelCount: g.channel_count ?? null }))
+      : [];
+    const profiles = profilesResult.ok
+      ? profilesResult.data.map((p) => ({ id: p.id, name: p.name }))
+      : [];
 
     // Compare each mapping's effective (remote) profile set with its intended
-    // (resolved-from-group-ids) set to surface drift in the admin UI.
-    const usersResult = await fetchAllPages(client, "/api/accounts/users/", DispatcharrUserSchema);
+    // (resolved-from-group-ids) set to surface drift in the admin UI. This full
+    // paginated fetch is the likeliest long pole, so bound it independently: on
+    // timeout drift is simply left empty (badges don't render) while
+    // groups/profiles above still show.
+    const driftByMappingId: Record<number, boolean> = {};
+    const usersResult = await withDeadline(
+      fetchAllPages(client, "/api/accounts/users/", DispatcharrUserSchema),
+      USERS_DRIFT_DEADLINE_MS,
+      {
+        ok: false,
+        error: "network_error",
+        message: "Drift fetch exceeded deadline",
+      } as DispatcharrResult<z.infer<typeof DispatcharrUserSchema>[]>,
+    );
     if (usersResult.ok) {
       const remoteByUserId = new Map<number, Set<number>>();
       for (const u of usersResult.data) {
@@ -169,9 +234,15 @@ export const load: PageServerLoad = async (event) => {
           [...intended].some((id) => !effective.has(id));
       }
     }
-  } catch {
-    // Dispatcharr may not be configured yet — groups/profiles stay empty
-  }
+
+    return { groups, profiles, driftByMappingId };
+  };
+
+  const { groups, profiles, driftByMappingId } = await withDeadline(
+    loadDispatcharrData(),
+    USERS_DISPATCHARR_DEADLINE_MS,
+    EMPTY_DISPATCHARR_DATA,
+  );
 
   return {
     mappings,

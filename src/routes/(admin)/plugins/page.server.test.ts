@@ -14,7 +14,14 @@ vi.mock("$lib/db/repositories/channel-group-profiles", () => ({
   EMPTY_PROFILE_GROUP_ID: -1,
   getAllGroupProfiles: mocks.getAllGroupProfiles,
 }));
-vi.mock("$lib/dispatcharr/client", () => ({ DispatcharrClient: class DispatcharrClient {} }));
+vi.mock("$lib/dispatcharr/client", () => {
+  class DispatcharrClient {}
+  return {
+    DispatcharrClient,
+    createInteractiveClient: () => new DispatcharrClient(),
+    createRobustClient: () => new DispatcharrClient(),
+  };
+});
 vi.mock("$lib/dispatcharr/endpoints/plugins", () => ({ listPlugins: mocks.listPlugins }));
 
 const loadEvent = { url: new URL("http://localhost/plugins") };

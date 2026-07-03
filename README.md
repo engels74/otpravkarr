@@ -53,6 +53,7 @@ services:
     volumes:
       - ./data:/app/data
     environment:
+      - NODE_ENV=production
       - OTPRAVKARR_SECRET=<your-secret>
       - ORIGIN=https://otpravkarr.example.com
     restart: unless-stopped

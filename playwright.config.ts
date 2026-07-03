@@ -68,6 +68,10 @@ export default defineConfig({
     // and never attaches to an arbitrary pre-existing process on 4173.
     reuseExistingServer: false,
     env: {
+      // ISSUE-001: run the E2E suite against the same production path the docs
+      // ship (NODE_ENV=production), so the gate can't silently mask the prod
+      // build 500 that appears when the var is unset.
+      NODE_ENV: "production",
       OTPRAVKARR_SECRET: "e2e-test-secret-that-is-at-least-32-characters-long",
       DATABASE_PATH: testDbPath,
       ORIGIN: `http://localhost:${E2E_PORT}`,

@@ -102,9 +102,17 @@ vi.mock("$lib/db/repositories/sessions", () => ({
   deleteUserSessionsByUserRef: mocks.deleteUserSessionsByUserRef,
 }));
 
-vi.mock("$lib/dispatcharr/client", () => ({
-  DispatcharrClient: class DispatcharrClient {},
-}));
+vi.mock("$lib/dispatcharr/client", () => {
+  class DispatcharrClient {}
+  return {
+    DispatcharrClient,
+    createInteractiveClient: () => new DispatcharrClient(),
+    createRobustClient: () => new DispatcharrClient(),
+    // The load derives its aggregate deadline from this; keep the real default
+    // so withDeadline gets a finite (non-NaN) timeout in tests.
+    IDLE_TIMEOUT_MS: 10_000,
+  };
+});
 
 vi.mock("$lib/dispatcharr/endpoints/groups", () => ({
   listGroups: mocks.listGroups,
@@ -299,6 +307,44 @@ describe("admin users actions", () => {
       expect(result.filters.mode).toBe("self_managed");
       expect(result.mappings).toHaveLength(1);
       expect(result.mappings[0]?.provisioning_mode).toBe("self_managed");
+    });
+
+    // ISSUE-002: when the Dispatcharr work exceeds the aggregate deadline the
+    // load must still render the DB mappings with empty groups/profiles/drift
+    // (never throw, never hang past the adapter idle window).
+    it("degrades to DB mappings with empty groups/profiles/drift when Dispatcharr exceeds the aggregate deadline", async () => {
+      vi.useFakeTimers();
+      try {
+        const { load } = await import("./+page.server");
+        mocks.getConfig.mockResolvedValue("https://dispatcharr.example");
+        mocks.getAllUserMappings.mockReturnValueOnce([
+          makeMapping({ id: 1, plex_account_id: 100, plex_username: "regular-user" }),
+        ]);
+        // Simulate a slow Dispatcharr: the interactive calls never resolve.
+        const never = new Promise<never>(() => {});
+        mocks.listChannelGroups.mockReturnValueOnce(never as never);
+        mocks.listProfiles.mockReturnValueOnce(never as never);
+
+        const loadPromise = load(
+          createLoadEvent() as unknown as Parameters<typeof load>[0],
+        ) as Promise<{
+          mappings: UserMapping[];
+          groups: unknown[];
+          profiles: unknown[];
+          driftByMappingId: Record<number, boolean>;
+        }>;
+
+        // Advance past the 8s aggregate deadline; the load resolves degraded.
+        await vi.advanceTimersByTimeAsync(8_000);
+        const result = await loadPromise;
+
+        expect(result.mappings).toHaveLength(1);
+        expect(result.groups).toEqual([]);
+        expect(result.profiles).toEqual([]);
+        expect(result.driftByMappingId).toEqual({});
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 

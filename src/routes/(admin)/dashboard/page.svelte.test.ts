@@ -91,4 +91,42 @@ describe("admin dashboard page", () => {
       expect(screen.getByRole("button", { name: "Syncing…" })).toHaveProperty("disabled", true);
     });
   });
+
+  it("aborts a stuck sync after the timeout, re-enabling the button with a warning (ISSUE-010)", async () => {
+    vi.useFakeTimers();
+    try {
+      // A fetch that only rejects when its abort signal fires — i.e. it stays
+      // pending until the client-side timeout aborts it.
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(
+          (_url: string, opts: { signal: AbortSignal }) =>
+            new Promise<Response>((_resolve, reject) => {
+              opts.signal.addEventListener("abort", () =>
+                reject(new DOMException("The operation was aborted.", "AbortError")),
+              );
+            }),
+        ),
+      );
+
+      render(DashboardPage, { props: { data } });
+      await fireEvent.click(screen.getByRole("button", { name: "Run sync now" }));
+
+      // Disabled while in flight.
+      expect(screen.getByRole("button", { name: "Syncing…" })).toHaveProperty("disabled", true);
+
+      // Advance past the 30s abort deadline → the request is aborted.
+      await vi.advanceTimersByTimeAsync(30_000);
+
+      expect(mocks.toastWarning).toHaveBeenCalledWith(
+        "Sync is still running in the background — refresh shortly.",
+      );
+      expect(screen.getByRole("button", { name: "Run sync now" })).toHaveProperty(
+        "disabled",
+        false,
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

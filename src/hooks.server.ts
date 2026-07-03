@@ -25,6 +25,7 @@ import {
 } from "$lib/server/auth";
 import { validateOrigin } from "$lib/server/csrf";
 import { validateEnv } from "$lib/server/env";
+import { handleError as serverErrorHandler } from "$lib/server/error-handler";
 import { createRequestLogger } from "$lib/server/logging";
 import { markServerStarted } from "$lib/server/uptime";
 
@@ -301,6 +302,11 @@ const securityHeaders: Handle = async ({ event, resolve }) => {
 };
 
 const requestLogger = createRequestLogger();
+
+// ISSUE-012: replace SvelteKit's default handler (which logs `undefined`) with a
+// structured logger that surfaces the real error class/message/stack while
+// keeping the client-facing body generic.
+export const handleError = serverErrorHandler;
 
 export const handle = sequence(
   requestLogger,

@@ -52,7 +52,7 @@ function clearFiltered(): void {
 }
 </script>
 
-<div class="space-y-3">
+<div class="min-w-0 space-y-3">
   <div class="relative">
     <SearchIcon
       class="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
@@ -68,7 +68,7 @@ function clearFiltered(): void {
   </div>
 
   <div class="flex flex-wrap items-center justify-between gap-2">
-    <p class="text-sm text-muted-foreground">
+    <p class="min-w-0 text-sm text-muted-foreground">
       {selected.size} selected · {groups.length} available
     </p>
     {#if !disabled}

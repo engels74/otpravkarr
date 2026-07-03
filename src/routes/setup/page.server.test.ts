@@ -81,9 +81,14 @@ vi.mock("$lib/db/types", () => ({
   },
 }));
 
-vi.mock("$lib/dispatcharr/client", () => ({
-  DispatcharrClient: vi.fn(),
-}));
+vi.mock("$lib/dispatcharr/client", () => {
+  const DispatcharrClient = vi.fn();
+  return {
+    DispatcharrClient,
+    createInteractiveClient: (url: string, key: string) => new DispatcharrClient(url, key),
+    createRobustClient: (url: string, key: string) => new DispatcharrClient(url, key),
+  };
+});
 
 vi.mock("$lib/dispatcharr/endpoints/channel-groups", () => ({
   listChannelGroups: vi.fn(async () => ({ ok: true, data: [] })),
@@ -2067,14 +2072,15 @@ describe("configureDispatcharr retry behavior", () => {
     expect(mockCheckHealth).toHaveBeenCalledOnce();
   });
 
-  it("retries when server is unreachable and succeeds", async () => {
+  // ISSUE-006: the interactive connection test no longer retry-storms. A single
+  // unreachable probe fails fast (one attempt) instead of the 4x backoff that
+  // took 25-86s, so a transient blip is reported immediately rather than retried.
+  it("does not retry an unreachable probe — fails fast in a single attempt", async () => {
     const { cookies } = createCookies({ [setupClaimCookie]: "proof-123" });
     const healthModule = await import("$lib/dispatcharr/endpoints/health");
     const mockCheckHealth = vi
       .fn()
-      .mockResolvedValueOnce({ ok: true, data: { reachable: false, authValid: false } })
-      .mockResolvedValueOnce({ ok: true, data: { reachable: false, authValid: false } })
-      .mockResolvedValueOnce({ ok: true, data: { reachable: true, authValid: true } });
+      .mockResolvedValue({ ok: true, data: { reachable: false, authValid: false } });
     vi.mocked(healthModule.createHealthEndpoints).mockReturnValue({
       checkHealth: mockCheckHealth,
     } as unknown as ReturnType<typeof healthModule.createHealthEndpoints>);
@@ -2094,11 +2100,14 @@ describe("configureDispatcharr retry behavior", () => {
       getClientAddress: () => "127.0.0.1",
     } as unknown as Parameters<typeof configureDispatcharr>[0]);
 
-    expect(result).toMatchObject({ success: true });
-    expect(mockCheckHealth).toHaveBeenCalledTimes(3);
+    expect(result).toMatchObject({
+      status: 400,
+      data: { error: expect.stringContaining("Could not connect to Dispatcharr") },
+    });
+    expect(mockCheckHealth).toHaveBeenCalledTimes(1);
   });
 
-  it("fails after exhausting all retry attempts", async () => {
+  it("fails fast with the unreachable copy on a blackholed server", async () => {
     const { cookies } = createCookies({ [setupClaimCookie]: "proof-123" });
     const healthModule = await import("$lib/dispatcharr/endpoints/health");
     const mockCheckHealth = vi.fn().mockResolvedValue({
@@ -2125,9 +2134,9 @@ describe("configureDispatcharr retry behavior", () => {
 
     expect(result).toMatchObject({
       status: 400,
-      data: { error: expect.stringContaining("multiple attempts") },
+      data: { error: expect.stringContaining("Could not connect to Dispatcharr") },
     });
-    expect(mockCheckHealth).toHaveBeenCalledTimes(5);
+    expect(mockCheckHealth).toHaveBeenCalledTimes(1);
   });
 
   it("stores external URL when provided", async () => {

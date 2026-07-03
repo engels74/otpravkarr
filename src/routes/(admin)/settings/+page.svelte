@@ -54,7 +54,10 @@ let syncIntervalError = $derived(
   sectionMessage.sync?.type === "error" ? sectionMessage.sync.text : "",
 );
 
-function makeEnhance(section: string, { reset = true }: { reset?: boolean } = {}) {
+function makeEnhance(
+  section: string,
+  { reset = true, invalidateAll }: { reset?: boolean; invalidateAll?: boolean } = {},
+) {
   return () => {
     sectionSubmitting[section] = true;
     delete sectionMessage[section];
@@ -67,20 +70,31 @@ function makeEnhance(section: string, { reset = true }: { reset?: boolean } = {}
     }) => {
       sectionSubmitting[section] = false;
       if (result.type === "success") {
-        // ISSUE-008/ISSUE-001: forms whose fields reflect persisted (non-secret)
-        // state must opt out of the default reset:true. form.reset() reverts bound
-        // inputs to their HTML defaults after save — blanking the security form's
-        // uncontrolled Allowed Origins textarea, and unchecking the subscription
-        // form's allow_user_self_select checkbox — even though the server saved the
-        // new value. Those sections pass reset:false so the saved value sticks. The
-        // Plex/Dispatcharr "leave blank to keep current" password fields keep the
-        // default reset so an entered secret is cleared from the DOM after save.
-        await update({ reset });
         const msg =
           (result.data as { message?: string } | undefined)?.message ??
           "Settings saved successfully.";
+        // ISSUE-008: fire the confirmation BEFORE awaiting the reload. update()
+        // defaults to invalidateAll:true, which re-runs the settings load(); if
+        // that load is blocked on a slow Dispatcharr call the await would delay
+        // or (on a severed socket) swallow the success signal. The save already
+        // succeeded server-side by the time this callback runs.
         sectionMessage[section] = { type: "success", text: msg };
         toast.success(msg);
+        // ISSUE-008/ISSUE-001: forms whose fields reflect persisted (non-secret)
+        // state opt out of the default reset:true so form.reset() doesn't blank
+        // the saved value (the security textarea, the subscription checkbox);
+        // secret "leave blank to keep current" fields keep the default reset so
+        // an entered secret is cleared from the DOM after save. A severed/slow
+        // reload must not throw past the confirmation we already rendered.
+        const updateOptions: { reset: boolean; invalidateAll?: boolean } = { reset };
+        if (invalidateAll !== undefined) {
+          updateOptions.invalidateAll = invalidateAll;
+        }
+        try {
+          await update(updateOptions);
+        } catch {
+          // The reload failed after a successful save — keep the confirmation.
+        }
       } else if (result.type === "failure") {
         const errorMsg =
           (result.data as { error?: string } | undefined)?.error ?? "An error occurred.";
@@ -388,7 +402,7 @@ function makeEnhance(section: string, { reset = true }: { reset?: boolean } = {}
       <form
         method="POST"
         action="?/updateDefaultProvisioning"
-        use:enhance={makeEnhance("subscription", { reset: false })}
+        use:enhance={makeEnhance("subscription", { reset: false, invalidateAll: false })}
       >
         <input type="hidden" name="allow_user_self_select" value={String(allowSelfSelect)} />
         <input type="hidden" name="default_selectable_groups" value={selectableGroupsJson} />
@@ -407,7 +421,7 @@ function makeEnhance(section: string, { reset = true }: { reset?: boolean } = {}
             </span>
           </label>
 
-          <div class="grid gap-1.5">
+          <div class="grid min-w-0 gap-1.5">
             <Label>Default selectable groups</Label>
             <p class="text-xs text-muted-foreground">
               The groups offered to users by default. Select none to offer every channel group.

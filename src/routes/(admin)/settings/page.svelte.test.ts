@@ -10,6 +10,11 @@ type MockActionResult = {
 
 const state = vi.hoisted(() => ({
   queuedResults: [] as MockActionResult[],
+  // When true, the mocked update() resets the form then never resolves —
+  // simulating a reload blocked on a slow Dispatcharr load (ISSUE-008).
+  hangUpdate: false,
+  // Captures the options the component passed to the last update() call.
+  lastUpdateOptions: undefined as { reset?: boolean; invalidateAll?: boolean } | undefined,
 }));
 
 const mocks = vi.hoisted(() => ({
@@ -39,8 +44,13 @@ vi.mock("$app/forms", () => ({
       await callback({
         result,
         update: async (options?: { reset?: boolean; invalidateAll?: boolean }) => {
+          state.lastUpdateOptions = options;
           if (options?.reset !== false) {
             node.reset();
+          }
+          if (state.hangUpdate) {
+            // Never resolves: the confirmation must already have fired.
+            await new Promise<void>(() => {});
           }
         },
       });
@@ -92,6 +102,8 @@ const defaultData = {
 describe("admin settings page", () => {
   beforeEach(() => {
     state.queuedResults = [];
+    state.hangUpdate = false;
+    state.lastUpdateOptions = undefined;
     mocks.applyAction.mockClear();
     mocks.toastSuccess.mockClear();
     mocks.toastError.mockClear();
@@ -282,5 +294,51 @@ describe("admin settings page", () => {
     // reset:false → the just-toggled checkbox keeps the saved value instead of
     // being reverted to its unchecked HTML default by form.reset().
     expect(checkbox.checked).toBe(true);
+  });
+
+  it("fires the success confirmation before awaiting a hung reload (ISSUE-008)", async () => {
+    state.queuedResults.push({
+      type: "success",
+      data: { message: "Sync settings saved." },
+    });
+    // Simulate the reload (invalidateAll) blocking on a slow Dispatcharr load.
+    state.hangUpdate = true;
+
+    const { container } = render(SettingsPage, { props: { data: defaultData } });
+    const syncForm = container.querySelector<HTMLFormElement>(
+      'form[action="?/updateSyncSettings"]',
+    );
+    if (!syncForm) throw new Error("Sync form not found");
+
+    await fireEvent.submit(syncForm);
+    // Let the synchronous pre-await portion of the callback run.
+    await Promise.resolve();
+
+    // update() never resolves, yet the confirmation already fired — a slow
+    // reload can no longer delay or swallow the success signal.
+    expect(mocks.toastSuccess).toHaveBeenCalledWith("Sync settings saved.");
+    expect(screen.getByText("Sync settings saved.")).toBeTruthy();
+  });
+
+  it("saves subscription defaults without an invalidateAll reload round-trip (ISSUE-004)", async () => {
+    state.queuedResults.push({
+      type: "success",
+      data: { message: "Subscription defaults saved." },
+    });
+
+    const { container } = render(SettingsPage, { props: { data: defaultData } });
+    const subscriptionForm = container.querySelector<HTMLFormElement>(
+      'form[action="?/updateDefaultProvisioning"]',
+    );
+    if (!subscriptionForm) throw new Error("Subscription form not found");
+
+    await fireEvent.submit(subscriptionForm);
+    await Promise.resolve();
+
+    // The subscription card's picker state is client-side; it confirms without
+    // re-fetching Dispatcharr (reset:false so the toggle sticks, invalidateAll
+    // :false so no slow reload round-trip).
+    expect(state.lastUpdateOptions).toEqual({ reset: false, invalidateAll: false });
+    expect(mocks.toastSuccess).toHaveBeenCalledWith("Subscription defaults saved.");
   });
 });

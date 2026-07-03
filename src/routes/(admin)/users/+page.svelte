@@ -54,6 +54,11 @@ let deleteDialogOpen = $state(false);
 let selectedMapping = $state<UserMapping | null>(null);
 let selectedGroupSet = $state(new Set<number>());
 let lockEnabled = $state(false);
+// Inline confirmation shown inside the still-open Change Group dialog after a
+// successful lock save. The success toast fires too, but the dialog can inert the
+// toaster's aria-live region, so this in-dialog role=status guarantees a visible +
+// announced confirmation (ISSUE-005). Reset on dialog open and on any toggle.
+let lockSaved = $state(false);
 let selectedProfileId = $state<number | null>(null);
 // Grouped subscribers (>=1 channel group) derive their Dispatcharr scope from
 // those groups: subscription-sync nulls dispatcharr_profile_id for them, so a
@@ -158,6 +163,7 @@ function openGroupDialog(m: UserMapping) {
   }
   selectedGroupSet = new Set(ids);
   lockEnabled = m.group_selection_locked === 1;
+  lockSaved = false;
   groupDialogOpen = true;
 }
 
@@ -209,6 +215,8 @@ function makeGroupLockEnhanceHandler() {
       try {
         if (result.type === "success") {
           toast.success("Lock updated.");
+          // Also surface the in-dialog confirmation (ISSUE-005).
+          lockSaved = true;
           // ISSUE-001: this lock <form> stays open after save (the handler does
           // not close the dialog), so the default reset:true would run form.reset()
           // and visibly revert the just-toggled `locked` checkbox to unchecked.
@@ -664,7 +672,12 @@ async function copyOneTimePassword() {
           <input type="hidden" name="id" value={selectedMapping.id} />
           <input type="hidden" name="locked" value={String(lockEnabled)} />
           <label class="flex items-start gap-2">
-            <input type="checkbox" class="mt-0.5 rounded" bind:checked={lockEnabled} />
+            <input
+              type="checkbox"
+              class="mt-0.5 rounded"
+              bind:checked={lockEnabled}
+              onchange={() => (lockSaved = false)}
+            />
             <span class="grid gap-0.5">
               <span class="text-sm font-medium">Lock selection</span>
               <span class="text-xs text-muted-foreground">
@@ -672,7 +685,10 @@ async function copyOneTimePassword() {
               </span>
             </span>
           </label>
-          <div class="mt-2 flex flex-wrap justify-end">
+          <div class="mt-2 flex flex-wrap items-center justify-end gap-2">
+            {#if lockSaved}
+              <span role="status" class="text-xs font-medium text-primary">Lock updated.</span>
+            {/if}
             <Button type="submit" variant="outline" size="sm" disabled={submitting}>
               {submitting ? "Saving..." : "Save lock"}
             </Button>
@@ -689,10 +705,13 @@ async function copyOneTimePassword() {
               Zero groups means this user will see no channels.
             </p>
           {/if}
+          <!-- scrollList=false: the picker grows and the dialog is the single
+               scroll region, so the sticky footer below keeps Save reachable at
+               390px without JS scrolling (ISSUE-001). Only this call site. -->
           <div class="py-2">
-            <GroupPicker groups={data.groups} bind:selected={selectedGroupSet} />
+            <GroupPicker groups={data.groups} bind:selected={selectedGroupSet} scrollList={false} />
           </div>
-          <Dialog.Footer>
+          <Dialog.Footer class="sticky bottom-0 z-10 bg-popover">
             <Button type="submit" disabled={submitting} size="sm">
               {submitting ? "Saving..." : "Save"}
             </Button>

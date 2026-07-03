@@ -39,6 +39,12 @@
   /* Status — red, not teal */
   --destructive: 0.6368 0.2078 25.3313;
   --destructive-foreground: 0.9851 0 0;
+  /* Text colour for destructive buttons (red text on a translucent-red fill).
+   * The button uses text-destructive at L=0.6368 which only reaches ~3.3:1 on
+   * bg-destructive/10 over white — below WCAG AA (ISSUE-008). Darken the *text*
+   * to L=0.55 (same hue/chroma) for ~4.74:1 while leaving --destructive itself
+   * (fill, borders, alerts, badges) untouched. Dark mode overrides below. */
+  --destructive-text: 0.55 0.2078 25.3313;
 
   /* Form */
   --border: 0.9276 0.0058 264.5313;
@@ -92,6 +98,9 @@
   /* Status — red, not teal */
   --destructive: 0.704 0.191 22.216;
   --destructive-foreground: 0.9851 0 0;
+  /* Dark destructive text already clears AA (~4.92:1 on bg-destructive/20 over
+   * the dark surface), so keep it equal to --destructive (ISSUE-008). */
+  --destructive-text: 0.704 0.191 22.216;
 
   /* Form */
   --border: 0.252 0 0;

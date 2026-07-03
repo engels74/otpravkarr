@@ -16,9 +16,23 @@ interface Props {
   /** Cap on rows rendered at once so the list stays responsive at scale. */
   renderCap?: number;
   disabled?: boolean;
+  /**
+   * When false, the list grows to its natural height and the caller owns
+   * scrolling — used by the users Change Group dialog so there is a single
+   * scroll region plus a sticky Save footer (ISSUE-001). Defaults to true,
+   * which keeps the self-contained max-height scroll the full-page call sites
+   * (settings, subscription, onboarding) rely on.
+   */
+  scrollList?: boolean;
 }
 
-let { groups, selected = $bindable(), renderCap = 300, disabled = false }: Props = $props();
+let {
+  groups,
+  selected = $bindable(),
+  renderCap = 300,
+  disabled = false,
+  scrollList = true,
+}: Props = $props();
 
 let query = $state("");
 
@@ -28,6 +42,65 @@ const filtered = $derived(
 );
 const visible = $derived(filtered.slice(0, renderCap));
 const hiddenCount = $derived(filtered.length - visible.length);
+
+const listClass = $derived(
+  scrollList
+    ? "max-h-[28rem] overflow-y-auto rounded-md border border-border"
+    : "rounded-md border border-border",
+);
+
+// Roving tabindex (ISSUE-002): the whole list is a single tab stop instead of
+// one stop per checkbox, so Save stays a bounded number of Tabs away regardless
+// of group count. `activeIndex` is the row the user last landed on; `activeRow`
+// clamps it into range so a valid tab stop always exists as the filtered list
+// shrinks. Space toggles natively; Enter and Arrow keys are handled below.
+let activeIndex = $state(0);
+let listEl = $state<HTMLElement | null>(null);
+const activeRow = $derived(
+  visible.length > 0 ? Math.min(Math.max(activeIndex, 0), visible.length - 1) : 0,
+);
+
+// When the search query changes the collection, reset the active row to the
+// first visible row so the tab stop never lands on a filtered-out item
+// (Critic MAJOR: no lost tab stop / focus trap).
+$effect(() => {
+  normalizedQuery;
+  activeIndex = 0;
+});
+
+function focusRow(index: number): void {
+  const inputs = listEl?.querySelectorAll<HTMLInputElement>('input[type="checkbox"]');
+  inputs?.[index]?.focus();
+}
+
+function onRowKeydown(event: KeyboardEvent): void {
+  if (disabled || visible.length === 0) return;
+  switch (event.key) {
+    case "ArrowDown":
+      event.preventDefault();
+      focusRow(Math.min(activeRow + 1, visible.length - 1));
+      break;
+    case "ArrowUp":
+      event.preventDefault();
+      focusRow(Math.max(activeRow - 1, 0));
+      break;
+    case "Home":
+      event.preventDefault();
+      focusRow(0);
+      break;
+    case "End":
+      event.preventDefault();
+      focusRow(visible.length - 1);
+      break;
+    case "Enter": {
+      // A native checkbox toggles on Space but not Enter; make Enter match.
+      event.preventDefault();
+      const group = visible[activeRow];
+      if (group) toggle(group.id);
+      break;
+    }
+  }
+}
 
 function toggle(id: number): void {
   const next = new Set(selected);
@@ -83,14 +156,14 @@ function clearFiltered(): void {
     {/if}
   </div>
 
-  <div class="max-h-[28rem] overflow-y-auto rounded-md border border-border">
+  <div class={listClass}>
     {#if filtered.length === 0}
       <p class="px-3 py-6 text-center text-sm text-muted-foreground">
         {groups.length === 0 ? "No channel groups available." : `No groups match “${query}”.`}
       </p>
     {:else}
-      <ul>
-        {#each visible as group (group.id)}
+      <ul bind:this={listEl} role="group" aria-label="Channel groups">
+        {#each visible as group, i (group.id)}
           <li class="border-b border-border last:border-b-0">
             <label
               class="flex items-center gap-3 px-3 py-2.5 hover:bg-muted/40"
@@ -100,7 +173,10 @@ function clearFiltered(): void {
                 type="checkbox"
                 class="h-4 w-4 rounded border-border accent-primary"
                 checked={selected.has(group.id)}
+                tabindex={i === activeRow ? 0 : -1}
                 onchange={() => toggle(group.id)}
+                onfocus={() => (activeIndex = i)}
+                onkeydown={onRowKeydown}
                 {disabled}
               />
               <span class="min-w-0 flex-1 truncate text-sm text-foreground">{group.name}</span>

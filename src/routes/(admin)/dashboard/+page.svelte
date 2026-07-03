@@ -344,7 +344,9 @@ async function runSyncNow() {
             <Table.Header>
               <Table.Row>
                 <Table.Head class="pl-6">Time</Table.Head>
-                <Table.Head>Actor</Table.Head>
+                <!-- Actor hidden on phones so the Action pill isn't clipped at 390px
+                     (ISSUE-007); shown from sm up. Mirrors /audit's column-hiding. -->
+                <Table.Head class="hidden sm:table-cell">Actor</Table.Head>
                 <Table.Head>Action</Table.Head>
               </Table.Row>
             </Table.Header>
@@ -355,7 +357,7 @@ async function runSyncNow() {
                   <Table.Cell class="pl-6 text-xs text-muted-foreground whitespace-nowrap">
                     {formatRelativeTime(entry.timestamp)}
                   </Table.Cell>
-                  <Table.Cell class="text-sm">
+                  <Table.Cell class="hidden text-sm sm:table-cell">
                     {entry.actor ?? "system"}
                   </Table.Cell>
                   <Table.Cell>

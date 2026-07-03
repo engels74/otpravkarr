@@ -215,9 +215,7 @@ function makeGroupLockEnhanceHandler() {
       try {
         if (result.type === "success") {
           toast.success("Lock updated.");
-          // In-dialog confirmation (ISSUE-005): the dialog stays open and can
-          // inert the toaster's announcement, so surface a role=status message
-          // inside the dialog too.
+          // Also surface the in-dialog confirmation (ISSUE-005).
           lockSaved = true;
           // ISSUE-001: this lock <form> stays open after save (the handler does
           // not close the dialog), so the default reset:true would run form.reset()

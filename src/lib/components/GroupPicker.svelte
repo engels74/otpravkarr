@@ -162,7 +162,7 @@ function clearFiltered(): void {
         {groups.length === 0 ? "No channel groups available." : `No groups match “${query}”.`}
       </p>
     {:else}
-      <ul bind:this={listEl}>
+      <ul bind:this={listEl} role="group" aria-label="Channel groups">
         {#each visible as group, i (group.id)}
           <li class="border-b border-border last:border-b-0">
             <label

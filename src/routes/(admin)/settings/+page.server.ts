@@ -261,9 +261,8 @@ export const actions: Actions = {
 
     invalidateConfigCache();
 
-    // Only record an audit row when something actually changed. A re-verify with
-    // identical values is a no-op (message below says so) and must not append an
-    // empty config.changed row (ISSUE-006). Cache invalidation stays unconditional.
+    // Same no-op guard as updatePlexConnection: skip the empty config.changed row
+    // on an identical re-verify; cache invalidation stays unconditional (ISSUE-006).
     if (changedFields.length > 0) {
       appendAuditLog({
         actor,

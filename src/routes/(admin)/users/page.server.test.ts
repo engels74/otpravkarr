@@ -19,6 +19,9 @@ const mocks = vi.hoisted(() => ({
   transaction: vi.fn((fn: () => unknown) => fn),
   listGroups: vi.fn(async () => ({ ok: true, data: [] })),
   listChannelGroups: vi.fn(async () => ({ ok: true, data: [] as { id: number; name: string }[] })),
+  getAllGroupProfiles: vi.fn(() => []),
+  getGroupProfile: vi.fn(() => null),
+  getGroupProfilesByGroupIds: vi.fn(() => new Map()),
   applyGroupSubscription: vi.fn(async () => ({
     ok: true,
     data: { profileIds: [10], groupIds: [5, 7] },
@@ -98,6 +101,13 @@ vi.mock("$lib/db/repositories/users", () => ({
   updateUserMapping: mocks.updateUserMapping,
 }));
 
+vi.mock("$lib/db/repositories/channel-group-profiles", () => ({
+  EMPTY_PROFILE_GROUP_ID: -1,
+  getAllGroupProfiles: mocks.getAllGroupProfiles,
+  getGroupProfile: mocks.getGroupProfile,
+  getGroupProfilesByGroupIds: mocks.getGroupProfilesByGroupIds,
+}));
+
 vi.mock("$lib/db/repositories/sessions", () => ({
   deleteUserSessionsByUserRef: mocks.deleteUserSessionsByUserRef,
 }));
@@ -152,6 +162,13 @@ function resetMocks() {
   mocks.transaction.mockImplementation((fn: () => unknown) => fn);
   mocks.listGroups.mockClear();
   mocks.listChannelGroups.mockClear();
+  mocks.listChannelGroups.mockResolvedValue({ ok: true, data: [] });
+  mocks.getAllGroupProfiles.mockClear();
+  mocks.getAllGroupProfiles.mockReturnValue([]);
+  mocks.getGroupProfile.mockClear();
+  mocks.getGroupProfile.mockReturnValue(null);
+  mocks.getGroupProfilesByGroupIds.mockClear();
+  mocks.getGroupProfilesByGroupIds.mockReturnValue(new Map());
   mocks.applyGroupSubscription.mockClear();
   mocks.applyGroupSubscription.mockResolvedValue({
     ok: true,
@@ -268,9 +285,7 @@ describe("admin users actions", () => {
       expect(result.filters).toEqual({ status: "active", mode: "all", search: "active" });
     });
 
-    // ISSUE-007: an unrecognized mode (e.g. the hyphenated "self-managed")
-    // must default to "all" rather than silently selecting the wrong filter.
-    it("defaults an unknown mode filter to 'all' and does not mis-filter", async () => {
+    it("accepts the public hyphenated self-managed mode filter", async () => {
       const { load } = await import("./+page.server");
       mocks.getAllUserMappings.mockReturnValueOnce([
         makeMapping({ id: 1, plex_account_id: 100, provisioning_mode: "automatic" }),
@@ -285,12 +300,12 @@ describe("admin users actions", () => {
         filters: { status: string; mode: string; search: string };
       };
 
-      expect(result.filters.mode).toBe("all");
-      // No filtering applied → all three modes remain visible.
-      expect(result.mappings).toHaveLength(3);
+      expect(result.filters.mode).toBe("self-managed");
+      expect(result.mappings).toHaveLength(1);
+      expect(result.mappings[0]?.provisioning_mode).toBe("self_managed");
     });
 
-    it("keeps a valid mode filter", async () => {
+    it("keeps underscore self_managed as a backwards-compatible mode alias", async () => {
       const { load } = await import("./+page.server");
       mocks.getAllUserMappings.mockReturnValueOnce([
         makeMapping({ id: 1, plex_account_id: 100, provisioning_mode: "automatic" }),
@@ -304,9 +319,28 @@ describe("admin users actions", () => {
         filters: { status: string; mode: string; search: string };
       };
 
-      expect(result.filters.mode).toBe("self_managed");
+      expect(result.filters.mode).toBe("self-managed");
       expect(result.mappings).toHaveLength(1);
       expect(result.mappings[0]?.provisioning_mode).toBe("self_managed");
+    });
+
+    it("defaults an unknown mode filter to 'all' and does not mis-filter", async () => {
+      const { load } = await import("./+page.server");
+      mocks.getAllUserMappings.mockReturnValueOnce([
+        makeMapping({ id: 1, plex_account_id: 100, provisioning_mode: "automatic" }),
+        makeMapping({ id: 2, plex_account_id: 101, provisioning_mode: "self_managed" }),
+        makeMapping({ id: 3, plex_account_id: 102, provisioning_mode: "staff" }),
+      ]);
+
+      const result = (await load(
+        createLoadEvent("?mode=bogus") as unknown as Parameters<typeof load>[0],
+      )) as {
+        mappings: UserMapping[];
+        filters: { status: string; mode: string; search: string };
+      };
+
+      expect(result.filters.mode).toBe("all");
+      expect(result.mappings).toHaveLength(3);
     });
 
     // ISSUE-002: when the Dispatcharr work exceeds the aggregate deadline the

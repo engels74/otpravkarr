@@ -25,6 +25,7 @@ vi.mock("$lib/db/repositories/audit", () => ({
 vi.mock("$lib/db/repositories/channel-group-profiles", () => ({
   EMPTY_PROFILE_GROUP_ID: -1,
   getGroupProfile: vi.fn(),
+  getGroupProfilesByGroupIds: vi.fn(),
   upsertGroupProfile: vi.fn(),
 }));
 
@@ -37,6 +38,7 @@ vi.mock("$lib/dispatcharr/endpoints/channels", () => ({
 }));
 
 vi.mock("$lib/dispatcharr/endpoints/users", () => ({
+  findUserByUsername: vi.fn(),
   getUser: vi.fn(),
   updateUser: vi.fn(),
 }));
@@ -59,9 +61,14 @@ vi.mock("$lib/utils/retry", async (importOriginal) => {
 
 const { getUserMappingById, updateUserMapping } = await import("$lib/db/repositories/users");
 const { appendAuditLog } = await import("$lib/db/repositories/audit");
+const { getGroupProfile, getGroupProfilesByGroupIds } = await import(
+  "$lib/db/repositories/channel-group-profiles"
+);
 const { listChannelGroups } = await import("$lib/dispatcharr/endpoints/channel-groups");
 const { listAllChannels } = await import("$lib/dispatcharr/endpoints/channels");
-const { getUser, updateUser } = await import("$lib/dispatcharr/endpoints/users");
+const { findUserByUsername, getUser, updateUser } = await import(
+  "$lib/dispatcharr/endpoints/users"
+);
 const { reconcileGroupProfile, ensureEmptyProfile } = await import("../group-profiles");
 const { applyGroupSubscription } = await import("../subscriptions");
 
@@ -119,6 +126,9 @@ beforeEach(() => {
   vi.mocked(getUserMappingById).mockReset().mockReturnValue(makeMapping());
   vi.mocked(updateUserMapping).mockReset();
   vi.mocked(appendAuditLog).mockReset();
+  vi.mocked(getGroupProfile).mockReset().mockReturnValue(null);
+  vi.mocked(getGroupProfilesByGroupIds).mockReset().mockReturnValue(new Map());
+  vi.mocked(findUserByUsername).mockReset().mockResolvedValue(ok(makeUser()));
   vi.mocked(getUser).mockReset().mockResolvedValue(ok(makeUser()));
   vi.mocked(updateUser)
     .mockReset()
@@ -191,6 +201,48 @@ describe("applyGroupSubscription", () => {
     });
   });
 
+  it("uses cached group profiles without slow channel/group discovery when all groups are known", async () => {
+    vi.mocked(getGroupProfilesByGroupIds).mockReturnValue(
+      new Map([
+        [
+          1,
+          {
+            group_id: 1,
+            profile_id: 501,
+            profile_name: "otpravkarr:g1:Sports",
+            created_at: "2024-01-01 00:00:00",
+            updated_at: "2024-01-01 00:00:00",
+          },
+        ],
+        [
+          2,
+          {
+            group_id: 2,
+            profile_id: 502,
+            profile_name: "otpravkarr:g2:News",
+            created_at: "2024-01-01 00:00:00",
+            updated_at: "2024-01-01 00:00:00",
+          },
+        ],
+      ]),
+    );
+
+    const result = await applyGroupSubscription(client, 1, [2, 1]);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.profileIds).toEqual([501, 502]);
+      expect(result.data.groupIds).toEqual([1, 2]);
+    }
+    expect(listAllChannels).not.toHaveBeenCalled();
+    expect(listChannelGroups).not.toHaveBeenCalled();
+    expect(reconcileGroupProfile).not.toHaveBeenCalled();
+    expect(updateUser).toHaveBeenCalledWith(client, 42, {
+      channel_profiles: [501, 502],
+      user_level: 1,
+    });
+  });
+
   it("resolves a ZERO-group selection to the empty profile, NEVER an empty array", async () => {
     const result = await applyGroupSubscription(client, 1, []);
 
@@ -210,7 +262,7 @@ describe("applyGroupSubscription", () => {
   });
 
   it("refuses to scope an admin-level (user_level >= 10) Dispatcharr user", async () => {
-    vi.mocked(getUser).mockResolvedValue(ok(makeUser({ user_level: 10 })));
+    vi.mocked(findUserByUsername).mockResolvedValue(ok(makeUser({ user_level: 10 })));
 
     const result = await applyGroupSubscription(client, 1, [1]);
 
@@ -223,13 +275,13 @@ describe("applyGroupSubscription", () => {
     expect(reconcileGroupProfile).not.toHaveBeenCalled();
   });
 
-  it("drops duplicate and non-existent group ids before resolving", async () => {
+  it("rejects non-existent group ids before patching the user", async () => {
     const result = await applyGroupSubscription(client, 1, [1, 1, 999]);
 
-    expect(result.ok).toBe(true);
-    if (result.ok) expect(result.data.groupIds).toEqual([1]);
-    expect(reconcileGroupProfile).toHaveBeenCalledTimes(1);
-    expect(reconcileGroupProfile).toHaveBeenCalledWith(client, 1, "Sports", new Set([1, 2]));
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toBe("validation_error");
+    expect(updateUser).not.toHaveBeenCalled();
+    expect(updateUserMapping).not.toHaveBeenCalled();
   });
 
   it("returns not_found when the mapping does not exist", async () => {

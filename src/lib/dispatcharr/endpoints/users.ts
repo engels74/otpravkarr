@@ -7,6 +7,21 @@ import type { DispatcharrResult, DispatcharrUser, PaginatedResponse } from "../t
 const userPageSchema = paginatedSchema(DispatcharrUserSchema);
 const flatArraySchema = z.array(DispatcharrUserSchema);
 
+function normalizeUserPage(data: unknown): DispatcharrResult<PaginatedResponse<DispatcharrUser>> {
+  const paginated = userPageSchema.safeParse(data);
+  if (paginated.success) return { ok: true, data: paginated.data };
+
+  const flat = flatArraySchema.safeParse(data);
+  if (flat.success) {
+    return {
+      ok: true,
+      data: { count: flat.data.length, next: null, previous: null, results: flat.data },
+    };
+  }
+
+  return { ok: false, error: "unexpected_shape" as const, message: paginated.error.message };
+}
+
 /**
  * Fields accepted by POST /api/accounts/users/ per the Dispatcharr OpenAPI spec.
  * Only `username` and `password` are required. Other writable fields are optional.
@@ -59,29 +74,29 @@ export async function listUsers(
   const qs = params.toString();
   const path = `/api/accounts/users/${qs ? `?${qs}` : ""}`;
 
-  // When pagination params are provided, expect paginated envelope
-  if (qs) {
-    return client.request("GET", path, { schema: userPageSchema });
-  }
-
-  // No pagination params — API may return flat array or paginated envelope
+  // The Dispatcharr users endpoint is inconsistent across query shapes: the
+  // unfiltered and page-only paths usually return a paginated envelope, while
+  // username filtering can return a flat array. Normalize both so callers do not
+  // need to care which representation a specific Dispatcharr build chooses.
   const result = await client.request<unknown>("GET", path);
   if (!result.ok) return result;
 
-  // Try paginated first
-  const paginated = userPageSchema.safeParse(result.data);
-  if (paginated.success) return { ok: true, data: paginated.data };
+  return normalizeUserPage(result.data);
+}
 
-  // Try flat array
-  const flat = flatArraySchema.safeParse(result.data);
-  if (flat.success) {
-    return {
-      ok: true,
-      data: { count: flat.data.length, next: null, previous: null, results: flat.data },
-    };
-  }
+export async function findUserByUsername(
+  client: DispatcharrClient,
+  username: string,
+): Promise<DispatcharrResult<DispatcharrUser | null>> {
+  const params = new URLSearchParams({ username, page_size: "100" });
+  const result = await client.request<unknown>("GET", `/api/accounts/users/?${params}`);
+  if (!result.ok) return result;
 
-  return { ok: false, error: "unexpected_shape" as const, message: paginated.error.message };
+  const page = normalizeUserPage(result.data);
+  if (!page.ok) return page;
+
+  const exact = page.data.results.find((user) => user.username === username) ?? null;
+  return { ok: true, data: exact };
 }
 
 export function createUser(

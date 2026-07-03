@@ -10,9 +10,13 @@ import {
 import type { UserMapping } from "$lib/db/types";
 import { AuditAction } from "$lib/db/types";
 import type { DispatcharrClient } from "$lib/dispatcharr/client";
-import { createUser, deleteUser, getUser, updateUser } from "$lib/dispatcharr/endpoints/users";
-import { fetchAllPages } from "$lib/dispatcharr/pagination";
-import { DispatcharrUserSchema } from "$lib/dispatcharr/schemas";
+import {
+  createUser,
+  deleteUser,
+  findUserByUsername,
+  getUser,
+  updateUser,
+} from "$lib/dispatcharr/endpoints/users";
 import { isTransientResultError, retryResult } from "$lib/utils/retry";
 import type { ActorContext } from "./lifecycle";
 import { applyGroupSubscription } from "./subscriptions";
@@ -41,6 +45,38 @@ export function sanitizeUsername(plexUsername: string, existingUsernames: string
     suffix++;
   }
   return `${base}_${suffix}`;
+}
+
+async function remoteUsernameExists(client: DispatcharrClient, username: string): Promise<boolean> {
+  const result = await findUserByUsername(client, username);
+  if (!result.ok) {
+    console.warn(
+      `[provisioner] Failed to verify remote username ${username}, falling back to local-only dedup: ${result.message}`,
+    );
+    return false;
+  }
+  return result.data != null;
+}
+
+async function chooseDispatcharrUsername(
+  client: DispatcharrClient,
+  plexUsername: string,
+  localUsernames: string[],
+): Promise<string> {
+  let base = plexUsername.replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
+  if (base === "") {
+    base = "plexuser";
+  }
+
+  const local = new Set(localUsernames.map((username) => username.toLowerCase()));
+  for (let suffix = 0; suffix < 1000; suffix++) {
+    const candidate = suffix === 0 ? base : `${base}_${suffix + 1}`;
+    if (local.has(candidate.toLowerCase())) continue;
+    if (await remoteUsernameExists(client, candidate)) continue;
+    return candidate;
+  }
+
+  return `${base}_${Date.now().toString(36)}`;
 }
 
 /**
@@ -251,25 +287,11 @@ export async function provisionUser(
     .map((m: UserMapping) => m.dispatcharr_username)
     .filter((u): u is string => u != null);
 
-  // Also include remote Dispatcharr usernames to avoid 400 "username already exists" collisions
-  let remoteUsernames: string[] = [];
-  try {
-    const remoteResult = await fetchAllPages(client, "/api/accounts/users/", DispatcharrUserSchema);
-    if (remoteResult.ok) {
-      remoteUsernames = remoteResult.data.map((u) => u.username);
-    } else {
-      console.warn(
-        `[provisioner] Failed to fetch remote usernames for dedup, falling back to local-only: ${remoteResult.message}`,
-      );
-    }
-  } catch (err) {
-    console.warn(
-      `[provisioner] Failed to fetch remote usernames for dedup, falling back to local-only: ${err instanceof Error ? err.message : String(err)}`,
-    );
-  }
-
-  const existingUsernames = [...new Set([...localUsernames, ...remoteUsernames])];
-  const sanitizedUsername = sanitizeUsername(request.plexIdentity.username, existingUsernames);
+  const sanitizedUsername = await chooseDispatcharrUsername(
+    client,
+    request.plexIdentity.username,
+    localUsernames,
+  );
 
   const password = generateXcPassword();
 

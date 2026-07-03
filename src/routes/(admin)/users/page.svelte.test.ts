@@ -6,7 +6,13 @@ import UsersPage from "./+page.svelte";
 
 type MockActionResult = {
   type: "success" | "failure" | "error";
-  data?: { error?: string; initialPassword?: string; reprovisioned?: boolean };
+  data?: {
+    error?: string;
+    groupIds?: number[];
+    initialPassword?: string;
+    profileId?: number | null;
+    reprovisioned?: boolean;
+  };
   error?: Error;
 };
 
@@ -220,6 +226,35 @@ describe("admin users page", () => {
     expect(mocks.invalidateAll).not.toHaveBeenCalled();
   });
 
+  it("updates search query params after debounce", async () => {
+    render(UsersPage, { props: { data: defaultData } });
+
+    await fireEvent.input(screen.getByLabelText("Search users by username…"), {
+      target: { value: "hans" },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 350));
+
+    await waitFor(() =>
+      expect(mocks.goto).toHaveBeenCalledWith("/users?search=hans", {
+        replaceState: true,
+        keepFocus: true,
+      }),
+    );
+  });
+
+  it("renders the public self-managed mode filter label", () => {
+    render(UsersPage, {
+      props: {
+        data: {
+          ...defaultData,
+          filters: { ...defaultData.filters, mode: "self-managed" },
+        },
+      },
+    });
+
+    expect(screen.getByText("Self-managed")).toBeTruthy();
+  });
+
   it("shows delete local mapping for eligible inactive local-only rows", async () => {
     render(UsersPage, {
       props: {
@@ -375,6 +410,35 @@ describe("admin users page", () => {
     const listContainer = groupCheckbox.closest("ul")?.parentElement;
     expect(listContainer?.className).not.toContain("overflow-y-auto");
     expect(listContainer?.className).not.toContain("max-h-[28rem]");
+  });
+
+  it("closes Change Group promptly and updates local mapping details after success", async () => {
+    render(UsersPage, {
+      props: { data: { ...defaultData, groups: [{ id: 1, name: "Group A", channelCount: 5 }] } },
+    });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Open actions for testuser" }));
+    await fireEvent.click(await screen.findByRole("menuitem", { name: /Change Group/ }));
+    const dialog = await screen.findByRole("dialog");
+    await fireEvent.click(within(dialog).getByRole("checkbox", { name: /Group A/ }));
+
+    const form = dialog.querySelector<HTMLFormElement>('form[action="?/changeGroup"]');
+    if (!form) throw new Error("changeGroup form not found");
+    state.queuedResults.push({
+      type: "success",
+      data: { groupIds: [1], profileId: null },
+    });
+    await fireEvent.submit(form);
+
+    await waitFor(() =>
+      expect(mocks.toastSuccess).toHaveBeenCalledWith("Group updated successfully."),
+    );
+    expect(mocks.invalidateAll).toHaveBeenCalled();
+
+    await fireEvent.click(screen.getByRole("button", { name: "Open actions for testuser" }));
+    await fireEvent.click(await screen.findByRole("menuitem", { name: /View Details/ }));
+    const details = await screen.findByRole("dialog");
+    expect(within(details).getByText("[1]")).toBeTruthy();
   });
 
   it("keeps the lock checkbox checked after a successful Save lock (ISSUE-001)", async () => {

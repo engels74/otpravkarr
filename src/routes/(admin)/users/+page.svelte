@@ -29,6 +29,9 @@ import type { ProvisioningMode, UserMapping } from "$lib/db/types";
 import { normalizeSqliteDatetime } from "$lib/utils/datetime";
 import { copyOtpToClipboard } from "./otp-clipboard";
 
+type ModeFilter = "all" | "automatic" | "self-managed" | "self_managed" | "staff";
+type EnhanceUpdate = (options?: { reset?: boolean; invalidateAll?: boolean }) => Promise<void>;
+
 interface Props {
   data: {
     mappings: UserMapping[];
@@ -42,6 +45,11 @@ interface Props {
 let { data }: Props = $props();
 
 let submitting = $state(false);
+// svelte-ignore state_referenced_locally
+let mappings = $state<UserMapping[]>(data.mappings);
+$effect(() => {
+  mappings = data.mappings;
+});
 
 // Dialog state
 let groupDialogOpen = $state(false);
@@ -91,6 +99,44 @@ let searchValue = $state(data.filters.search);
 $effect(() => {
   searchValue = data.filters.search;
 });
+// svelte-ignore state_referenced_locally
+let statusFilter = $state(data.filters.status);
+// svelte-ignore state_referenced_locally
+let modeFilter = $state<ModeFilter>(data.filters.mode as ModeFilter);
+// svelte-ignore state_referenced_locally
+let previousDataStatus = data.filters.status;
+// svelte-ignore state_referenced_locally
+let previousDataMode = data.filters.mode;
+// svelte-ignore state_referenced_locally
+let previousStatusFilter = data.filters.status;
+// svelte-ignore state_referenced_locally
+let previousModeFilter = data.filters.mode;
+$effect(() => {
+  if (data.filters.status !== previousDataStatus) {
+    previousDataStatus = data.filters.status;
+    statusFilter = data.filters.status;
+    previousStatusFilter = data.filters.status;
+  }
+});
+$effect(() => {
+  if (data.filters.mode !== previousDataMode) {
+    previousDataMode = data.filters.mode;
+    modeFilter = data.filters.mode as ModeFilter;
+    previousModeFilter = data.filters.mode;
+  }
+});
+$effect(() => {
+  if (statusFilter !== previousStatusFilter) {
+    previousStatusFilter = statusFilter;
+    updateFilter("status", statusFilter);
+  }
+});
+$effect(() => {
+  if (modeFilter !== previousModeFilter) {
+    previousModeFilter = modeFilter;
+    updateFilter("mode", modeFilter);
+  }
+});
 
 // Clear the pending rotate target whenever the confirm dialog closes (confirm,
 // cancel, or dismiss) so a stale mapping never leaks into a later dialog.
@@ -127,6 +173,26 @@ function updateFilter(key: string, value: string) {
   goto(`/users${qs ? `?${qs}` : ""}`, { replaceState: true, keepFocus: true });
 }
 
+function refreshPageData(update?: EnhanceUpdate): void {
+  void update?.({ reset: false, invalidateAll: false });
+  void invalidateAll();
+}
+
+function patchLocalMapping(id: number, updates: Partial<UserMapping>) {
+  mappings = mappings.map((m) => (m.id === id ? { ...m, ...updates } : m));
+  if (selectedMapping?.id === id) {
+    selectedMapping = { ...selectedMapping, ...updates };
+  }
+}
+
+function appendLocalMapping(mapping: UserMapping) {
+  if (mappings.some((m) => m.id === mapping.id)) {
+    patchLocalMapping(mapping.id, mapping);
+    return;
+  }
+  mappings = [...mappings, mapping];
+}
+
 function onSearchInput(e: Event) {
   const val = (e.currentTarget as HTMLInputElement).value;
   searchValue = val;
@@ -144,9 +210,10 @@ function canDeleteLocalMapping(m: UserMapping): boolean {
   return m.dispatcharr_user_id == null && m.dispatcharr_xc_password_enc == null;
 }
 
-function modeLabelText(mode: ProvisioningMode): string {
+function modeLabelText(mode: ModeFilter | ProvisioningMode): string {
   if (mode === "automatic") return "Automatic";
-  if (mode === "self_managed") return "Self-managed";
+  if (mode === "self_managed" || mode === "self-managed") return "Self-managed";
+  if (mode === "all") return "All modes";
   return "Staff";
 }
 
@@ -181,22 +248,29 @@ function openDetailDialog(m: UserMapping) {
 function makeEnhanceHandler() {
   return () => {
     submitting = true;
-    return async ({ result, update }: { result: ActionResult; update: () => Promise<void> }) => {
+    return async ({ result, update }: { result: ActionResult; update: EnhanceUpdate }) => {
       try {
         if (result.type === "success") {
+          const d = result.data as { groupIds?: number[]; profileId?: number | null } | undefined;
+          if (selectedMapping && d?.groupIds) {
+            patchLocalMapping(selectedMapping.id, {
+              dispatcharr_group_ids: JSON.stringify(d.groupIds),
+              dispatcharr_profile_id: d.profileId ?? null,
+            });
+          }
           toast.success("Group updated successfully.");
-          await update();
+          groupDialogOpen = false;
+          refreshPageData(update);
         } else if (result.type === "failure") {
           toast.error(
             (result.data as { error?: string } | undefined)?.error ?? "Failed to update group.",
           );
-          await update();
+          refreshPageData(update);
         } else {
           await applyAction(result);
         }
       } finally {
         submitting = false;
-        groupDialogOpen = false;
       }
     };
   };
@@ -231,12 +305,12 @@ function makeGroupLockEnhanceHandler() {
           // On a rejected save the attempted toggle was NOT persisted, so restore
           // the authoritative stored value instead of leaving the optimistic toggle
           // (or letting form.reset() force it unchecked). update() above keeps the
-          // default invalidateAll, so data.mappings has just been reloaded from the
+          // default invalidateAll, so mappings has just been reloaded from the
           // server — read the live row (not the once-captured openGroupDialog
           // snapshot) so this stays correct even after an earlier successful save in
           // the same still-open dialog.
           lockEnabled =
-            data.mappings.find((mm) => mm.id === selectedMapping?.id)?.group_selection_locked === 1;
+            mappings.find((mm) => mm.id === selectedMapping?.id)?.group_selection_locked === 1;
         } else {
           await applyAction(result);
         }
@@ -250,22 +324,26 @@ function makeGroupLockEnhanceHandler() {
 function makeProfileEnhanceHandler() {
   return () => {
     submitting = true;
-    return async ({ result, update }: { result: ActionResult; update: () => Promise<void> }) => {
+    return async ({ result, update }: { result: ActionResult; update: EnhanceUpdate }) => {
       try {
         if (result.type === "success") {
+          const d = result.data as { profileId?: number | null } | undefined;
+          if (selectedMapping && d?.profileId != null) {
+            patchLocalMapping(selectedMapping.id, { dispatcharr_profile_id: d.profileId });
+          }
           toast.success("Profile updated.");
-          await update();
+          profileDialogOpen = false;
+          refreshPageData(update);
         } else if (result.type === "failure") {
           toast.error(
             (result.data as { error?: string } | undefined)?.error ?? "Failed to update profile.",
           );
-          await update();
+          refreshPageData(update);
         } else {
           await applyAction(result);
         }
       } finally {
         submitting = false;
-        profileDialogOpen = false;
       }
     };
   };
@@ -274,10 +352,15 @@ function makeProfileEnhanceHandler() {
 function makeOwnerEnhance() {
   return () => {
     submitting = true;
-    return async ({ result, update }: { result: ActionResult; update: () => Promise<void> }) => {
+    return async ({ result, update }: { result: ActionResult; update: EnhanceUpdate }) => {
       try {
         if (result.type === "success") {
-          const d = result.data as { initialPassword?: string | null } | undefined;
+          const d = result.data as
+            | { initialPassword?: string | null; mapping?: UserMapping }
+            | undefined;
+          if (d?.mapping) {
+            appendLocalMapping(d.mapping);
+          }
           if (d?.initialPassword) {
             oneTimePassword = d.initialPassword;
             passwordCopyStatus = "idle";
@@ -286,13 +369,13 @@ function makeOwnerEnhance() {
           } else {
             toast.success("Subscriber account created.");
           }
-          await update();
+          refreshPageData(update);
         } else if (result.type === "failure") {
           toast.error(
             (result.data as { error?: string } | undefined)?.error ??
               "Failed to create subscriber account.",
           );
-          await update();
+          refreshPageData(update);
         } else {
           await applyAction(result);
         }
@@ -331,12 +414,32 @@ function makeDisableEnhance() {
 function makeEnableEnhance() {
   return () => {
     submitting = true;
-    return async ({ result, update }: { result: ActionResult; update: () => Promise<void> }) => {
+    return async ({ result, update }: { result: ActionResult; update: EnhanceUpdate }) => {
       try {
         if (result.type === "success") {
           const d = result.data as
-            | { initialPassword?: string; reprovisioned?: boolean }
+            | {
+                initialPassword?: string;
+                mappingId?: number;
+                reprovisioned?: boolean;
+                isActive?: number;
+                dispatcharrUserId?: number | null;
+                dispatcharrUsername?: string | null;
+                groupIds?: number[];
+                profileId?: number | null;
+              }
             | undefined;
+          const mappingId = selectedMapping?.id ?? d?.mappingId;
+          if (mappingId) {
+            const current = mappings.find((m) => m.id === mappingId) ?? selectedMapping;
+            patchLocalMapping(mappingId, {
+              is_active: d?.isActive ?? 1,
+              dispatcharr_user_id: d?.dispatcharrUserId ?? current?.dispatcharr_user_id ?? null,
+              dispatcharr_username: d?.dispatcharrUsername ?? current?.dispatcharr_username ?? null,
+              dispatcharr_group_ids: JSON.stringify(d?.groupIds ?? []),
+              dispatcharr_profile_id: d?.profileId ?? current?.dispatcharr_profile_id ?? null,
+            });
+          }
           if (d?.initialPassword) {
             oneTimePassword = d.initialPassword;
             passwordCopyStatus = "idle";
@@ -347,12 +450,12 @@ function makeEnableEnhance() {
           } else {
             toast.success("User enabled successfully.");
           }
-          await update();
+          refreshPageData(update);
         } else if (result.type === "failure") {
           toast.error(
             (result.data as { error?: string } | undefined)?.error ?? "Failed to enable user.",
           );
-          await update();
+          refreshPageData(update);
         } else {
           await applyAction(result);
         }
@@ -436,8 +539,8 @@ async function copyOneTimePassword() {
     <h1 class="text-lg font-semibold text-foreground">Users</h1>
     <div class="flex items-center gap-3">
       <span class="text-sm text-muted-foreground">
-        {data.mappings.length}
-        {data.mappings.length === 1 ? "user" : "users"}
+        {mappings.length}
+        {mappings.length === 1 ? "user" : "users"}
       </span>
       <form method="POST" action="?/subscribeOwner" use:enhance={makeOwnerEnhance()}>
         <Button type="submit" variant="outline" size="sm" disabled={submitting}>
@@ -451,12 +554,11 @@ async function copyOneTimePassword() {
   <div class="flex flex-wrap items-center gap-3">
     <Select.Root
       type="single"
-      value={data.filters.status}
-      onValueChange={(v) => updateFilter("status", v ?? "all")}
+      bind:value={statusFilter}
     >
       <Select.Trigger class="w-[140px] text-foreground">
         <span data-slot="select-value">
-          {data.filters.status === "all" ? "All statuses" : data.filters.status.charAt(0).toUpperCase() + data.filters.status.slice(1)}
+          {statusFilter === "all" ? "All statuses" : statusFilter.charAt(0).toUpperCase() + statusFilter.slice(1)}
         </span>
       </Select.Trigger>
       <Select.Content>
@@ -469,18 +571,17 @@ async function copyOneTimePassword() {
 
     <Select.Root
       type="single"
-      value={data.filters.mode}
-      onValueChange={(v) => updateFilter("mode", v ?? "all")}
+      bind:value={modeFilter}
     >
       <Select.Trigger class="w-[160px] text-foreground">
         <span data-slot="select-value">
-          {data.filters.mode === "all" ? "All modes" : modeLabelText(data.filters.mode as ProvisioningMode)}
+          {modeFilter === "all" ? "All modes" : modeLabelText(modeFilter)}
         </span>
       </Select.Trigger>
       <Select.Content>
         <Select.Item value="all" label="All modes">All modes</Select.Item>
         <Select.Item value="automatic" label="Automatic">Automatic</Select.Item>
-        <Select.Item value="self_managed" label="Self-managed">Self-managed</Select.Item>
+        <Select.Item value="self-managed" label="Self-managed">Self-managed</Select.Item>
         <Select.Item value="staff" label="Staff">Staff</Select.Item>
       </Select.Content>
     </Select.Root>
@@ -508,14 +609,14 @@ async function copyOneTimePassword() {
         </Table.Row>
       </Table.Header>
       <Table.Body>
-        {#if data.mappings.length === 0}
+        {#if mappings.length === 0}
           <Table.Row>
             <Table.Cell colspan={6} class="py-8 text-center text-sm text-muted-foreground">
               No users found.
             </Table.Cell>
           </Table.Row>
         {:else}
-          {#each data.mappings as m (m.id)}
+          {#each mappings as m (m.id)}
             {@const status = getStatus(m)}
             <Table.Row>
               <Table.Cell class="pl-4">
@@ -589,7 +690,13 @@ async function copyOneTimePassword() {
                         {#snippet child({ props })}
                           <form method="POST" action="?/enableUser" use:enhance={makeEnableEnhance()}>
                             <input type="hidden" name="id" value={m.id} />
-                            <button type="submit" class="flex w-full items-center gap-2 text-left" disabled={submitting} {...props}>
+                            <button
+                              type="submit"
+                              class="flex w-full items-center gap-2 text-left"
+                              disabled={submitting}
+                              onclick={() => (selectedMapping = m)}
+                              {...props}
+                            >
                               <CheckCircle2Icon class="h-3.5 w-3.5" />
                               Enable
                             </button>

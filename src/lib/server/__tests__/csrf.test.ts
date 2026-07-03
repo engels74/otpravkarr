@@ -70,6 +70,17 @@ describe("validateOrigin", () => {
     }
   });
 
+  it("throws 403 on forged cross-origin internal API origins", () => {
+    try {
+      validateOrigin(makeRequest("POST", "http://evil.example"), ["http://localhost:3000"]);
+      expect.unreachable("should have thrown");
+    } catch (e: unknown) {
+      const err = e as { status: number; body: { message: string } };
+      expect(err.status).toBe(403);
+      expect(err.body.message).toBe("origin not allowed");
+    }
+  });
+
   it("passes POST with matching Origin", () => {
     expect(() =>
       validateOrigin(makeRequest("POST", "http://example.com"), ["http://example.com"]),

@@ -172,12 +172,17 @@ export const actions: Actions = {
 
     invalidateConfigCache();
 
-    appendAuditLog({
-      actor,
-      action: AuditAction.CONFIG_CHANGED,
-      detail: { section: "plex", fields: changedFields },
-      ipAddress: getClientAddress(),
-    });
+    // Only record an audit row when something actually changed. A re-verify with
+    // identical values is a no-op (message below says so) and must not append an
+    // empty config.changed row (ISSUE-006). Cache invalidation stays unconditional.
+    if (changedFields.length > 0) {
+      appendAuditLog({
+        actor,
+        action: AuditAction.CONFIG_CHANGED,
+        detail: { section: "plex", fields: changedFields },
+        ipAddress: getClientAddress(),
+      });
+    }
 
     return {
       success: true,
@@ -256,12 +261,17 @@ export const actions: Actions = {
 
     invalidateConfigCache();
 
-    appendAuditLog({
-      actor,
-      action: AuditAction.CONFIG_CHANGED,
-      detail: { section: "dispatcharr", fields: changedFields },
-      ipAddress: getClientAddress(),
-    });
+    // Only record an audit row when something actually changed. A re-verify with
+    // identical values is a no-op (message below says so) and must not append an
+    // empty config.changed row (ISSUE-006). Cache invalidation stays unconditional.
+    if (changedFields.length > 0) {
+      appendAuditLog({
+        actor,
+        action: AuditAction.CONFIG_CHANGED,
+        detail: { section: "dispatcharr", fields: changedFields },
+        ipAddress: getClientAddress(),
+      });
+    }
 
     return {
       success: true,

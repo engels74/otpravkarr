@@ -644,6 +644,115 @@ describe("admin settings actions", () => {
     expect(mocks.invalidateConfigCache).not.toHaveBeenCalled();
   });
 
+  it("skips the audit log but still invalidates cache on a no-op plex re-save (ISSUE-006)", async () => {
+    const { actions } = await import("./+page.server");
+    const updatePlexConnection = actions.updatePlexConnection;
+    if (!updatePlexConnection) throw new Error("updatePlexConnection action is undefined");
+
+    state.configValues.set("plex_server_url", "http://localhost:32400");
+    state.configValues.set("plex_admin_token", "existing-token");
+    state.configValues.set("plex_machine_id", "mid");
+    // Default validateServerToken mock returns machineIdentifier "mid" → nothing changes.
+
+    const body = new FormData();
+    body.set("plex_server_url", "http://localhost:32400");
+    body.set("plex_admin_token", "");
+
+    const result = await updatePlexConnection(
+      createActionEvent(body) as unknown as Parameters<typeof updatePlexConnection>[0],
+    );
+
+    expect(result).toEqual({
+      success: true,
+      message: "Connection verified, no changes needed.",
+    });
+    expect(mocks.invalidateConfigCache).toHaveBeenCalledOnce();
+    expect(mocks.appendAuditLog).not.toHaveBeenCalled();
+  });
+
+  it("writes exactly one plex audit row naming changed fields on a real change (ISSUE-006)", async () => {
+    const { actions } = await import("./+page.server");
+    const updatePlexConnection = actions.updatePlexConnection;
+    if (!updatePlexConnection) throw new Error("updatePlexConnection action is undefined");
+
+    state.configValues.set("plex_server_url", "http://localhost:32400");
+    state.configValues.set("plex_admin_token", "existing-token");
+    state.configValues.set("plex_machine_id", "mid");
+
+    const body = new FormData();
+    body.set("plex_server_url", "https://plex.example.com:32400");
+    body.set("plex_admin_token", "");
+
+    const result = await updatePlexConnection(
+      createActionEvent(body) as unknown as Parameters<typeof updatePlexConnection>[0],
+    );
+
+    expect(result).toEqual({ success: true, message: "Plex settings saved." });
+    expect(mocks.appendAuditLog).toHaveBeenCalledOnce();
+    expect(mocks.appendAuditLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actor: "admin",
+        detail: expect.objectContaining({ section: "plex", fields: ["plex_server_url"] }),
+      }),
+    );
+  });
+
+  it("skips the audit log but still invalidates cache on a no-op dispatcharr re-save (ISSUE-006)", async () => {
+    const { actions } = await import("./+page.server");
+    const updateDispatcharrConnection = actions.updateDispatcharrConnection;
+    if (!updateDispatcharrConnection) {
+      throw new Error("updateDispatcharrConnection action is undefined");
+    }
+
+    state.configValues.set("dispatcharr_url", "http://localhost:9192");
+    state.configValues.set("dispatcharr_api_key", "existing-api-key");
+    // No external URL set; form sends none → "" === "" → no change.
+    // Default checkHealth mock → reachable + authValid.
+
+    const body = new FormData();
+    body.set("dispatcharr_url", "http://localhost:9192");
+    body.set("dispatcharr_api_key", "");
+
+    const result = await updateDispatcharrConnection(
+      createActionEvent(body) as unknown as Parameters<typeof updateDispatcharrConnection>[0],
+    );
+
+    expect(result).toEqual({
+      success: true,
+      message: "Connection verified, no changes needed.",
+    });
+    expect(mocks.invalidateConfigCache).toHaveBeenCalledOnce();
+    expect(mocks.appendAuditLog).not.toHaveBeenCalled();
+  });
+
+  it("writes exactly one dispatcharr audit row naming changed fields on a real change (ISSUE-006)", async () => {
+    const { actions } = await import("./+page.server");
+    const updateDispatcharrConnection = actions.updateDispatcharrConnection;
+    if (!updateDispatcharrConnection) {
+      throw new Error("updateDispatcharrConnection action is undefined");
+    }
+
+    state.configValues.set("dispatcharr_url", "http://localhost:9192");
+    state.configValues.set("dispatcharr_api_key", "existing-api-key");
+
+    const body = new FormData();
+    body.set("dispatcharr_url", "http://localhost:9193");
+    body.set("dispatcharr_api_key", "");
+
+    const result = await updateDispatcharrConnection(
+      createActionEvent(body) as unknown as Parameters<typeof updateDispatcharrConnection>[0],
+    );
+
+    expect(result).toEqual({ success: true, message: "Dispatcharr settings saved." });
+    expect(mocks.appendAuditLog).toHaveBeenCalledOnce();
+    expect(mocks.appendAuditLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actor: "admin",
+        detail: expect.objectContaining({ section: "dispatcharr", fields: ["dispatcharr_url"] }),
+      }),
+    );
+  });
+
   it("persists subscription defaults (self-select toggle + selectable groups)", async () => {
     const { actions } = await import("./+page.server");
     const updateDefaultProvisioning = actions.updateDefaultProvisioning;

@@ -113,12 +113,16 @@ function enhanceRefresh() {
   return async ({ result, update }: { result: ActionResult; update: () => Promise<void> }) => {
     refreshing = false;
     confirmRefreshOpen = false;
-    await update();
+    // Fire the toast BEFORE awaiting update(). update() runs invalidateAll and can
+    // block on a slow reload, which previously delayed/swallowed the success toast
+    // (ISSUE-004). The dialog is already closed and the toaster sits far above it,
+    // so no z-index change is needed.
     if (result.type === "success") {
       toast.success("Credentials refreshed.");
     } else if (result.type === "failure" || result.type === "error") {
       toast.error("Couldn't refresh credentials. Try again.");
     }
+    await update();
   };
 }
 </script>

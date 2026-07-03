@@ -919,9 +919,14 @@ describe("admin users actions", () => {
     );
 
     expect(result).toMatchObject({ success: true });
-    expect(mocks.updateUser).toHaveBeenCalledWith(expect.anything(), 42, {
-      channel_profiles: [7],
-    });
+    expect(mocks.updateUser).toHaveBeenCalledWith(
+      expect.anything(),
+      42,
+      {
+        channel_profiles: [7],
+      },
+      8000,
+    );
     expect(mocks.updateUserMapping).toHaveBeenCalledWith(1, {
       dispatcharr_profile_id: 7,
     });

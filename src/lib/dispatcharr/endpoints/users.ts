@@ -122,11 +122,19 @@ export function updateUser(
   client: DispatcharrClient,
   id: number,
   data: UpdateUserData,
+  timeoutMs?: number,
 ): Promise<DispatcharrResult<DispatcharrUser>> {
-  // Use PATCH for partial updates (PatchedUser schema in the API spec)
+  // Use PATCH for partial updates (PatchedUser schema in the API spec).
+  // `timeoutMs` lets a caller that wraps this in `withDeadline(work, ms, fallback)`
+  // set the request's own timeout to that same `ms`, so ofetch aborts the in-flight
+  // PATCH when the deadline is hit instead of leaving an orphaned mutation to land
+  // late and desync remote vs. local state. Omitted → the client default (15s).
   return client.request("PATCH", `/api/accounts/users/${id}/`, {
     body: data,
     schema: DispatcharrUserSchema,
+    // Omit rather than pass `undefined` (exactOptionalPropertyTypes); an absent
+    // timeoutMs falls through to the client default in `request`.
+    ...(timeoutMs !== undefined ? { timeoutMs } : {}),
   });
 }
 

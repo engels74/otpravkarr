@@ -170,10 +170,15 @@ describe("rotateCredentials", () => {
     await rotateCredentials(mockClient, mapping);
 
     expect(mockGenerateXcPassword).toHaveBeenCalledOnce();
-    expect(mockUpdateUser).toHaveBeenCalledWith(mockClient, 10, {
-      password: "new-xc-password",
-      custom_properties: { device_fingerprint: "abc", xc_password: "new-xc-password" },
-    });
+    expect(mockUpdateUser).toHaveBeenCalledWith(
+      mockClient,
+      10,
+      {
+        password: "new-xc-password",
+        custom_properties: { device_fingerprint: "abc", xc_password: "new-xc-password" },
+      },
+      8000,
+    );
     expect(mockEncrypt).toHaveBeenCalledWith("new-xc-password", "credential-encryption");
     expect(mockUpdateXcPasswordForMapping).toHaveBeenCalledWith(1, 10, "encrypted:value");
   });
@@ -190,10 +195,15 @@ describe("rotateCredentials", () => {
 
     expect(mockFindUserByUsername).toHaveBeenCalledWith(mockClient, "dispuser");
     expect(mockGetUser).not.toHaveBeenCalled();
-    expect(mockUpdateUser).toHaveBeenCalledWith(mockClient, 10, {
-      password: "new-xc-password",
-      custom_properties: { device_fingerprint: "abc", xc_password: "new-xc-password" },
-    });
+    expect(mockUpdateUser).toHaveBeenCalledWith(
+      mockClient,
+      10,
+      {
+        password: "new-xc-password",
+        custom_properties: { device_fingerprint: "abc", xc_password: "new-xc-password" },
+      },
+      8000,
+    );
   });
 
   it("reloads mapping by ID before rotating credentials", async () => {
@@ -209,7 +219,7 @@ describe("rotateCredentials", () => {
     await rotateCredentialsForMappingId(mockClient, 7);
 
     expect(mockGetUserMappingById).toHaveBeenCalledWith(7);
-    expect(mockUpdateUser).toHaveBeenCalledWith(mockClient, 70, expect.any(Object));
+    expect(mockUpdateUser).toHaveBeenCalledWith(mockClient, 70, expect.any(Object), 8000);
     expect(mockUpdateXcPasswordForMapping).toHaveBeenCalledWith(7, 70, "encrypted:value");
   });
 

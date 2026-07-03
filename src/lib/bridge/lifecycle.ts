@@ -137,10 +137,17 @@ export async function rotateCredentials(
   const result = await withDeadline(
     retryResult(
       () =>
-        updateUser(client, dispatcharrUserId, {
-          password: newPassword,
-          custom_properties: { ...existingCustomProps, xc_password: newPassword },
-        }),
+        updateUser(
+          client,
+          dispatcharrUserId,
+          {
+            password: newPassword,
+            custom_properties: { ...existingCustomProps, xc_password: newPassword },
+          },
+          // Bound the request to the wrapping deadline so a late PATCH is aborted,
+          // not orphaned (which would desync remote vs. local credentials on retry).
+          INTERACTIVE_MUTATION_DEADLINE_MS,
+        ),
       isTransientResultError,
     ),
     INTERACTIVE_MUTATION_DEADLINE_MS,

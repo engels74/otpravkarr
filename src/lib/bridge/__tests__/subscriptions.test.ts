@@ -161,10 +161,15 @@ describe("applyGroupSubscription", () => {
     }
     // Desired set passed to the resolver is exactly group 1's channels (by ID).
     expect(reconcileGroupProfile).toHaveBeenCalledWith(client, 1, "Sports", new Set([1, 2]));
-    expect(updateUser).toHaveBeenCalledWith(client, 42, {
-      channel_profiles: [101],
-      user_level: 1,
-    });
+    expect(updateUser).toHaveBeenCalledWith(
+      client,
+      42,
+      {
+        channel_profiles: [101],
+        user_level: 1,
+      },
+      8000,
+    );
     expect(updateUserMapping).toHaveBeenCalledWith(1, {
       dispatcharr_group_ids: "[1]",
       dispatcharr_profile_id: null,
@@ -195,10 +200,15 @@ describe("applyGroupSubscription", () => {
 
     expect(result.ok).toBe(true);
     expect(reconcileGroupProfile).toHaveBeenCalledTimes(2);
-    expect(updateUser).toHaveBeenCalledWith(client, 42, {
-      channel_profiles: [101, 102],
-      user_level: 1,
-    });
+    expect(updateUser).toHaveBeenCalledWith(
+      client,
+      42,
+      {
+        channel_profiles: [101, 102],
+        user_level: 1,
+      },
+      8000,
+    );
   });
 
   it("uses cached group profiles without slow channel/group discovery when all groups are known", async () => {
@@ -237,10 +247,15 @@ describe("applyGroupSubscription", () => {
     expect(listAllChannels).not.toHaveBeenCalled();
     expect(listChannelGroups).not.toHaveBeenCalled();
     expect(reconcileGroupProfile).not.toHaveBeenCalled();
-    expect(updateUser).toHaveBeenCalledWith(client, 42, {
-      channel_profiles: [501, 502],
-      user_level: 1,
-    });
+    expect(updateUser).toHaveBeenCalledWith(
+      client,
+      42,
+      {
+        channel_profiles: [501, 502],
+        user_level: 1,
+      },
+      8000,
+    );
   });
 
   it("resolves a ZERO-group selection to the empty profile, NEVER an empty array", async () => {
@@ -251,10 +266,15 @@ describe("applyGroupSubscription", () => {
     expect(ensureEmptyProfile).toHaveBeenCalledOnce();
     expect(reconcileGroupProfile).not.toHaveBeenCalled();
     // The critical guarantee: channel_profiles is non-empty (a real empty profile).
-    expect(updateUser).toHaveBeenCalledWith(client, 42, {
-      channel_profiles: [999],
-      user_level: 1,
-    });
+    expect(updateUser).toHaveBeenCalledWith(
+      client,
+      42,
+      {
+        channel_profiles: [999],
+        user_level: 1,
+      },
+      8000,
+    );
     expect(updateUserMapping).toHaveBeenCalledWith(1, {
       dispatcharr_group_ids: "[]",
       dispatcharr_profile_id: 999,

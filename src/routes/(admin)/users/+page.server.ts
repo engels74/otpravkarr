@@ -119,6 +119,11 @@ const USERS_DRIFT_DEADLINE_MS = Math.max(
   Math.min(6_000, USERS_DISPATCHARR_DEADLINE_MS - 1_000),
 );
 
+// Deadline for single-shot interactive admin mutations (changeProfile). Passed as
+// the updateUser request timeout too, so ofetch aborts the in-flight PATCH at the
+// deadline instead of orphaning it — mirrors the bridge mutation sites.
+const INTERACTIVE_MUTATION_DEADLINE_MS = 8_000;
+
 export const load: PageServerLoad = async (event) => {
   await requireAdmin(event);
   const { url } = event;
@@ -463,7 +468,10 @@ export const actions: Actions = {
       ipAddress: event.getClientAddress(),
     });
     if (!result.ok) {
-      return fail(502, { error: result.message });
+      // A validation_error here means client-supplied group IDs were rejected
+      // (e.g. stale/unknown IDs resolved against Dispatcharr) — a 4xx, not an
+      // upstream outage. Every other error kind is a genuine 502.
+      return fail(result.error === "validation_error" ? 400 : 502, { error: result.message });
     }
 
     return {
@@ -641,10 +649,15 @@ export const actions: Actions = {
     try {
       const client = await getClient();
       const updateRes = await withDeadline(
-        updateUser(client, mapping.dispatcharr_user_id, {
-          channel_profiles: [profileId],
-        }),
-        8_000,
+        updateUser(
+          client,
+          mapping.dispatcharr_user_id,
+          {
+            channel_profiles: [profileId],
+          },
+          INTERACTIVE_MUTATION_DEADLINE_MS,
+        ),
+        INTERACTIVE_MUTATION_DEADLINE_MS,
         {
           ok: false,
           error: "network_error",

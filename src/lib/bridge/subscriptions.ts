@@ -156,10 +156,13 @@ export async function applyGroupSubscription(
     }
   } else {
     const cachedProfiles = getGroupProfilesByGroupIds(requestedGroupIds);
-    if (cachedProfiles.size === requestedGroupIds.length) {
-      resolvedProfileIds.push(
-        ...requestedGroupIds.map((groupId) => cachedProfiles.get(groupId)?.profile_id as number),
-      );
+    const cachedProfileIds: number[] = [];
+    for (const groupId of requestedGroupIds) {
+      const cached = cachedProfiles.get(groupId);
+      if (cached) cachedProfileIds.push(cached.profile_id);
+    }
+    if (cachedProfileIds.length === requestedGroupIds.length) {
+      resolvedProfileIds.push(...cachedProfileIds);
     } else {
       const channelsResult = await retryResult(
         () => listAllChannels(client),
@@ -197,10 +200,17 @@ export async function applyGroupSubscription(
   const patch = await withDeadline(
     retryResult(
       () =>
-        updateUser(client, dispatcharrUserId, {
-          channel_profiles: resolvedProfileIds,
-          user_level: PROVISIONED_USER_LEVEL,
-        }),
+        updateUser(
+          client,
+          dispatcharrUserId,
+          {
+            channel_profiles: resolvedProfileIds,
+            user_level: PROVISIONED_USER_LEVEL,
+          },
+          // Bound the request to the wrapping deadline so a late PATCH is aborted,
+          // not orphaned (which would desync remote vs. local subscription state).
+          INTERACTIVE_MUTATION_DEADLINE_MS,
+        ),
       isTransientResultError,
     ),
     INTERACTIVE_MUTATION_DEADLINE_MS,

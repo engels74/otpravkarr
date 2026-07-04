@@ -34,14 +34,14 @@ export const eventChannelManagarrAdapter: PluginAdapter = {
       advisories.push({
         level: "info",
         message:
-          "All otpravkarr group profiles are within ECM's scope (kept in sync automatically) — event automation reaches subscribers.",
+          "All otpravkarr group profiles are within ECM's channel_profile_name scope (kept in sync automatically) — event automation reaches subscribers.",
       });
     }
 
     advisories.push({
       level: "info",
       message:
-        "otpravkarr does not toggle channel visibility inside ECM-managed profiles; ECM owns within-profile event toggling.",
+        "otpravkarr coordinates ECM channel_profile_name scope only; it does not toggle channel visibility inside ECM-managed profiles, where ECM owns within-profile event toggling.",
     });
     return advisories;
   },

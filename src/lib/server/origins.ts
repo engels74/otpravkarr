@@ -22,11 +22,18 @@ function toOriginUrl(rawOrigin: string | null | undefined): URL | null {
 
 function isLoopbackHostname(hostname: string): boolean {
   const normalized = hostname.toLowerCase();
+  const octets = normalized.split(".");
+  const isIpv4Loopback =
+    octets.length === 4 &&
+    octets.every((part) => /^\d+$/.test(part)) &&
+    Number(octets[0]) === 127 &&
+    octets.every((part) => {
+      const value = Number(part);
+      return value >= 0 && value <= 255;
+    });
+
   return (
-    normalized === "localhost" ||
-    normalized === "::1" ||
-    normalized === "[::1]" ||
-    normalized.startsWith("127.")
+    normalized === "localhost" || normalized === "::1" || normalized === "[::1]" || isIpv4Loopback
   );
 }
 
@@ -61,10 +68,14 @@ export function selectActivePublicOrigin(
     return request.origin;
   }
 
-  if (
-    isLoopbackHostname(configured.hostname) &&
-    !areEquivalentLoopbackOrigins(configured, request)
-  ) {
+  if (isLoopbackHostname(configured.hostname)) {
+    if (areEquivalentLoopbackOrigins(configured, request)) {
+      // Preserve the concrete loopback hostname the browser used to start OAuth
+      // (localhost vs 127.0.0.1 vs [::1]) so the Plex callback returns to the
+      // same listener/cookie scope instead of silently switching hostnames.
+      return request.origin;
+    }
+
     // When the configured origin is a loopback that doesn't match the request,
     // return the configured origin rather than falling back to the request origin.
     // Falling back to request.origin could let a spoofed Host header influence

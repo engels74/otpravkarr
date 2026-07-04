@@ -69,6 +69,10 @@ describe("describePlugins", () => {
     });
     const detected = describePlugins([ecm], ["otpravkarr:g1:Sports"]);
     expect(detected[0]?.advisories.some((a) => a.level === "warning")).toBe(false);
-    expect(detected[0]?.advisories.some((a) => a.level === "info")).toBe(true);
+    expect(
+      detected[0]?.advisories.some(
+        (a) => a.level === "info" && a.message.includes("channel_profile_name"),
+      ),
+    ).toBe(true);
   });
 });

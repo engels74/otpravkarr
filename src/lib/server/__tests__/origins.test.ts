@@ -20,8 +20,20 @@ describe("selectActivePublicOrigin", () => {
     );
   });
 
-  it("keeps configured loopback origin when it matches request service", () => {
+  it("preserves the active 127.0.0.1 loopback hostname when it matches the configured service", () => {
     expect(selectActivePublicOrigin("http://localhost:3000", "http://127.0.0.1:3000")).toBe(
+      "http://127.0.0.1:3000",
+    );
+  });
+
+  it("preserves the active localhost loopback hostname when it matches the configured service", () => {
+    expect(selectActivePublicOrigin("http://127.0.0.1:3000", "http://localhost:3000")).toBe(
+      "http://localhost:3000",
+    );
+  });
+
+  it("does not treat hostnames that only start with 127 as loopback", () => {
+    expect(selectActivePublicOrigin("http://localhost:3000", "http://127.evil.com:3000")).toBe(
       "http://localhost:3000",
     );
   });

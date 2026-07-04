@@ -128,7 +128,8 @@ function filterHref(key: "status" | "mode" | "search", value: string): string {
   const params = new URLSearchParams();
   if (data.filters.status !== "all") params.set("status", data.filters.status);
   if (data.filters.mode !== "all") params.set("mode", data.filters.mode);
-  if (data.filters.search.trim()) params.set("search", data.filters.search);
+  const search = data.filters.search.trim();
+  if (search) params.set("search", search);
 
   if (value === "all" || value === "") {
     params.delete(key);

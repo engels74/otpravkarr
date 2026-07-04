@@ -11,6 +11,15 @@ function canonicalize(value: string): string | null {
   }
 }
 
+export function validateFetchMetadata(request: Request): void {
+  if (!MUTATING_METHODS.has(request.method)) return;
+
+  const fetchSite = request.headers.get("Sec-Fetch-Site")?.toLowerCase();
+  if (fetchSite === "cross-site") {
+    throw error(403, "cross-site request blocked");
+  }
+}
+
 export function validateOrigin(request: Request, allowedOrigins: string[]): void {
   if (!MUTATING_METHODS.has(request.method)) return;
 

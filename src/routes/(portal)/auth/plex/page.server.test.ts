@@ -495,6 +495,19 @@ describe("plex onboarding — confirm action", () => {
     );
   });
 
+  it("preserves the submitted selection when Plex re-verification is temporarily unavailable", async () => {
+    mocks.getAccount.mockRejectedValueOnce(new Error("Plex timeout"));
+    const { actions } = await importServer();
+    const { event } = confirmEvent([2]);
+    const res = await actions.confirm?.(event);
+
+    expect(res).toMatchObject({
+      status: 502,
+      data: { error: "Couldn't reach Plex. Please try again.", selected: [2] },
+    });
+    expect(mocks.provisionUser).not.toHaveBeenCalled();
+  });
+
   it("fails 403 and clears the cookie when friend status no longer checks out", async () => {
     state.friends = [{ id: 12345, email: "test@example.com", status: "pending" }];
     const { actions } = await importServer();
@@ -521,7 +534,28 @@ describe("plex onboarding — confirm action", () => {
     );
   });
 
-  it("provisions with the chosen groups and redirects to the portal", async () => {
+  it("fails 502 without clearing onboarding or creating a session when provisioning fails", async () => {
+    state.provisionResult = { status: "failed", error: "Dispatcharr unavailable" };
+    const { actions } = await importServer();
+    const { event, deleteFn } = confirmEvent([2, 1]);
+    const res = await actions.confirm?.(event);
+
+    expect(res).toMatchObject({
+      status: 502,
+      data: {
+        error: "Unable to set up your account. Please try again.",
+        selected: [2, 1],
+      },
+    });
+    expect(mocks.provisionUser).toHaveBeenCalledTimes(1);
+    expect(deleteFn).not.toHaveBeenCalledWith(
+      "otpravkarr_onboarding",
+      expect.objectContaining({ path: "/" }),
+    );
+    expect(mocks.createSession).not.toHaveBeenCalled();
+  });
+
+  it("provisions with the chosen groups, clears onboarding, creates a session, and redirects", async () => {
     const { actions } = await importServer();
     const { event, deleteFn } = confirmEvent([1]);
     await expect(actions.confirm?.(event)).rejects.toMatchObject({ status: 303, location: "/" });
@@ -531,7 +565,7 @@ describe("plex onboarding — confirm action", () => {
       { groupIds: number[] },
     ];
     expect(request.groupIds).toEqual([1]);
-    // Onboarding cookie consumed before provisioning.
+    expect(mocks.createSession).toHaveBeenCalledWith("1", "user", 14400);
     expect(deleteFn).toHaveBeenCalledWith(
       "otpravkarr_onboarding",
       expect.objectContaining({ path: "/" }),

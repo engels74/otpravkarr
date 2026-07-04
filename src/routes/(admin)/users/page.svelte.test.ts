@@ -28,6 +28,12 @@ const mocks = vi.hoisted(() => ({
   toastError: vi.fn(),
 }));
 
+const appState = vi.hoisted(() => ({
+  page: {
+    url: new URL("http://localhost/users"),
+  },
+}));
+
 vi.mock("$app/forms", () => ({
   // Settings-style harness: invoke the returned enhance callback with a queued
   // result and a mock update() that mirrors SvelteKit's reset behaviour
@@ -76,9 +82,7 @@ vi.mock("$app/navigation", () => ({
 }));
 
 vi.mock("$app/state", () => ({
-  page: {
-    url: new URL("http://localhost/users"),
-  },
+  page: appState.page,
 }));
 
 vi.mock("svelte-sonner", () => ({
@@ -124,6 +128,17 @@ function mockFetch(response: Response | Promise<Response>) {
   return fetchMock;
 }
 
+function setPageUrl(pathAndQuery: string) {
+  appState.page.url = new URL(pathAndQuery, "http://localhost");
+  window.history.replaceState({}, "", `${appState.page.url.pathname}${appState.page.url.search}`);
+}
+
+function linkPath(name: string): string {
+  const link = screen.getByRole("link", { name }) as HTMLAnchorElement;
+  const url = new URL(link.href);
+  return `${url.pathname}${url.search}`;
+}
+
 async function renderAndClickRotate() {
   render(UsersPage, { props: { data: defaultData } });
   await fireEvent.click(screen.getByRole("button", { name: "Open actions for testuser" }));
@@ -153,6 +168,7 @@ describe("admin users page", () => {
     mocks.invalidateAll.mockClear();
     mocks.toastSuccess.mockClear();
     mocks.toastError.mockClear();
+    setPageUrl("/users");
   });
 
   afterEach(() => {
@@ -226,20 +242,101 @@ describe("admin users page", () => {
     expect(mocks.invalidateAll).not.toHaveBeenCalled();
   });
 
-  it("updates search query params after debounce", async () => {
+  it("renders status filter links with shareable query params", () => {
     render(UsersPage, { props: { data: defaultData } });
 
-    await fireEvent.input(screen.getByLabelText("Search users by username…"), {
-      target: { value: "hans" },
-    });
-    await new Promise((resolve) => setTimeout(resolve, 350));
+    expect(linkPath("Active")).toBe("/users?status=active");
+    expect(linkPath("Inactive")).toBe("/users?status=inactive");
+    expect(linkPath("Orphaned")).toBe("/users?status=orphaned");
+  });
 
-    await waitFor(() =>
-      expect(mocks.goto).toHaveBeenCalledWith("/users?search=hans", {
-        replaceState: true,
-        keepFocus: true,
-      }),
-    );
+  it("removes the status query param when the status filter is cleared to all", () => {
+    setPageUrl("/users?status=inactive&mode=staff&search=hans");
+    render(UsersPage, {
+      props: {
+        data: {
+          ...defaultData,
+          filters: { status: "inactive", mode: "staff", search: "hans" },
+        },
+      },
+    });
+
+    expect(linkPath("All statuses")).toBe("/users?mode=staff&search=hans");
+  });
+
+  it("renders mode filter links with shareable query params", () => {
+    render(UsersPage, { props: { data: defaultData } });
+
+    expect(linkPath("Self-managed")).toBe("/users?mode=self-managed");
+    expect(linkPath("Staff")).toBe("/users?mode=staff");
+    expect(linkPath("Automatic")).toBe("/users?mode=automatic");
+  });
+
+  it("removes the mode query param when the mode filter is cleared to all", () => {
+    setPageUrl("/users?status=active&mode=automatic&search=hans");
+    render(UsersPage, {
+      props: {
+        data: {
+          ...defaultData,
+          filters: { status: "active", mode: "automatic", search: "hans" },
+        },
+      },
+    });
+
+    expect(linkPath("All modes")).toBe("/users?status=active&search=hans");
+  });
+
+  it("submits search as a GET form while preserving other filters", () => {
+    setPageUrl("/users?status=active&mode=staff");
+    render(UsersPage, {
+      props: {
+        data: {
+          ...defaultData,
+          filters: { status: "active", mode: "staff", search: "" },
+        },
+      },
+    });
+
+    const input = screen.getByLabelText("Search users by username…") as HTMLInputElement;
+    input.value = "hans";
+    const form = screen.getByRole("search", { name: "Search users" }) as HTMLFormElement;
+    const params = new URLSearchParams();
+    for (const [key, value] of new FormData(form)) {
+      params.append(key, String(value));
+    }
+
+    expect(form.method).toBe("get");
+    expect(form.getAttribute("action")).toBe("/users");
+    expect(params.toString()).toBe("status=active&mode=staff&search=hans");
+  });
+
+  it("renders a clear-search link that removes only the search query param", () => {
+    setPageUrl("/users?status=active&search=hans");
+    render(UsersPage, {
+      props: {
+        data: {
+          ...defaultData,
+          filters: { status: "active", mode: "all", search: "hans" },
+        },
+      },
+    });
+
+    expect(linkPath("Clear search")).toBe("/users?status=active");
+  });
+
+  it("does not preserve unrelated query params in filter links", () => {
+    setPageUrl("/users?status=active&mode=staff&search=hans&token=secret");
+    render(UsersPage, {
+      props: {
+        data: {
+          ...defaultData,
+          filters: { status: "active", mode: "staff", search: "hans" },
+        },
+      },
+    });
+
+    expect(linkPath("Inactive")).toBe("/users?status=inactive&mode=staff&search=hans");
+    expect(linkPath("Clear search")).toBe("/users?status=active&mode=staff");
   });
 
   it("renders the public self-managed mode filter label", () => {

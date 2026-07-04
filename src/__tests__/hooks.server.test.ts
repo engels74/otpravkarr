@@ -130,10 +130,6 @@ vi.mock("$lib/server/auth", () => ({
   isSetupComplete: () => true,
 }));
 
-vi.mock("$lib/server/csrf", () => ({
-  validateOrigin: vi.fn(),
-}));
-
 vi.mock("$lib/server/env", () => ({
   validateEnv: vi.fn(),
 }));
@@ -152,10 +148,9 @@ vi.mock("$lib/server/logging", () => ({
 }));
 
 const { handle } = await import("../hooks.server");
-const { validateOrigin } = await import("$lib/server/csrf");
+const { env } = await import("$env/dynamic/private");
 const { getConfig } = await import("$lib/db/repositories/config");
 const { deleteSession, refreshSession } = await import("$lib/db/repositories/sessions");
-const mockValidateOrigin = vi.mocked(validateOrigin);
 const mockGetConfig = vi.mocked(getConfig);
 const mockDeleteSession = vi.mocked(deleteSession);
 const mockRefreshSession = vi.mocked(refreshSession);
@@ -208,16 +203,21 @@ function createMockEvent({
   sessionId,
   method = "GET",
   origin,
+  secFetchSite,
   url = "http://localhost/dashboard",
 }: {
   sessionId?: string;
   method?: string;
   origin?: string;
+  secFetchSite?: string;
   url?: string;
 } = {}) {
   const headers: Record<string, string> = {};
   if (origin !== undefined) {
     headers.Origin = origin;
+  }
+  if (secFetchSite !== undefined) {
+    headers["Sec-Fetch-Site"] = secFetchSite;
   }
 
   return {
@@ -247,7 +247,7 @@ describe("hooks sessionResolver", () => {
     mockSession = null;
     mockAdmin = null;
     mockUser = null;
-    mockValidateOrigin.mockReset();
+    env.ORIGIN = "http://localhost:3000";
     mockGetConfig.mockReset();
     mockGetConfig.mockResolvedValue(null);
     mockDeleteSession.mockReset();
@@ -372,7 +372,7 @@ describe("hooks security headers", () => {
     mockSession = null;
     mockAdmin = null;
     mockUser = null;
-    mockValidateOrigin.mockReset();
+    env.ORIGIN = "http://localhost:3000";
     mockGetConfig.mockReset();
     mockGetConfig.mockResolvedValue(null);
   });
@@ -392,17 +392,11 @@ describe("hooks security headers", () => {
     // Authenticated session so the request reaches CSRF (not the 401 unauth gate).
     mockSession = { ...validAdminSession };
     mockAdmin = { ...validAdmin };
-    mockValidateOrigin.mockImplementation(() => {
-      throw {
-        status: 403,
-        body: { message: "origin not allowed" },
-      };
-    });
     const event = createMockEvent({
       sessionId: "sess-admin-1",
       method: "POST",
       origin: "http://evil.example",
-      url: "http://localhost/api/internal/sync",
+      url: "http://localhost:3000/api/internal/sync",
     });
     const resolveSpy = vi.fn(async () => new Response(null, { status: 204 }));
 
@@ -420,16 +414,10 @@ describe("hooks security headers", () => {
   it("returns missing-Origin CSRF rejections with security headers", async () => {
     mockSession = { ...validAdminSession };
     mockAdmin = { ...validAdmin };
-    mockValidateOrigin.mockImplementation(() => {
-      throw {
-        status: 403,
-        body: { message: "missing origin header" },
-      };
-    });
     const event = createMockEvent({
       sessionId: "sess-admin-1",
       method: "POST",
-      url: "http://localhost/api/internal/sync",
+      url: "http://localhost:3000/api/internal/sync",
     });
 
     const resolveSpy = vi.fn(async () => new Response(null, { status: 204 }));
@@ -448,11 +436,53 @@ describe("hooks security headers", () => {
     expect(resolveSpy).not.toHaveBeenCalled();
   });
 
+  it("blocks authenticated cross-site browser POSTs before internal API endpoint logic", async () => {
+    mockSession = { ...validAdminSession };
+    mockAdmin = { ...validAdmin };
+    env.ORIGIN = "";
+    const event = createMockEvent({
+      sessionId: "sess-admin-1",
+      method: "POST",
+      origin: "http://evil.example",
+      secFetchSite: "cross-site",
+      url: "http://evil.example/api/internal/sync",
+    });
+    const resolveSpy = vi.fn(async () => new Response(null, { status: 204 }));
+
+    const response = await handle({ event, resolve: resolveSpy });
+
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({
+      message: "cross-site request blocked",
+    });
+    expectStandardSecurityHeaders(response);
+    expect(resolveSpy).not.toHaveBeenCalled();
+  });
+
+  it("allows authenticated same-origin internal API POSTs through CSRF checks", async () => {
+    mockSession = { ...validAdminSession };
+    mockAdmin = { ...validAdmin };
+    const event = createMockEvent({
+      sessionId: "sess-admin-1",
+      method: "POST",
+      origin: "http://localhost:3000",
+      secFetchSite: "same-origin",
+      url: "http://localhost:3000/api/internal/sync",
+    });
+    const resolveSpy = vi.fn(async () => new Response(null, { status: 204 }));
+
+    const response = await handle({ event, resolve: resolveSpy });
+
+    expect(response.status).toBe(204);
+    expectStandardSecurityHeaders(response);
+    expect(resolveSpy).toHaveBeenCalledOnce();
+  });
+
   it("returns 401 for unauthenticated requests to internal API endpoints", async () => {
     const event = createMockEvent({
       method: "POST",
-      origin: "http://localhost",
-      url: "http://localhost/api/internal/sync",
+      origin: "http://localhost:3000",
+      url: "http://localhost:3000/api/internal/sync",
     });
     const resolveSpy = vi.fn(async () => new Response(null, { status: 204 }));
 

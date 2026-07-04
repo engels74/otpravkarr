@@ -116,19 +116,18 @@ async function fetchOfferedGroups(
   };
 }
 
-/**
- * Provision (or reactivate / no-op) the user, establish their session, stash the
- * one-time initial password for the landing page, and redirect to the portal.
- * Always throws (redirect on success, HttpError on failure).
- */
-async function provisionAndRedirect(
-  cookies: Parameters<PageServerLoad>[0]["cookies"],
+type SuccessfulProvisionResult = Exclude<
+  Awaited<ReturnType<typeof provisionUser>>,
+  { status: "failed" }
+>;
+
+async function provisionForPortal(
   client: DispatcharrClient,
   identity: PlexIdentity,
   mode: ProvisioningMode,
   groupIds: number[],
   clientAddress: string,
-): Promise<never> {
+): Promise<SuccessfulProvisionResult | null> {
   const result = await provisionUser(
     client,
     { plexIdentity: identity, mode, groupIds },
@@ -137,9 +136,16 @@ async function provisionAndRedirect(
 
   if (result.status === "failed") {
     console.error("[auth/plex] Provisioning failed for Plex user:", result.error);
-    throw error(502, "Unable to set up your account. Please contact the administrator.");
+    return null;
   }
 
+  return result;
+}
+
+async function redirectProvisionedUser(
+  cookies: Parameters<PageServerLoad>[0]["cookies"],
+  result: SuccessfulProvisionResult,
+): Promise<never> {
   const mapping = result.mapping;
   const priorSessionId = cookies.get(SESSION_COOKIE_NAME);
   if (priorSessionId) {
@@ -159,6 +165,27 @@ async function provisionAndRedirect(
 
   updateLastAccessed(mapping.id);
   throw redirect(303, "/");
+}
+
+/**
+ * Provision (or reactivate / no-op) the user, establish their session, stash the
+ * one-time initial password for the landing page, and redirect to the portal.
+ * Always throws (redirect on success, HttpError on failure).
+ */
+async function provisionAndRedirect(
+  cookies: Parameters<PageServerLoad>[0]["cookies"],
+  client: DispatcharrClient,
+  identity: PlexIdentity,
+  mode: ProvisioningMode,
+  groupIds: number[],
+  clientAddress: string,
+): Promise<never> {
+  const result = await provisionForPortal(client, identity, mode, groupIds, clientAddress);
+  if (!result) {
+    throw error(502, "Unable to set up your account. Please contact the administrator.");
+  }
+
+  return redirectProvisionedUser(cookies, result);
 }
 
 export const load: PageServerLoad = async ({ cookies, getClientAddress }) => {
@@ -331,7 +358,7 @@ export const actions: Actions = {
     try {
       account = await getAccount(plexAdminToken);
     } catch {
-      return fail(502, { error: "Couldn't reach Plex. Please try again." });
+      return fail(502, { error: "Couldn't reach Plex. Please try again.", selected: requestedIds });
     }
     if (account.id === identity.id) {
       // The server owner is handled in load; they should never reach confirm.
@@ -342,7 +369,7 @@ export const actions: Actions = {
     try {
       friends = await fetchFriends(account);
     } catch {
-      return fail(502, { error: "Couldn't reach Plex. Please try again." });
+      return fail(502, { error: "Couldn't reach Plex. Please try again.", selected: requestedIds });
     }
     const hasAcceptedAccess = friends.some(
       (friend) => friend.id === identity.id && friend.status.trim().toLowerCase() === "accepted",
@@ -379,7 +406,10 @@ export const actions: Actions = {
     }
     const groupsResult = await retryResult(() => listChannelGroups(client), isTransientResultError);
     if (!groupsResult.ok) {
-      return fail(502, { error: "Unable to set up your account. Please try again." });
+      return fail(502, {
+        error: "Unable to set up your account. Please try again.",
+        selected: requestedIds,
+      });
     }
     const offeredIds = new Set(computeOfferedGroups(groupsResult.data, defaults).map((g) => g.id));
     if (!requestedIds.every((id) => offeredIds.has(id))) {
@@ -387,19 +417,27 @@ export const actions: Actions = {
     }
 
     const mode = await resolveProvisioningMode();
-    // Consume the onboarding cookie before provisioning so a refresh can't replay.
-    cookies.delete(ONBOARDING_COOKIE_NAME, OAUTH_COOKIE_DELETE_OPTIONS);
 
     // provisionUser only reads identity id/uuid/username/email/thumb; the Plex
-    // auth token is intentionally absent from the sealed cookie.
+    // auth token is intentionally absent from the sealed cookie. Keep the
+    // onboarding cookie until provisioning succeeds so transient Dispatcharr
+    // failures remain retryable.
     const fullIdentity: PlexIdentity = { ...identity, authenticationToken: "" };
-    return provisionAndRedirect(
-      cookies,
+    const provisionResult = await provisionForPortal(
       client,
       fullIdentity,
       mode,
       requestedIds,
       getClientAddress(),
     );
+    if (!provisionResult) {
+      return fail(502, {
+        error: "Unable to set up your account. Please try again.",
+        selected: requestedIds,
+      });
+    }
+
+    cookies.delete(ONBOARDING_COOKIE_NAME, OAUTH_COOKIE_DELETE_OPTIONS);
+    return redirectProvisionedUser(cookies, provisionResult);
   },
 };

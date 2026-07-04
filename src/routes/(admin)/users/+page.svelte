@@ -10,8 +10,7 @@ import Trash2Icon from "lucide-svelte/icons/trash-2";
 import UsersIcon from "lucide-svelte/icons/users";
 import { toast } from "svelte-sonner";
 import { applyAction, enhance } from "$app/forms";
-import { goto, invalidateAll } from "$app/navigation";
-import { page } from "$app/state";
+import { invalidateAll } from "$app/navigation";
 
 import ConfirmDialog from "$lib/components/ConfirmDialog.svelte";
 import GroupPicker from "$lib/components/GroupPicker.svelte";
@@ -20,8 +19,6 @@ import * as Avatar from "$lib/components/ui/avatar";
 import { Button } from "$lib/components/ui/button";
 import * as Dialog from "$lib/components/ui/dialog";
 import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
-import { Input } from "$lib/components/ui/input";
-import * as Select from "$lib/components/ui/select";
 import { Separator } from "$lib/components/ui/separator";
 import * as Table from "$lib/components/ui/table";
 import type { ProvisioningMode, UserMapping } from "$lib/db/types";
@@ -92,50 +89,15 @@ let passwordCopyStatus = $state<"idle" | "copied" | "failed">("idle");
 // so a prior re-enable can't leave a stale `true` for a later owner subscribe (ISSUE-002).
 let passwordReprovisioned = $state(false);
 
-// Search debounce
-let searchTimeout: ReturnType<typeof setTimeout> | undefined;
-// svelte-ignore state_referenced_locally
-let searchValue = $state(data.filters.search);
-$effect(() => {
-  searchValue = data.filters.search;
-});
 // svelte-ignore state_referenced_locally
 let statusFilter = $state(data.filters.status);
 // svelte-ignore state_referenced_locally
 let modeFilter = $state<ModeFilter>(data.filters.mode as ModeFilter);
-// svelte-ignore state_referenced_locally
-let previousDataStatus = data.filters.status;
-// svelte-ignore state_referenced_locally
-let previousDataMode = data.filters.mode;
-// svelte-ignore state_referenced_locally
-let previousStatusFilter = data.filters.status;
-// svelte-ignore state_referenced_locally
-let previousModeFilter = data.filters.mode;
 $effect(() => {
-  if (data.filters.status !== previousDataStatus) {
-    previousDataStatus = data.filters.status;
-    statusFilter = data.filters.status;
-    previousStatusFilter = data.filters.status;
-  }
+  statusFilter = data.filters.status;
 });
 $effect(() => {
-  if (data.filters.mode !== previousDataMode) {
-    previousDataMode = data.filters.mode;
-    modeFilter = data.filters.mode as ModeFilter;
-    previousModeFilter = data.filters.mode;
-  }
-});
-$effect(() => {
-  if (statusFilter !== previousStatusFilter) {
-    previousStatusFilter = statusFilter;
-    updateFilter("status", statusFilter);
-  }
-});
-$effect(() => {
-  if (modeFilter !== previousModeFilter) {
-    previousModeFilter = modeFilter;
-    updateFilter("mode", modeFilter);
-  }
+  modeFilter = data.filters.mode as ModeFilter;
 });
 
 // Clear the pending rotate target whenever the confirm dialog closes (confirm,
@@ -162,16 +124,43 @@ function formatRelativeTime(isoString: string | null): string {
   return `${days}d ago`;
 }
 
-function updateFilter(key: string, value: string) {
-  const params = new URLSearchParams(page.url.searchParams);
+function filterHref(key: "status" | "mode" | "search", value: string): string {
+  const params = new URLSearchParams();
+  if (data.filters.status !== "all") params.set("status", data.filters.status);
+  if (data.filters.mode !== "all") params.set("mode", data.filters.mode);
+  const search = data.filters.search.trim();
+  if (search) params.set("search", search);
+
   if (value === "all" || value === "") {
     params.delete(key);
   } else {
     params.set(key, value);
   }
   const qs = params.toString();
-  goto(`/users${qs ? `?${qs}` : ""}`, { replaceState: true, keepFocus: true });
+  return `/users${qs ? `?${qs}` : ""}`;
 }
+
+function filterLinkClass(active: boolean): string {
+  const base =
+    "inline-flex h-8 items-center rounded-lg border px-2.5 text-sm transition-colors focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50";
+  return active
+    ? `${base} border-primary/40 bg-primary/15 text-primary`
+    : `${base} border-input bg-transparent text-foreground hover:bg-muted`;
+}
+
+const statusFilterOptions = [
+  { value: "all", label: "All statuses" },
+  { value: "active", label: "Active" },
+  { value: "inactive", label: "Inactive" },
+  { value: "orphaned", label: "Orphaned" },
+];
+
+const modeFilterOptions: { value: ModeFilter; label: string }[] = [
+  { value: "all", label: "All modes" },
+  { value: "automatic", label: "Automatic" },
+  { value: "self-managed", label: "Self-managed" },
+  { value: "staff", label: "Staff" },
+];
 
 function refreshPageData(update?: EnhanceUpdate): void {
   void update?.({ reset: false, invalidateAll: false });
@@ -193,13 +182,6 @@ function appendLocalMapping(mapping: UserMapping) {
   mappings = [...mappings, mapping];
 }
 
-function onSearchInput(e: Event) {
-  const val = (e.currentTarget as HTMLInputElement).value;
-  searchValue = val;
-  clearTimeout(searchTimeout);
-  searchTimeout = setTimeout(() => updateFilter("search", val), 300);
-}
-
 function getStatus(m: UserMapping): "active" | "inactive" | "orphaned" {
   if (m.is_active === 0) return "inactive";
   if (m.dispatcharr_user_id == null) return "orphaned";
@@ -208,13 +190,6 @@ function getStatus(m: UserMapping): "active" | "inactive" | "orphaned" {
 
 function canDeleteLocalMapping(m: UserMapping): boolean {
   return m.dispatcharr_user_id == null && m.dispatcharr_xc_password_enc == null;
-}
-
-function modeLabelText(mode: ModeFilter | ProvisioningMode): string {
-  if (mode === "automatic") return "Automatic";
-  if (mode === "self_managed" || mode === "self-managed") return "Self-managed";
-  if (mode === "all") return "All modes";
-  return "Staff";
 }
 
 function openGroupDialog(m: UserMapping) {
@@ -552,47 +527,55 @@ async function copyOneTimePassword() {
 
   <!-- Filters bar -->
   <div class="flex flex-wrap items-center gap-3">
-    <Select.Root
-      type="single"
-      bind:value={statusFilter}
-    >
-      <Select.Trigger class="w-[140px] text-foreground">
-        <span data-slot="select-value">
-          {statusFilter === "all" ? "All statuses" : statusFilter.charAt(0).toUpperCase() + statusFilter.slice(1)}
-        </span>
-      </Select.Trigger>
-      <Select.Content>
-        <Select.Item value="all" label="All statuses">All statuses</Select.Item>
-        <Select.Item value="active" label="Active">Active</Select.Item>
-        <Select.Item value="inactive" label="Inactive">Inactive</Select.Item>
-        <Select.Item value="orphaned" label="Orphaned">Orphaned</Select.Item>
-      </Select.Content>
-    </Select.Root>
+    <div role="group" aria-label="Filter users by status" class="flex flex-wrap gap-1.5">
+      {#each statusFilterOptions as option}
+        <a
+          href={filterHref("status", option.value)}
+          aria-current={statusFilter === option.value ? "true" : undefined}
+          class={filterLinkClass(statusFilter === option.value)}
+        >
+          {option.label}
+        </a>
+      {/each}
+    </div>
 
-    <Select.Root
-      type="single"
-      bind:value={modeFilter}
-    >
-      <Select.Trigger class="w-[160px] text-foreground">
-        <span data-slot="select-value">
-          {modeFilter === "all" ? "All modes" : modeLabelText(modeFilter)}
-        </span>
-      </Select.Trigger>
-      <Select.Content>
-        <Select.Item value="all" label="All modes">All modes</Select.Item>
-        <Select.Item value="automatic" label="Automatic">Automatic</Select.Item>
-        <Select.Item value="self-managed" label="Self-managed">Self-managed</Select.Item>
-        <Select.Item value="staff" label="Staff">Staff</Select.Item>
-      </Select.Content>
-    </Select.Root>
+    <div role="group" aria-label="Filter users by provisioning mode" class="flex flex-wrap gap-1.5">
+      {#each modeFilterOptions as option}
+        <a
+          href={filterHref("mode", option.value)}
+          aria-current={modeFilter === option.value ? "true" : undefined}
+          class={filterLinkClass(modeFilter === option.value)}
+        >
+          {option.label}
+        </a>
+      {/each}
+    </div>
 
-    <Input
-      placeholder="Search users by username…"
-      aria-label="Search users by username…"
-      class="w-[260px] text-foreground"
-      value={searchValue}
-      oninput={onSearchInput}
-    />
+    <form
+      method="GET"
+      action="/users"
+      role="search"
+      aria-label="Search users"
+      class="flex flex-wrap items-center gap-2"
+    >
+      {#if statusFilter !== "all"}
+        <input type="hidden" name="status" value={statusFilter} />
+      {/if}
+      {#if modeFilter !== "all"}
+        <input type="hidden" name="mode" value={modeFilter} />
+      {/if}
+      <input
+        name="search"
+        placeholder="Search users by username…"
+        aria-label="Search users by username…"
+        class="border-input dark:bg-input/30 placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 h-8 w-[260px] min-w-0 rounded-lg border bg-transparent px-2.5 py-1 text-base text-foreground outline-none transition-colors focus-visible:ring-3 md:text-sm"
+        value={data.filters.search}
+      />
+      <Button type="submit" variant="outline" size="sm">Search</Button>
+      {#if data.filters.search.trim()}
+        <a href={filterHref("search", "")} class={filterLinkClass(false)}>Clear search</a>
+      {/if}
+    </form>
   </div>
 
   <!-- Table -->

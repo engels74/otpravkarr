@@ -23,7 +23,7 @@ import {
   USER_COOKIE_OPTIONS,
   USER_SESSION_TTL,
 } from "$lib/server/auth";
-import { validateOrigin } from "$lib/server/csrf";
+import { validateFetchMetadata, validateOrigin } from "$lib/server/csrf";
 import { validateEnv } from "$lib/server/env";
 import { handleError as serverErrorHandler } from "$lib/server/error-handler";
 import { createRequestLogger } from "$lib/server/logging";
@@ -254,6 +254,18 @@ const csrfValidator: Handle = async ({ event, resolve }) => {
     const hasSession = event.locals.admin !== null || event.locals.user !== null;
     if (isInternalApi && !hasSession) {
       return applySecurityHeaders(Response.json({ error: "unauthorized" }, { status: 401 }));
+    }
+
+    if (isInternalApi && hasSession) {
+      try {
+        validateFetchMetadata(event.request);
+      } catch (error) {
+        const forbiddenResponse = toForbiddenResponse(error);
+        if (forbiddenResponse) {
+          return applySecurityHeaders(forbiddenResponse);
+        }
+        throw error;
+      }
     }
 
     let originsConfig: string | null = null;

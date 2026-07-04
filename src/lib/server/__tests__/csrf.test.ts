@@ -7,10 +7,14 @@ vi.mock("@sveltejs/kit", () => ({
   },
 }));
 
-const { validateOrigin } = await import("$lib/server/csrf");
+const { validateFetchMetadata, validateOrigin } = await import("$lib/server/csrf");
 
-function makeRequest(method: string, origin?: string): Request {
-  const headers: Record<string, string> = {};
+function makeRequest(
+  method: string,
+  origin?: string,
+  extraHeaders: Record<string, string> = {},
+): Request {
+  const headers: Record<string, string> = { ...extraHeaders };
   if (origin !== undefined) {
     headers.Origin = origin;
   }
@@ -157,6 +161,35 @@ describe("validateOrigin", () => {
       const err = e as { status: number; body: { message: string } };
       expect(err.status).toBe(403);
       expect(err.body.message).toBe("invalid origin header");
+    }
+  });
+});
+
+describe("validateFetchMetadata", () => {
+  it("passes non-mutating cross-site requests", () => {
+    expect(() =>
+      validateFetchMetadata(makeRequest("GET", undefined, { "Sec-Fetch-Site": "cross-site" })),
+    ).not.toThrow();
+  });
+
+  it("passes mutating same-origin browser requests", () => {
+    expect(() =>
+      validateFetchMetadata(makeRequest("POST", undefined, { "Sec-Fetch-Site": "same-origin" })),
+    ).not.toThrow();
+  });
+
+  it("passes mutating requests without Fetch Metadata headers", () => {
+    expect(() => validateFetchMetadata(makeRequest("POST"))).not.toThrow();
+  });
+
+  it("throws 403 on mutating cross-site browser requests", () => {
+    try {
+      validateFetchMetadata(makeRequest("POST", undefined, { "Sec-Fetch-Site": "cross-site" }));
+      expect.unreachable("should have thrown");
+    } catch (e: unknown) {
+      const err = e as { status: number; body: { message: string } };
+      expect(err.status).toBe(403);
+      expect(err.body.message).toBe("cross-site request blocked");
     }
   });
 });

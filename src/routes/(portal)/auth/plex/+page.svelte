@@ -18,13 +18,13 @@ interface Props {
     offered?: OfferedGroup[];
     selected?: number[];
   };
-  form?: { error?: string } | null;
+  form?: { error?: string; selected?: number[] } | null;
 }
 
 let { data, form }: Props = $props();
 
 // svelte-ignore state_referenced_locally
-let selected = $state(new Set<number>(data.selected ?? []));
+let selected = $state(new Set<number>(form?.selected ?? data.selected ?? []));
 
 const selectedJson = $derived(JSON.stringify([...selected]));
 </script>

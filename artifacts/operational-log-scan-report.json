@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "kind": "secret-log-scan-test-report",
-  "capturedAt": "2026-07-29T11:52:00Z",
+  "capturedAt": "2026-07-29T12:10:00Z",
   "binding": {
     "scannedBaseCommit": "a70727dd2510b298d1bf9fbbcaa55c053b163585",
     "deployedSourceCommit": "06d91dd3df567a08257380c039df7d4eb5d9e263",
@@ -15,7 +15,7 @@
     "tracked Otpravkarr files including final receipts"
   ],
   "inventory": {
-    "trackedFiles": 480,
+    "trackedFiles": 481,
     "containerLogs": 3,
     "localSensitiveValues": 7
   },
@@ -49,6 +49,18 @@
     "sensitiveValueHits": 0,
     "credentialUrlHits": 0
   },
-  "notes": "scannedBaseCommit identifies the complete tracked tree scanned before this receipt was updated; the supplemental browser, operator-artifact, and health-recovery scans bind every later changed byte. The receipt contains only redacted counts and is reviewed separately because a commit cannot self-reference. Values, credential-bearing paths, and protected backup locations are intentionally omitted.",
+  "supplementalDocumentationRemovalScan": {
+    "capturedAt": "2026-07-29T12:10:00Z",
+    "operatorRunbookPath": "artifacts/operator-runbook.json",
+    "operatorRunbookSha256": "9fb70a019769226df3c73bb9c4ee9b4e074cd542d9b81fd70a64cfa71f70b01e",
+    "decisionLogPath": "artifacts/autonomous-decision-log.jsonl",
+    "decisionLogSha256": "5ac4ec1729288ce5dafa1115aa97432e5235fc77d1587b4c047c669e380c8f9d",
+    "trackedAndPendingFiles": 481,
+    "docsDirectoryPresent": false,
+    "sensitiveValueHits": 0,
+    "credentialUrlHits": 0,
+    "qrPayloadHits": 0
+  },
+  "notes": "The base and earlier supplemental scans retain the reviewed operational-log evidence. The documentation-removal scan binds the replacement structured operator artifacts and confirms the ignored docs directory is absent. The receipt contains only redacted counts; values, credential-bearing paths, and protected backup locations are intentionally omitted.",
   "result": "passed"
 }

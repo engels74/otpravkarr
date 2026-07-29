@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "kind": "secret-log-scan-test-report",
-  "capturedAt": "2026-07-29T10:40:00Z",
+  "capturedAt": "2026-07-29T10:48:00Z",
   "binding": {
-    "scannedBaseCommit": "921cd42a180c8e32569ab5bf5fe5729482426fb5",
+    "scannedBaseCommit": "747c0ad889c1ddb3ad5c842edc68aa7794b8b82c",
     "deployedSourceCommit": "06d91dd3df567a08257380c039df7d4eb5d9e263",
     "imageDigest": "sha256:a36dcfc3abe7b0b6be873ac5a6516287d565e627d9c86a75857a668d132d3ac1"
   },
@@ -26,8 +26,8 @@
     "qrPayloadArtifacts": 0
   },
   "supplementalBrowserEvidenceScan": {
-    "capturedAt": "2026-07-29T10:40:00Z",
-    "transcriptSha256": "798209a2e3088022ea4161b7d724a1151c6ae7503253ce5c056c5c69be8f548d",
+    "capturedAt": "2026-07-29T10:48:00Z",
+    "transcriptSha256": "c8a2ac1a01363a7492636a2d366feaee750d900ed14ac1baf3347deebe655113",
     "screenshotSha256": "99354f8d2bcde28433a8d5cd69fd7ed5db63ca7776f7d006d56ee5dae48372a5",
     "sensitiveValueHits": 0,
     "credentialUrlHits": 0,

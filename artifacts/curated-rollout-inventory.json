@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "capturedAt": "2026-07-29T07:48:00Z",
+  "capturedAt": "2026-07-29T09:00:00Z",
   "dispatcharr": {
     "version": "0.28.2",
     "streams": 55340,
@@ -16,9 +16,9 @@
     "activeEventChannels": 4
   },
   "otpravkarr": {
-    "sourceCommit": "6f9be829272110a4f6ea575488491d08438fec4d",
-    "runningImageDigest": "sha256:4abd621cbcce38b1f5a9f56b2017d06a41c10c8f391be83d1b2d0212f5fc9254",
-    "buildWorkflowRun": 30432391407,
+    "sourceCommit": "cafb80a1dbdbe6cb4c857041bbc751bc65e9dadf",
+    "runningImageDigest": "sha256:c67c0df2db41dc33cafd4dabba1a5b7664e0996c551b5df292a3048c7c7fd2c5",
+    "buildWorkflowRun": 30437050399,
     "migrations": 4,
     "defaultPolicy": "core_bundles",
     "approvedGroups": 7,

@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "kind": "secret-log-scan-test-report",
-  "capturedAt": "2026-07-29T10:26:48.215Z",
+  "capturedAt": "2026-07-29T10:40:00Z",
   "binding": {
-    "scannedBaseCommit": "d52f36e5ad755e27d0a42f830bbec5e48f7ac95d",
+    "scannedBaseCommit": "921cd42a180c8e32569ab5bf5fe5729482426fb5",
     "deployedSourceCommit": "06d91dd3df567a08257380c039df7d4eb5d9e263",
     "imageDigest": "sha256:a36dcfc3abe7b0b6be873ac5a6516287d565e627d9c86a75857a668d132d3ac1"
   },
@@ -25,6 +25,14 @@
     "credentialBearingUrlsInArtifacts": 0,
     "qrPayloadArtifacts": 0
   },
-  "notes": "scannedBaseCommit identifies the complete tracked tree scanned before this receipt was committed; the receipt contains only redacted counts and is reviewed separately because a commit cannot self-reference. Values, credential-bearing paths, and protected backup locations are intentionally omitted.",
+  "supplementalBrowserEvidenceScan": {
+    "capturedAt": "2026-07-29T10:40:00Z",
+    "transcriptSha256": "798209a2e3088022ea4161b7d724a1151c6ae7503253ce5c056c5c69be8f548d",
+    "screenshotSha256": "99354f8d2bcde28433a8d5cd69fd7ed5db63ca7776f7d006d56ee5dae48372a5",
+    "sensitiveValueHits": 0,
+    "credentialUrlHits": 0,
+    "qrPayloadHits": 0
+  },
+  "notes": "scannedBaseCommit identifies the complete tracked tree scanned before this receipt was updated; supplementalBrowserEvidenceScan covers the only changed browser transcript and screenshot bytes. The receipt contains only redacted counts and is reviewed separately because a commit cannot self-reference. Values, credential-bearing paths, and protected backup locations are intentionally omitted.",
   "result": "passed"
 }

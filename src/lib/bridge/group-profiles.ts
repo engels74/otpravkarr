@@ -88,18 +88,30 @@ export function isEcmManagedGroup(groupName: string): boolean {
   return groupName.endsWith(" — PPV/Events") || groupName.endsWith(" — Unscheduled Events");
 }
 
-function parseKnownChannelIds(value: string | undefined): Set<number> {
-  if (!value) return new Set();
+function parseKnownChannelIds(value: string, groupId: number): DispatcharrResult<Set<number>> {
   try {
     const parsed: unknown = JSON.parse(value);
-    if (!Array.isArray(parsed)) return new Set();
-    return new Set(
-      parsed.filter(
+    if (
+      !Array.isArray(parsed) ||
+      !parsed.every(
         (id): id is number => typeof id === "number" && Number.isSafeInteger(id) && id > 0,
-      ),
-    );
+      )
+    ) {
+      return {
+        ok: false,
+        error: "server_error",
+        message: `Invalid known-channel snapshot for group ${groupId}`,
+        retryable: false,
+      };
+    }
+    return { ok: true, data: new Set(parsed) };
   } catch {
-    return new Set();
+    return {
+      ok: false,
+      error: "server_error",
+      message: `Invalid known-channel snapshot for group ${groupId}`,
+      retryable: false,
+    };
   }
 }
 
@@ -239,6 +251,12 @@ export async function reconcileGroupProfile(
   // this numeric id won't carry it.
   const ownedPrefix = `${OTPRAVKARR_PROFILE_PREFIX}g${groupId}:`;
   const existing = getGroupProfile(groupId);
+  let knownEventChannels: Set<number> | undefined;
+  if (existing && isEcmManagedGroup(groupName)) {
+    const parsedKnown = parseKnownChannelIds(existing.known_channel_ids, groupId);
+    if (!parsedKnown.ok) return parsedKnown;
+    knownEventChannels = parsedKnown.data;
+  }
   if (existing) {
     const got = await retryResult(
       () => getProfile(client, existing.profile_id),
@@ -295,9 +313,8 @@ export async function reconcileGroupProfile(
   }
 
   let effectiveDesired = desiredEnabled;
-  if (isEcmManagedGroup(groupName) && existing) {
-    const previouslyKnown = parseKnownChannelIds(existing.known_channel_ids);
-    const hiddenByEcm = new Set([...previouslyKnown].filter((id) => !currentEnabled.has(id)));
+  if (knownEventChannels) {
+    const hiddenByEcm = new Set([...knownEventChannels].filter((id) => !currentEnabled.has(id)));
     effectiveDesired = new Set([...desiredEnabled].filter((id) => !hiddenByEcm.has(id)));
   }
 

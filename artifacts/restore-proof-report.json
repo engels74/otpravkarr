@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "kind": "database-restore-test-report",
-  "capturedAt": "2026-07-29T01:30:00Z",
+  "capturedAt": "2026-07-29T07:48:00Z",
   "postgresql": {
     "mode": "isolated restore",
     "integrity": "passed",
@@ -11,8 +11,9 @@
   "sqlite": {
     "mode": "isolated image and production-shaped restore",
     "integrity": "ok",
-    "migrations": 3,
+    "migrations": 4,
     "lineupBundlesTable": true,
+    "eventMembershipStateColumn": true,
     "wrongExplicitPathFailedClosed": true,
     "unexpectedDatabaseFilesCreated": 0,
     "interruptedMigrationFailedClosed": true,

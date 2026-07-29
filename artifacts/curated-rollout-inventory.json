@@ -1,28 +1,31 @@
 {
   "schemaVersion": 1,
-  "capturedAt": "2026-07-29T01:45:00Z",
+  "capturedAt": "2026-07-29T07:48:00Z",
   "dispatcharr": {
     "version": "0.28.2",
-    "streams": 55339,
+    "streams": 55340,
     "sourceGroups": 907,
-    "canonicalChannels": 25,
-    "curatedGroups": 6,
+    "canonicalChannels": 29,
+    "curatedGroups": 7,
     "healthyProvider": "STRNG8K",
     "disabledSources": 1,
     "curatedEpgMapped": 24,
     "curatedEpgWithPrograms": 24,
-    "attachedStreamsChecked": 59,
-    "attachedStreamsUsable": 59
+    "attachedStreamsChecked": 63,
+    "attachedStreamsUsable": 63,
+    "activeEventChannels": 4
   },
   "otpravkarr": {
-    "runningImageDigest": "sha256:665677392eed912e26fe7f1624bdba0390b51d9acad9140f517f57650612f162",
-    "migrations": 3,
+    "sourceCommit": "6f9be829272110a4f6ea575488491d08438fec4d",
+    "runningImageDigest": "sha256:4abd621cbcce38b1f5a9f56b2017d06a41c10c8f391be83d1b2d0212f5fc9254",
+    "buildWorkflowRun": 30432391407,
+    "migrations": 4,
     "defaultPolicy": "core_bundles",
-    "approvedGroups": 6,
+    "approvedGroups": 7,
     "bundles": 2,
     "activeSubscriberMappings": 1,
     "subscriberLevel": 1,
-    "subscriberProfiles": 5
+    "subscriberProfiles": 6
   },
   "plugins": [
     { "id": "lineuparr", "version": "1.26.1791747", "enabled": true, "scheduled": false },
@@ -35,7 +38,10 @@
       "id": "event_channel_managarr",
       "version": "1.26.1711720",
       "enabled": true,
-      "scheduled": false
+      "scheduled": true,
+      "scheduledTimesUtc": "0005,0405,0805,1205,1605,2005",
+      "refreshTrigger": true,
+      "recurringDelete": false
     }
   ],
   "safeState": {
@@ -43,7 +49,8 @@
     "databasePersistenceVerified": true,
     "restoreProofSeconds": 3,
     "publicDirectLiveEnabled": false,
-    "publicDirectLiveBlocker": "credential-bearing path logging",
-    "eventCatalogAvailable": false
+    "publicDirectLiveDisposition": "not required by operator; remains default-denied",
+    "eventCatalogAvailable": true,
+    "ecmVisibilityOwnershipPreservedAcrossOtpravkarrSync": true
   }
 }

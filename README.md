@@ -105,10 +105,6 @@ Complete the wizard immediately; the bootstrap token is single-use.
 }
 ```
 
-## Architecture
-
-See [`docs/otpravkarr-prd.md`](docs/otpravkarr-prd.md) for the full product requirements and architecture overview.
-
 ## License
 
 [AGPL-3.0](LICENSE)

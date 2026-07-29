@@ -30,20 +30,24 @@
   },
   "validation": {
     "capturedFrom": "live Dispatcharr PostgreSQL, live Otpravkarr SQLite, Docker inspect, and committed plugin settings",
-    "dispatcharrStreams": 55340,
-    "dispatcharrProviderGroups": 907,
-    "dispatcharrCanonicalChannels": 29,
-    "dispatcharrCuratedGroups": 7,
-    "dispatcharrProfiles": 9,
-    "dispatcharrUsers": 2,
-    "subscriberCount": 1,
-    "subscriberLevel": 1,
-    "subscriberProfiles": 6,
-    "attachedStreams": 63,
-    "activeEventChannels": 4,
-    "otpravkarrMigrations": 4,
-    "otpravkarrDatabaseIntegrity": "ok",
-    "imageHealth": "healthy"
+    "dispatcharr": {
+      "streams": 55340,
+      "sourceGroups": 907,
+      "canonicalChannels": 29,
+      "curatedGroups": 7,
+      "profiles": 9,
+      "users": 2,
+      "attachedStreamsChecked": 63,
+      "activeEventChannels": 4
+    },
+    "otpravkarr": {
+      "migrations": 4,
+      "activeSubscriberMappings": 1,
+      "subscriberLevel": 1,
+      "subscriberProfiles": 6,
+      "databaseIntegrity": "ok",
+      "imageHealth": "healthy"
+    }
   },
   "plugins": [
     { "id": "lineuparr", "version": "1.26.1791747", "enabled": true, "scheduled": false },

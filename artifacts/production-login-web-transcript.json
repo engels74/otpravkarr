@@ -1,37 +1,56 @@
 {
   "schemaVersion": 1,
   "kind": "web-automation-transcript",
+  "capturedAt": "2026-07-29T09:06:00Z",
   "surface": "production-admin-login",
+  "targetOrigin": "https://oktv.cccp.ps",
+  "deployment": {
+    "sourceCommit": "cafb80a1dbdbe6cb4c857041bbc751bc65e9dadf",
+    "imageDigest": "sha256:c67c0df2db41dc33cafd4dabba1a5b7664e0996c551b5df292a3048c7c7fd2c5",
+    "health": "healthy"
+  },
+  "automation": {
+    "browser": "headless Chromium",
+    "viewport": { "width": 1440, "height": 900 },
+    "traceCaptured": false,
+    "videoCaptured": false
+  },
   "steps": [
     {
       "action": "navigate",
       "target": "https://oktv.cccp.ps/login",
+      "waitUntil": "networkidle2",
       "result": "loaded",
-      "title": "Login \u2014 otpravkarr"
+      "title": "Login — otpravkarr"
     },
     {
       "action": "observe",
       "result": "username textbox, password textbox, and Sign In button present"
     },
     {
-      "action": "clear",
+      "action": "assert",
       "target": "username/password fields",
-      "result": "empty; no credentials captured"
+      "result": "both empty; no credentials entered or captured"
     },
     {
       "action": "screenshot",
-      "result": "saved non-uniform credential-free viewport"
+      "result": "saved non-uniform credential-free full-page viewport"
     }
   ],
   "screenshot": {
     "path": "artifacts/production-login-ui.png",
-    "sha256": "312fea5634d932778aa61906d9608be6c0e01cda4895237c51af0ab6928be5c8",
-    "bytes": 112606
+    "sha256": "99354f8d2bcde28433a8d5cd69fd7ed5db63ca7776f7d006d56ee5dae48372a5",
+    "bytes": 104618,
+    "width": 1440,
+    "height": 900,
+    "visuallyNonUniform": true
   },
   "assertions": {
     "productionOrigin": true,
+    "reviewedDeploymentBound": true,
     "loginBoundaryRendered": true,
     "credentialsPresent": false,
     "traceOrVideoCaptured": false
-  }
+  },
+  "result": "passed"
 }

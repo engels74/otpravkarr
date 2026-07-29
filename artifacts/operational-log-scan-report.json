@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "kind": "secret-log-scan-test-report",
-  "capturedAt": "2026-07-29T09:00:00Z",
+  "capturedAt": "2026-07-29T09:06:00Z",
   "sources": [
     "Caddy access log",
     "Caddy container logs",

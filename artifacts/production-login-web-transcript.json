@@ -26,7 +26,7 @@
     {
       "type": "screenshot",
       "timestamp": "2026-07-29T10:39:00.003Z",
-      "selector": "form",
+      "selector": ".surface-elevated",
       "path": "artifacts/production-login-ui.png"
     }
   ],
@@ -65,10 +65,10 @@
   ],
   "screenshot": {
     "path": "artifacts/production-login-ui.png",
-    "sha256": "1359bcf8c28c947cdf8cebdbece9a750859298f467900d287d87042a10e74abe",
-    "bytes": 6138,
-    "width": 382,
-    "height": 172,
+    "sha256": "9db8ca88f7d289beaa1cac8e143928fe7d6789611c77490c29f4c884d79bac29",
+    "bytes": 12893,
+    "width": 384,
+    "height": 274,
     "visuallyNonUniform": true
   },
   "assertions": [

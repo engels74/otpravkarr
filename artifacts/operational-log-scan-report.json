@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "kind": "secret-log-scan-test-report",
-  "capturedAt": "2026-07-29T10:54:00Z",
+  "capturedAt": "2026-07-29T11:00:00Z",
   "binding": {
-    "scannedBaseCommit": "ac93c5bc993d4f63b2110d858aa6f1dedb068df9",
+    "scannedBaseCommit": "20e61cd31b6b3da043ca2e64d932b4c97628b4a7",
     "deployedSourceCommit": "06d91dd3df567a08257380c039df7d4eb5d9e263",
     "imageDigest": "sha256:a36dcfc3abe7b0b6be873ac5a6516287d565e627d9c86a75857a668d132d3ac1"
   },
@@ -26,9 +26,9 @@
     "qrPayloadArtifacts": 0
   },
   "supplementalBrowserEvidenceScan": {
-    "capturedAt": "2026-07-29T10:54:00Z",
-    "transcriptSha256": "0869c1dca0b9002f84ddda38de8d70071e3f5b070705f8747c98f6f25d1479e7",
-    "screenshotSha256": "1359bcf8c28c947cdf8cebdbece9a750859298f467900d287d87042a10e74abe",
+    "capturedAt": "2026-07-29T11:00:00Z",
+    "transcriptSha256": "f6add5a25307731e9122b7c901dcf8de11d0db1cfda6e9a751ae49b2336188a6",
+    "screenshotSha256": "9db8ca88f7d289beaa1cac8e143928fe7d6789611c77490c29f4c884d79bac29",
     "sensitiveValueHits": 0,
     "credentialUrlHits": 0,
     "qrPayloadHits": 0

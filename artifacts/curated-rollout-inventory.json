@@ -26,7 +26,8 @@
     "bundles": 2,
     "activeSubscriberMappings": 1,
     "subscriberLevel": 1,
-    "subscriberProfiles": 6
+    "subscriberProfiles": 6,
+    "publicHealth": "ok"
   },
   "validation": {
     "capturedFrom": "live Dispatcharr PostgreSQL, live Otpravkarr SQLite, Docker inspect, and committed plugin settings",
@@ -46,7 +47,8 @@
       "subscriberLevel": 1,
       "subscriberProfiles": 6,
       "databaseIntegrity": "ok",
-      "imageHealth": "healthy"
+      "imageHealth": "healthy",
+      "publicHealth": "ok"
     }
   },
   "plugins": [

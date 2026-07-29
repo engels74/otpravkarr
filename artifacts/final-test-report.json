@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "kind": "api-package-test-report",
-  "capturedAt": "2026-07-29T09:00:00Z",
+  "capturedAt": "2026-07-29T10:06:36Z",
   "commands": [
-    { "command": "bun run check", "status": "passed", "files": 441 },
+    { "command": "bun run check", "status": "passed", "files": 442 },
     { "command": "bun run build", "status": "passed" },
     {
       "command": "bunx svelte-check --threshold warning",
@@ -12,7 +12,7 @@
       "warnings": 0
     },
     { "command": "bunx tsc --noEmit", "status": "passed" },
-    { "command": "bun run test", "status": "passed", "testFiles": 101, "tests": 1314 },
+    { "command": "bun run test", "status": "passed", "testFiles": 101, "tests": 1316 },
     { "command": "bun run test:e2e", "status": "passed", "passed": 48, "environmentSkipped": 1 },
     {
       "command": "E2E_SEED_SETUP_PRE_ADMIN=1 bunx playwright test --project=setup-wizard-fresh",
@@ -22,29 +22,40 @@
     }
   ],
   "focused": {
-    "command": "bunx vitest run src/lib/bridge/__tests__/group-profiles.test.ts src/lib/bridge/__tests__/ecm-scope.test.ts src/lib/db/__tests__/channel-group-profiles.test.ts src/lib/db/__tests__/migrate.test.ts src/lib/bridge/__tests__/subscription-sync.test.ts",
+    "command": "bunx vitest run src/lib/bridge/__tests__/group-profiles.test.ts src/lib/bridge/__tests__/ecm-scope.test.ts src/lib/dispatcharr/plugins/__tests__/registry.test.ts src/routes/(admin)/plugins/page.server.test.ts",
     "status": "passed",
-    "testFiles": 5,
-    "tests": 52
-  },
-  "snapshotFocused": {
-    "command": "bunx vitest run src/lib/bridge/__tests__/group-profiles.test.ts",
-    "status": "passed",
-    "tests": 23
+    "testFiles": 4,
+    "tests": 44
   },
   "remoteCi": {
-    "sourceCommit": "cafb80a1dbdbe6cb4c857041bbc751bc65e9dadf",
-    "updateWorkflowRun": 30436989536,
-    "buildWorkflowRun": 30437050399,
+    "sourceCommit": "06d91dd3df567a08257380c039df7d4eb5d9e263",
+    "updateWorkflowRun": 30441836873,
+    "buildWorkflowRun": 30441894432,
     "status": "passed"
   },
   "deployment": {
-    "imageDigest": "sha256:c67c0df2db41dc33cafd4dabba1a5b7664e0996c551b5df292a3048c7c7fd2c5",
+    "imageDigest": "sha256:a36dcfc3abe7b0b6be873ac5a6516287d565e627d9c86a75857a668d132d3ac1",
     "health": "healthy",
     "migration": 4,
     "databaseIntegrity": "ok",
     "publicHealthStatus": 200,
     "corruptSnapshotFailsClosed": true
+  },
+  "livePluginAdvisory": {
+    "adminPageStatus": 200,
+    "eventScope": "covered",
+    "readOnlyClaim": true,
+    "legacyAutomaticScopeClaim": false,
+    "ordinaryProfileLeakCount": 0
+  },
+  "dependencyReview": {
+    "merged": [91, 92, 93],
+    "blocked": [
+      {
+        "pullRequest": 90,
+        "reason": "TypeScript 7.0.2 is incompatible with svelte-check 4.4.6"
+      }
+    ]
   },
   "liveEventVerification": {
     "measuredActiveEvents": 4,

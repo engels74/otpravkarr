@@ -1,16 +1,16 @@
 {
   "schemaVersion": 1,
   "kind": "secret-log-scan-test-report",
-  "capturedAt": "2026-07-29T01:55:00Z",
+  "capturedAt": "2026-07-29T09:00:00Z",
   "sources": [
+    "Caddy access log",
     "Caddy container logs",
     "Dispatcharr container logs",
     "Otpravkarr container logs",
-    "Otpravkarr audit database",
-    "changed and untracked rollout files"
+    "tracked Otpravkarr files"
   ],
   "checks": {
-    "syntheticCredentialMarkerHits": 0,
+    "xcCredentialPatternHits": 0,
     "localSensitiveEnvironmentValueHits": 0,
     "credentialBearingUrlsInArtifacts": 0,
     "qrPayloadArtifacts": 0

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "kind": "api-package-test-report",
-  "capturedAt": "2026-07-29T07:48:00Z",
+  "capturedAt": "2026-07-29T09:00:00Z",
   "commands": [
     { "command": "bun run check", "status": "passed", "files": 441 },
     { "command": "bun run build", "status": "passed" },
@@ -12,7 +12,7 @@
       "warnings": 0
     },
     { "command": "bunx tsc --noEmit", "status": "passed" },
-    { "command": "bun run test", "status": "passed", "testFiles": 101, "tests": 1309 },
+    { "command": "bun run test", "status": "passed", "testFiles": 101, "tests": 1314 },
     { "command": "bun run test:e2e", "status": "passed", "passed": 48, "environmentSkipped": 1 },
     {
       "command": "E2E_SEED_SETUP_PRE_ADMIN=1 bunx playwright test --project=setup-wizard-fresh",
@@ -27,18 +27,24 @@
     "testFiles": 5,
     "tests": 52
   },
+  "snapshotFocused": {
+    "command": "bunx vitest run src/lib/bridge/__tests__/group-profiles.test.ts",
+    "status": "passed",
+    "tests": 23
+  },
   "remoteCi": {
-    "sourceCommit": "6f9be829272110a4f6ea575488491d08438fec4d",
-    "updateWorkflowRun": 30432329108,
-    "buildWorkflowRun": 30432391407,
+    "sourceCommit": "cafb80a1dbdbe6cb4c857041bbc751bc65e9dadf",
+    "updateWorkflowRun": 30436989536,
+    "buildWorkflowRun": 30437050399,
     "status": "passed"
   },
   "deployment": {
-    "imageDigest": "sha256:4abd621cbcce38b1f5a9f56b2017d06a41c10c8f391be83d1b2d0212f5fc9254",
+    "imageDigest": "sha256:c67c0df2db41dc33cafd4dabba1a5b7664e0996c551b5df292a3048c7c7fd2c5",
     "health": "healthy",
     "migration": 4,
     "databaseIntegrity": "ok",
-    "publicHealthStatus": 200
+    "publicHealthStatus": 200,
+    "corruptSnapshotFailsClosed": true
   },
   "liveEventVerification": {
     "measuredActiveEvents": 4,

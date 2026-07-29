@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
   "kind": "black-box-api-receipt",
-  "capturedAt": "2026-07-29T09:06:00Z",
+  "capturedAt": "2026-07-29T10:16:28.438Z",
   "surface": "public-xc-xmltv-ingress",
   "targetOrigin": "https://dptv.cccp.ps",
   "deployment": {
-    "sourceCommit": "cafb80a1dbdbe6cb4c857041bbc751bc65e9dadf",
-    "imageDigest": "sha256:c67c0df2db41dc33cafd4dabba1a5b7664e0996c551b5df292a3048c7c7fd2c5",
+    "sourceCommit": "06d91dd3df567a08257380c039df7d4eb5d9e263",
+    "imageDigest": "sha256:a36dcfc3abe7b0b6be873ac5a6516287d565e627d9c86a75857a668d132d3ac1",
     "health": "healthy"
   },
   "invocation": {
@@ -25,7 +25,7 @@
       "/output/m3u",
       "/hdhr",
       "/movie/{synthetic}/{synthetic}/1.ts",
-      "/live/{authorized-user}/{authorized-password}/26.ts"
+      "/live/{synthetic}/{synthetic}/26.ts"
     ]
   },
   "authorized": {

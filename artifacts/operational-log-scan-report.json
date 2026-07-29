@@ -52,7 +52,7 @@
   "supplementalDocumentationRemovalScan": {
     "capturedAt": "2026-07-29T12:10:00Z",
     "operatorRunbookPath": "artifacts/operator-runbook.json",
-    "operatorRunbookSha256": "30f5dcfce5124c70d627eb459e5f6de69ac5629f554fb26037c417182e7647b2",
+    "operatorRunbookSha256": "9fb70a019769226df3c73bb9c4ee9b4e074cd542d9b81fd70a64cfa71f70b01e",
     "decisionLogPath": "artifacts/autonomous-decision-log.jsonl",
     "decisionLogSha256": "5ac4ec1729288ce5dafa1115aa97432e5235fc77d1587b4c047c669e380c8f9d",
     "trackedAndPendingFiles": 481,

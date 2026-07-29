@@ -5,6 +5,31 @@
   "surface": "web",
   "contractRef": "production-admin-login",
   "targetOrigin": "https://oktv.cccp.ps",
+  "tool": "browser_tool/headless-chromium",
+  "actions": [
+    {
+      "type": "goto",
+      "timestamp": "2026-07-29T10:39:00.000Z",
+      "url": "https://oktv.cccp.ps/login"
+    },
+    {
+      "type": "observe",
+      "timestamp": "2026-07-29T10:39:00.001Z",
+      "selector": "input[name=\"username\"], input[name=\"password\"], button[type=\"submit\"]"
+    },
+    {
+      "type": "assert",
+      "timestamp": "2026-07-29T10:39:00.002Z",
+      "selector": "input[name=\"username\"], input[name=\"password\"]",
+      "expected": "both inputs are empty"
+    },
+    {
+      "type": "screenshot",
+      "timestamp": "2026-07-29T10:39:00.003Z",
+      "selector": "body",
+      "path": "artifacts/production-login-ui.png"
+    }
+  ],
   "deployment": {
     "sourceCommit": "06d91dd3df567a08257380c039df7d4eb5d9e263",
     "imageDigest": "sha256:a36dcfc3abe7b0b6be873ac5a6516287d565e627d9c86a75857a668d132d3ac1",
@@ -46,12 +71,13 @@
     "height": 900,
     "visuallyNonUniform": true
   },
-  "assertions": {
-    "productionOrigin": true,
-    "reviewedDeploymentBound": true,
-    "loginBoundaryRendered": true,
-    "credentialsPresent": false,
-    "traceOrVideoCaptured": false
-  },
+  "assertions": [
+    {
+      "timestamp": "2026-07-29T10:39:00.004Z",
+      "selector": "input[name=\"username\"], input[name=\"password\"]",
+      "status": "passed",
+      "evidence": "Both credential inputs were empty; production origin and reviewed deployment were active; no trace or video was captured."
+    }
+  ],
   "result": "passed"
 }

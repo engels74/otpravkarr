@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "kind": "live-health-recovery-test-report",
+  "capturedAt": "2026-07-29T11:50:00Z",
+  "deployment": {
+    "sourceCommit": "06d91dd3df567a08257380c039df7d4eb5d9e263",
+    "imageDigest": "sha256:a36dcfc3abe7b0b6be873ac5a6516287d565e627d9c86a75857a668d132d3ac1"
+  },
+  "before": {
+    "publicHealth": "degraded",
+    "dockerHealth": "healthy",
+    "cause": "configured Plex resource endpoint was stale and unreachable"
+  },
+  "recovery": {
+    "backupId": "20260729T114350Z-phase-plex-health-recovery",
+    "backupRestoreCheck": "ok",
+    "discoveredCandidates": 2,
+    "passingCandidates": 2,
+    "selectedLocal": true,
+    "selectedRelay": false,
+    "mutationPath": "authenticated updatePlexConnection admin action",
+    "credentialValuesPersisted": false
+  },
+  "after": {
+    "publicHealthReads": ["ok", "ok"],
+    "databaseIntegrity": "ok",
+    "dockerHealth": "healthy"
+  },
+  "rollback": {
+    "priorConfigurationRetainedInBackup": true,
+    "pairedComposeAndDatabaseBackup": true
+  },
+  "result": "passed"
+}

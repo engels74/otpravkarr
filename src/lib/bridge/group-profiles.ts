@@ -17,6 +17,7 @@ import type {
   DispatcharrChannelProfileWithChannels,
   DispatcharrResult,
 } from "$lib/dispatcharr/types";
+import { isEcmCsvSafeProfileName, isEcmManagedGroupName } from "$lib/event-groups";
 import { isTransientResultError, retryResult } from "$lib/utils/retry";
 
 /**
@@ -80,12 +81,7 @@ export function profileNameForGroup(groupId: number, groupName: string): string 
 
 /** Whether an existing otpravkarr profile name is unsafe for ECM's CSV scope. */
 export function profileNameNeedsCsvRepair(name: string): boolean {
-  return name.includes(",");
-}
-
-/** Event groups whose profile visibility is owned by Event Channel Managarr. */
-export function isEcmManagedGroup(groupName: string): boolean {
-  return groupName.endsWith(" — PPV/Events") || groupName.endsWith(" — Unscheduled Events");
+  return !isEcmCsvSafeProfileName(name);
 }
 
 function parseKnownChannelIds(value: string, groupId: number): DispatcharrResult<Set<number>> {
@@ -252,7 +248,7 @@ export async function reconcileGroupProfile(
   const ownedPrefix = `${OTPRAVKARR_PROFILE_PREFIX}g${groupId}:`;
   const existing = getGroupProfile(groupId);
   let knownEventChannels: Set<number> | undefined;
-  if (existing && isEcmManagedGroup(groupName)) {
+  if (existing && isEcmManagedGroupName(groupName)) {
     const parsedKnown = parseKnownChannelIds(existing.known_channel_ids, groupId);
     if (!parsedKnown.ok) return parsedKnown;
     knownEventChannels = parsedKnown.data;

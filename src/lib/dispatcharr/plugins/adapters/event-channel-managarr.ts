@@ -1,3 +1,4 @@
+import { isEcmCsvSafeProfileName, isEcmManagedGroupName } from "$lib/event-groups";
 import type { PluginAdapter, PluginAdvisory } from "../types";
 
 function parseCsv(value: unknown): string[] {
@@ -10,10 +11,9 @@ function parseCsv(value: unknown): string[] {
 
 /**
  * Event-Channel-Managarr (ECM): toggles visibility of existing event channels
- * (PPV/sports/F1) per Channel Profile on a schedule and on `m3u_refresh`. Never
- * creates channels. otpravkarr's primary integration — for event automation to
- * reach all subscribers of a group, that group's otpravkarr profile must be in
- * ECM's `channel_profile_name`.
+ * per event Channel Profile on a schedule and on `m3u_refresh`. It never creates
+ * channels. Otpravkarr reports missing event-profile scope but never mutates
+ * plugin settings or runs plugin actions.
  */
 export const eventChannelManagarrAdapter: PluginAdapter = {
   key: "event_channel_managarr",
@@ -23,25 +23,35 @@ export const eventChannelManagarrAdapter: PluginAdapter = {
   advise: ({ plugin, ownedProfileNames }) => {
     const advisories: PluginAdvisory[] = [];
     const scope = new Set(parseCsv(plugin.settings?.channel_profile_name));
-    const missing = ownedProfileNames.filter((name) => !scope.has(name));
+    const eventProfileNames = ownedProfileNames.filter(isEcmManagedGroupName);
+    const unsafeProfileNames = eventProfileNames.filter((name) => !isEcmCsvSafeProfileName(name));
+    const safeProfileNames = eventProfileNames.filter(isEcmCsvSafeProfileName);
+    const missing = safeProfileNames.filter((name) => !scope.has(name));
 
-    if (ownedProfileNames.length > 0 && missing.length > 0) {
+    if (unsafeProfileNames.length > 0) {
       advisories.push({
         level: "warning",
-        message: `These otpravkarr group profiles are not yet in ECM's "channel_profile_name"; otpravkarr adds them automatically on the next sync so event channels reach their subscribers: ${missing.join(", ")}.`,
+        message: `These legacy otpravkarr event profile names cannot be represented in ECM's comma-separated scope and were omitted: ${unsafeProfileNames.join("; ")}. Reconcile the group profile, then update ECM scope in Dispatcharr.`,
       });
-    } else if (ownedProfileNames.length > 0) {
+    }
+
+    if (missing.length > 0) {
+      advisories.push({
+        level: "warning",
+        message: `These otpravkarr event profiles are missing from ECM's "channel_profile_name": ${missing.join(", ")}. Update ECM scope in Dispatcharr; otpravkarr advisory is read-only.`,
+      });
+    } else if (safeProfileNames.length > 0) {
       advisories.push({
         level: "info",
         message:
-          "All otpravkarr group profiles are within ECM's channel_profile_name scope (kept in sync automatically) — event automation reaches subscribers.",
+          "All otpravkarr event profiles are within ECM's channel_profile_name scope. ECM visibility automation reaches their subscribers.",
       });
     }
 
     advisories.push({
       level: "info",
       message:
-        "otpravkarr coordinates ECM channel_profile_name scope only; it does not toggle channel visibility inside ECM-managed profiles, where ECM owns within-profile event toggling.",
+        "otpravkarr reports ECM event-profile scope only; it never changes plugin settings or runs actions. ECM owns visibility inside configured event profiles.",
     });
     return advisories;
   },

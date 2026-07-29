@@ -5,8 +5,8 @@ import {
 import type { DispatcharrClient } from "$lib/dispatcharr/client";
 import { listPlugins } from "$lib/dispatcharr/endpoints/plugins";
 import type { DispatcharrPlugin, DispatcharrResult } from "$lib/dispatcharr/types";
+import { isEcmCsvSafeProfileName, isEcmManagedGroupName } from "$lib/event-groups";
 import { isTransientResultError, retryResult } from "$lib/utils/retry";
-import { isEcmManagedGroup, profileNameNeedsCsvRepair } from "./group-profiles";
 
 /** Dispatcharr plugin key for Event-Channel-Managarr. */
 export const ECM_KEY = "event_channel_managarr";
@@ -69,8 +69,8 @@ export async function analyzeEcmScope(
 
   for (const profile of getAllGroupProfiles()) {
     if (profile.group_id === EMPTY_PROFILE_GROUP_ID) continue;
-    if (!isEcmManagedGroup(profile.profile_name)) continue;
-    if (profileNameNeedsCsvRepair(profile.profile_name)) {
+    if (!isEcmManagedGroupName(profile.profile_name)) continue;
+    if (!isEcmCsvSafeProfileName(profile.profile_name)) {
       skippedUnsafeProfiles.push({
         groupId: profile.group_id,
         profileId: profile.profile_id,

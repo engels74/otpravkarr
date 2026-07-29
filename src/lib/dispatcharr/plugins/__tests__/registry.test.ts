@@ -100,29 +100,78 @@ describe("describePlugins", () => {
     });
   });
 
-  it("warns when otpravkarr group profiles are outside ECM's scope", () => {
+  it("warns only when otpravkarr event profiles are outside ECM's scope", () => {
     const ecm = plugin({
       key: "event_channel_managarr",
       name: "ECM",
       settings: { channel_profile_name: "Streamers" },
     });
-    const detected = describePlugins([ecm], ["otpravkarr:g1:Sports", "otpravkarr:g2:News"]);
+    const detected = describePlugins(
+      [ecm],
+      [
+        "otpravkarr:g1:Sports",
+        "otpravkarr:g2:UK/English — PPV/Events",
+        "otpravkarr:g3:UK/English — Unscheduled Events",
+      ],
+    );
     const warning = detected[0]?.advisories.find((a) => a.level === "warning");
-    expect(warning?.message).toContain("otpravkarr:g1:Sports");
-    expect(warning?.message).toContain("otpravkarr:g2:News");
+    expect(warning?.message).not.toContain("otpravkarr:g1:Sports");
+    expect(warning?.message).toContain("otpravkarr:g2:UK/English — PPV/Events");
+    expect(warning?.message).toContain("otpravkarr:g3:UK/English — Unscheduled Events");
+    expect(warning?.message).toContain("Update ECM scope in Dispatcharr");
+    expect(warning?.message).toContain("read-only");
+    expect(warning?.message).not.toContain("automatically");
   });
 
-  it("reports ECM coverage as healthy when all group profiles are in scope", () => {
+  it("omits legacy comma-bearing event profiles from ECM scope comparisons", () => {
+    const legacyProfile = "otpravkarr:g4:UK, Legacy — PPV/Events";
+    const safeProfile = "otpravkarr:g5:Danish — PPV/Events";
     const ecm = plugin({
       key: "event_channel_managarr",
       name: "ECM",
-      settings: { channel_profile_name: "otpravkarr:g1:Sports, Streamers" },
+      settings: {},
     });
-    const detected = describePlugins([ecm], ["otpravkarr:g1:Sports"]);
+    const detected = describePlugins([ecm], [legacyProfile, safeProfile]);
+    const warnings = detected[0]?.advisories.filter((a) => a.level === "warning") ?? [];
+    const unsafe = warnings.find((a) => a.message.includes("cannot be represented"));
+    const missing = warnings.find((a) => a.message.includes("missing from ECM"));
+
+    expect(unsafe?.message).toContain(legacyProfile);
+    expect(unsafe?.message).toContain("omitted");
+    expect(missing?.message).toContain(safeProfile);
+    expect(missing?.message).not.toContain(legacyProfile);
+  });
+
+  it("reports ECM coverage as healthy when all event profiles are in scope", () => {
+    const profileName = "otpravkarr:g2:UK/English — PPV/Events";
+    const ecm = plugin({
+      key: "event_channel_managarr",
+      name: "ECM",
+      settings: { channel_profile_name: `${profileName}, Streamers` },
+    });
+    const detected = describePlugins([ecm], ["otpravkarr:g1:Sports", profileName]);
     expect(detected[0]?.advisories.some((a) => a.level === "warning")).toBe(false);
     expect(
       detected[0]?.advisories.some(
-        (a) => a.level === "info" && a.message.includes("channel_profile_name"),
+        (a) => a.level === "info" && a.message.includes("event profiles"),
+      ),
+    ).toBe(true);
+    expect(detected[0]?.advisories.every((a) => !a.message.includes("automatically"))).toBe(true);
+  });
+
+  it("ignores ordinary profiles and keeps ECM integration explicitly read-only", () => {
+    const ecm = plugin({
+      key: "event_channel_managarr",
+      name: "ECM",
+      settings: {},
+    });
+    const detected = describePlugins([ecm], ["otpravkarr:g1:Sports", "otpravkarr:g2:General TV"]);
+
+    expect(detected[0]?.advisories.some((a) => a.level === "warning")).toBe(false);
+    expect(
+      detected[0]?.advisories.some(
+        (a) =>
+          a.level === "info" && a.message.includes("never changes plugin settings or runs actions"),
       ),
     ).toBe(true);
   });

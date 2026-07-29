@@ -49,6 +49,7 @@ describe("plugins panel load", () => {
     mocks.getConfig.mockResolvedValue("https://d.example");
     mocks.getAllGroupProfiles.mockReturnValue([
       { group_id: 1, profile_name: "otpravkarr:g1:Sports" },
+      { group_id: 2, profile_name: "otpravkarr:g2:Danish — PPV/Events" },
       { group_id: -1, profile_name: "otpravkarr:empty" }, // sentinel excluded
     ]);
     mocks.listPlugins.mockResolvedValue({
@@ -74,9 +75,10 @@ describe("plugins panel load", () => {
     expect(result.configured).toBe(true);
     expect(result.reachable).toBe(true);
     expect(result.plugins[0]?.key).toBe("event_channel_managarr");
-    // The empty-profile sentinel must NOT appear in the ECM coverage warning.
+    // Only event profiles belong in ECM scope; ordinary and sentinel profiles are excluded.
     const warning = result.plugins[0]?.advisories.find((a) => a.level === "warning");
-    expect(warning?.message).toContain("otpravkarr:g1:Sports");
+    expect(warning?.message).toContain("otpravkarr:g2:Danish — PPV/Events");
+    expect(warning?.message).not.toContain("otpravkarr:g1:Sports");
     expect(warning?.message).not.toContain("otpravkarr:empty");
   });
 });

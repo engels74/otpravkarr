@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "capturedAt": "2026-07-29T09:00:00Z",
+  "capturedAt": "2026-07-29T11:25:00Z",
   "dispatcharr": {
     "version": "0.28.2",
     "streams": 55340,
@@ -16,9 +16,10 @@
     "activeEventChannels": 4
   },
   "otpravkarr": {
-    "sourceCommit": "cafb80a1dbdbe6cb4c857041bbc751bc65e9dadf",
-    "runningImageDigest": "sha256:c67c0df2db41dc33cafd4dabba1a5b7664e0996c551b5df292a3048c7c7fd2c5",
-    "buildWorkflowRun": 30437050399,
+    "sourceCommit": "06d91dd3df567a08257380c039df7d4eb5d9e263",
+    "runningImageDigest": "sha256:a36dcfc3abe7b0b6be873ac5a6516287d565e627d9c86a75857a668d132d3ac1",
+    "updateWorkflowRun": 30441836873,
+    "buildWorkflowRun": 30441894432,
     "migrations": 4,
     "defaultPolicy": "core_bundles",
     "approvedGroups": 7,
@@ -26,6 +27,23 @@
     "activeSubscriberMappings": 1,
     "subscriberLevel": 1,
     "subscriberProfiles": 6
+  },
+  "validation": {
+    "capturedFrom": "live Dispatcharr PostgreSQL, live Otpravkarr SQLite, Docker inspect, and committed plugin settings",
+    "dispatcharrStreams": 55340,
+    "dispatcharrProviderGroups": 907,
+    "dispatcharrCanonicalChannels": 29,
+    "dispatcharrCuratedGroups": 7,
+    "dispatcharrProfiles": 9,
+    "dispatcharrUsers": 2,
+    "subscriberCount": 1,
+    "subscriberLevel": 1,
+    "subscriberProfiles": 6,
+    "attachedStreams": 63,
+    "activeEventChannels": 4,
+    "otpravkarrMigrations": 4,
+    "otpravkarrDatabaseIntegrity": "ok",
+    "imageHealth": "healthy"
   },
   "plugins": [
     { "id": "lineuparr", "version": "1.26.1791747", "enabled": true, "scheduled": false },

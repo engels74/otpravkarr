@@ -352,6 +352,40 @@ describe("reconcileGroupProfile", () => {
     expect(updateGroupProfileKnownChannels).toHaveBeenCalledWith(9, [1, 2]);
   });
 
+  it.each([
+    "not-json",
+    "{}",
+    "[1,0]",
+    "[1,2.5]",
+    '[1,"2"]',
+  ])("fails closed on an invalid event known-channel snapshot: %s", async (knownChannelIds) => {
+    vi.mocked(getGroupProfile).mockReturnValue({
+      group_id: 9,
+      profile_id: 900,
+      profile_name: "otpravkarr:g9:UK/English — PPV/Events",
+      known_channel_ids: knownChannelIds,
+      created_at: "",
+      updated_at: "",
+    });
+    vi.mocked(getProfile).mockResolvedValue(
+      ok(profile(900, "otpravkarr:g9:UK/English — PPV/Events", [1])),
+    );
+
+    const result = await reconcileGroupProfile(
+      client,
+      9,
+      "UK/English — PPV/Events",
+      new Set([1, 2]),
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      error: "server_error",
+      message: "Invalid known-channel snapshot for group 9",
+    });
+    expect(bulkUpdateProfileMembership).not.toHaveBeenCalled();
+    expect(updateGroupProfileKnownChannels).not.toHaveBeenCalled();
+  });
   it("keeps exact membership reconciliation for non-event groups", async () => {
     vi.mocked(getGroupProfile).mockReturnValue({
       group_id: 1,

@@ -88,18 +88,28 @@ export function isEcmManagedGroup(groupName: string): boolean {
   return groupName.endsWith(" — PPV/Events") || groupName.endsWith(" — Unscheduled Events");
 }
 
-function parseKnownChannelIds(value: string | undefined): Set<number> {
-  if (!value) return new Set();
+function parseKnownChannelIds(value: string, groupId: number): DispatcharrResult<Set<number>> {
   try {
     const parsed: unknown = JSON.parse(value);
-    if (!Array.isArray(parsed)) return new Set();
-    return new Set(
-      parsed.filter(
+    if (
+      !Array.isArray(parsed) ||
+      !parsed.every(
         (id): id is number => typeof id === "number" && Number.isSafeInteger(id) && id > 0,
-      ),
-    );
+      )
+    ) {
+      return {
+        ok: false,
+        error: "server_error",
+        message: `Invalid known-channel snapshot for group ${groupId}`,
+      };
+    }
+    return { ok: true, data: new Set(parsed) };
   } catch {
-    return new Set();
+    return {
+      ok: false,
+      error: "server_error",
+      message: `Invalid known-channel snapshot for group ${groupId}`,
+    };
   }
 }
 
@@ -296,8 +306,9 @@ export async function reconcileGroupProfile(
 
   let effectiveDesired = desiredEnabled;
   if (isEcmManagedGroup(groupName) && existing) {
-    const previouslyKnown = parseKnownChannelIds(existing.known_channel_ids);
-    const hiddenByEcm = new Set([...previouslyKnown].filter((id) => !currentEnabled.has(id)));
+    const parsedKnown = parseKnownChannelIds(existing.known_channel_ids, groupId);
+    if (!parsedKnown.ok) return parsedKnown;
+    const hiddenByEcm = new Set([...parsedKnown.data].filter((id) => !currentEnabled.has(id)));
     effectiveDesired = new Set([...desiredEnabled].filter((id) => !hiddenByEcm.has(id)));
   }
 

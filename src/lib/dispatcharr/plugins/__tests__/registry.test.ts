@@ -123,6 +123,25 @@ describe("describePlugins", () => {
     expect(warning?.message).not.toContain("automatically");
   });
 
+  it("omits legacy comma-bearing event profiles from ECM scope comparisons", () => {
+    const legacyProfile = "otpravkarr:g4:UK, Legacy — PPV/Events";
+    const safeProfile = "otpravkarr:g5:Danish — PPV/Events";
+    const ecm = plugin({
+      key: "event_channel_managarr",
+      name: "ECM",
+      settings: {},
+    });
+    const detected = describePlugins([ecm], [legacyProfile, safeProfile]);
+    const warnings = detected[0]?.advisories.filter((a) => a.level === "warning") ?? [];
+    const unsafe = warnings.find((a) => a.message.includes("cannot be represented"));
+    const missing = warnings.find((a) => a.message.includes("missing from ECM"));
+
+    expect(unsafe?.message).toContain(legacyProfile);
+    expect(unsafe?.message).toContain("omitted");
+    expect(missing?.message).toContain(safeProfile);
+    expect(missing?.message).not.toContain(legacyProfile);
+  });
+
   it("reports ECM coverage as healthy when all event profiles are in scope", () => {
     const profileName = "otpravkarr:g2:UK/English — PPV/Events";
     const ecm = plugin({

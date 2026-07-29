@@ -17,7 +17,7 @@ import type {
   DispatcharrChannelProfileWithChannels,
   DispatcharrResult,
 } from "$lib/dispatcharr/types";
-import { isEcmManagedGroupName } from "$lib/event-groups";
+import { isEcmCsvSafeProfileName, isEcmManagedGroupName } from "$lib/event-groups";
 import { isTransientResultError, retryResult } from "$lib/utils/retry";
 
 /**
@@ -81,7 +81,7 @@ export function profileNameForGroup(groupId: number, groupName: string): string 
 
 /** Whether an existing otpravkarr profile name is unsafe for ECM's CSV scope. */
 export function profileNameNeedsCsvRepair(name: string): boolean {
-  return name.includes(",");
+  return !isEcmCsvSafeProfileName(name);
 }
 
 function parseKnownChannelIds(value: string, groupId: number): DispatcharrResult<Set<number>> {

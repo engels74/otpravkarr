@@ -1,4 +1,4 @@
-import { isEcmManagedGroupName } from "$lib/event-groups";
+import { isEcmCsvSafeProfileName, isEcmManagedGroupName } from "$lib/event-groups";
 import type { PluginAdapter, PluginAdvisory } from "../types";
 
 function parseCsv(value: unknown): string[] {
@@ -24,14 +24,23 @@ export const eventChannelManagarrAdapter: PluginAdapter = {
     const advisories: PluginAdvisory[] = [];
     const scope = new Set(parseCsv(plugin.settings?.channel_profile_name));
     const eventProfileNames = ownedProfileNames.filter(isEcmManagedGroupName);
-    const missing = eventProfileNames.filter((name) => !scope.has(name));
+    const unsafeProfileNames = eventProfileNames.filter((name) => !isEcmCsvSafeProfileName(name));
+    const safeProfileNames = eventProfileNames.filter(isEcmCsvSafeProfileName);
+    const missing = safeProfileNames.filter((name) => !scope.has(name));
+
+    if (unsafeProfileNames.length > 0) {
+      advisories.push({
+        level: "warning",
+        message: `These legacy otpravkarr event profile names cannot be represented in ECM's comma-separated scope and were omitted: ${unsafeProfileNames.join("; ")}. Reconcile the group profile, then update ECM scope in Dispatcharr.`,
+      });
+    }
 
     if (missing.length > 0) {
       advisories.push({
         level: "warning",
         message: `These otpravkarr event profiles are missing from ECM's "channel_profile_name": ${missing.join(", ")}. Update ECM scope in Dispatcharr; otpravkarr advisory is read-only.`,
       });
-    } else if (eventProfileNames.length > 0) {
+    } else if (safeProfileNames.length > 0) {
       advisories.push({
         level: "info",
         message:

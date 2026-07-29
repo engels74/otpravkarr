@@ -44,14 +44,18 @@ The dev server binds to `PORT` (default `3000`) and fails fast if that port is b
 
 ## Docker Deployment
 
+Container packaging is maintained separately in
+[`engels74/otpravkarr-docker`](https://github.com/engels74/otpravkarr-docker). This application
+repository intentionally has no Dockerfile or Docker build context.
+
 ```yaml
 services:
   otpravkarr:
-    build: .
+    image: ghcr.io/engels74/otpravkarr-docker:nightly
     ports:
       - "3000:3000"
     volumes:
-      - ./data:/app/data
+      - ./config:/config
     environment:
       - NODE_ENV=production
       - OTPRAVKARR_SECRET=<your-secret>

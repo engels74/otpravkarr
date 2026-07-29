@@ -382,7 +382,12 @@ describe("reconcileGroupProfile", () => {
       ok: false,
       error: "server_error",
       message: "Invalid known-channel snapshot for group 9",
+      retryable: false,
     });
+    expect(getProfile).not.toHaveBeenCalled();
+    expect(listProfiles).not.toHaveBeenCalled();
+    expect(createProfile).not.toHaveBeenCalled();
+    expect(upsertGroupProfile).not.toHaveBeenCalled();
     expect(bulkUpdateProfileMembership).not.toHaveBeenCalled();
     expect(updateGroupProfileKnownChannels).not.toHaveBeenCalled();
   });

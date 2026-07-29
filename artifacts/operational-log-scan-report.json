@@ -1,20 +1,30 @@
 {
   "schemaVersion": 1,
   "kind": "secret-log-scan-test-report",
-  "capturedAt": "2026-07-29T09:06:00Z",
+  "capturedAt": "2026-07-29T10:26:48.215Z",
+  "binding": {
+    "scannedBaseCommit": "d52f36e5ad755e27d0a42f830bbec5e48f7ac95d",
+    "deployedSourceCommit": "06d91dd3df567a08257380c039df7d4eb5d9e263",
+    "imageDigest": "sha256:a36dcfc3abe7b0b6be873ac5a6516287d565e627d9c86a75857a668d132d3ac1"
+  },
   "sources": [
     "Caddy access log",
     "Caddy container logs",
     "Dispatcharr container logs",
     "Otpravkarr container logs",
-    "tracked Otpravkarr files"
+    "tracked Otpravkarr files including final receipts"
   ],
+  "inventory": {
+    "trackedFiles": 480,
+    "containerLogs": 3,
+    "localSensitiveValues": 7
+  },
   "checks": {
     "xcCredentialPatternHits": 0,
     "localSensitiveEnvironmentValueHits": 0,
     "credentialBearingUrlsInArtifacts": 0,
     "qrPayloadArtifacts": 0
   },
-  "notes": "Values, credential-bearing paths, and protected backup locations are intentionally omitted.",
+  "notes": "scannedBaseCommit identifies the complete tracked tree scanned before this receipt was committed; the receipt contains only redacted counts and is reviewed separately because a commit cannot self-reference. Values, credential-bearing paths, and protected backup locations are intentionally omitted.",
   "result": "passed"
 }

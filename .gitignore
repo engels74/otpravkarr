@@ -24,6 +24,8 @@ vite.config.ts.timestamp-*
 
 # Agent/runtime state
 .omx/
+/.gjc/
+/artifacts/
 /docs/
 
 # SQLite data

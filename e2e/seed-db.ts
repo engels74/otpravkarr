@@ -23,6 +23,39 @@ if (!dbPath) {
 const ADMIN_USERNAME = "e2e-admin";
 const ADMIN_PASSWORD = "TestPassword123!@#";
 
+async function encryptConfigValue(plaintext: string): Promise<string> {
+  const secret = process.env.OTPRAVKARR_SECRET;
+  if (!secret) throw new Error("OTPRAVKARR_SECRET is required to seed encrypted config");
+
+  const masterKey = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    "HKDF",
+    false,
+    ["deriveKey"],
+  );
+  const key = await crypto.subtle.deriveKey(
+    {
+      name: "HKDF",
+      hash: "SHA-256",
+      salt: new TextEncoder().encode("otpravkarr-hkdf-v1"),
+      info: new TextEncoder().encode("config-encryption"),
+    },
+    masterKey,
+    { name: "AES-GCM", length: 256 },
+    false,
+    ["encrypt"],
+  );
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ciphertext = new Uint8Array(
+    await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, new TextEncoder().encode(plaintext)),
+  );
+  const result = new Uint8Array(iv.byteLength + ciphertext.byteLength);
+  result.set(iv);
+  result.set(ciphertext, iv.byteLength);
+  return Buffer.from(result).toString("base64");
+}
+
 async function seed() {
   const hash = await Bun.password.hash(ADMIN_PASSWORD, { algorithm: "argon2id" });
 
@@ -71,15 +104,20 @@ async function seed() {
   // before navigating to /setup. Mutually exclusive with the default seed.
   if (process.env.E2E_SEED_SETUP_PRE_ADMIN === "1") {
     const claimProof = process.env.E2E_SETUP_CLAIM_PROOF ?? "e2e-fresh-setup-proof";
-    const preAdminConfigs: [string, string][] = [
-      ["setup_completed", "false"],
-      ["setup_claimed", "true"],
-      ["setup_claim_proof", claimProof],
-      ["setup_claimed_at", String(Date.now())],
-      ["allowed_origins", JSON.stringify(["http://localhost:4173"])],
+    const encryptedClaimProof = await encryptConfigValue(claimProof);
+    const preAdminConfigs: [string, string, number][] = [
+      ["setup_completed", "false", 0],
+      ["setup_claimed", "true", 0],
+      ["setup_claim_proof", encryptedClaimProof, 1],
+      ["setup_claimed_at", String(Date.now()), 0],
+      ["allowed_origins", JSON.stringify(["http://localhost:4173"]), 0],
     ];
-    for (const [key, value] of preAdminConfigs) {
-      stmt.run(key, value);
+    const preAdminStmt = db.prepare(
+      `INSERT OR REPLACE INTO config (key, value, encrypted, updated_at)
+       VALUES (?, ?, ?, datetime('now'))`,
+    );
+    for (const [key, value, encrypted] of preAdminConfigs) {
+      preAdminStmt.run(key, value, encrypted);
     }
     db.close();
     console.log(`Seeded database at ${dbPath} in pre-admin setup mode`);

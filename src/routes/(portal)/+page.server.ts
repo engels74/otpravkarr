@@ -27,7 +27,6 @@ import {
 } from "$lib/url/platforms";
 import { getDispatcharrPublicUrl } from "$lib/url/resolve.server";
 import { buildPlayerApiUrl, buildXcUrl } from "$lib/url/xc";
-import { generateQRCodeDataUri } from "$lib/utils/qrcode";
 import { isTransientPlexError, type RetryOptions, retryAsync } from "$lib/utils/retry";
 
 const OAUTH_COOKIE_NAME = "otpravkarr_oauth_id";
@@ -122,7 +121,10 @@ export const load = async ({ locals, cookies }: RequestEvent) => {
   const xcParams = { host, username, password };
   const xcUrl = buildXcUrl(xcParams);
   const playerApiUrl = buildPlayerApiUrl(xcParams);
-  const qrCodeDataUri = await generateQRCodeDataUri(xcUrl);
+  const xmltvUrl = buildXcUrl({
+    ...xcParams,
+    template: "{protocol}://{host}/xmltv.php?username={username}&password={password}",
+  });
 
   const fredTvAssets = await getFredTvAssets();
   const platforms = getSupportedPlatforms();
@@ -143,7 +145,7 @@ export const load = async ({ locals, cookies }: RequestEvent) => {
     mode: "automatic" as const,
     xcUrl,
     playerApiUrl,
-    qrCodeDataUri,
+    xmltvUrl,
     platformUrls,
     dispatcharrUsername: username,
   };

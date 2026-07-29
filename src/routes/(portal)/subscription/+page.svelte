@@ -13,9 +13,18 @@ interface OfferedGroup {
   channelCount: number | null;
 }
 
+interface OfferedBundle {
+  id: string;
+  displayName: string;
+  groupIds: number[];
+}
+
 interface Props {
   data: {
     plexUsername: string;
+    policy: "fixed" | "core_bundles" | "approved_selection";
+    bundles: OfferedBundle[];
+    selectedBundleIds: string[];
     offered: OfferedGroup[];
     selected: number[];
     assignedGroups: OfferedGroup[];
@@ -29,8 +38,18 @@ let { data, form }: Props = $props();
 
 // svelte-ignore state_referenced_locally
 let selected = $state(new Set<number>(data.selected));
+// svelte-ignore state_referenced_locally
+let selectedBundles = $state(new Set<string>(data.selectedBundleIds));
 
 const selectedJson = $derived(JSON.stringify([...selected]));
+const selectedBundlesJson = $derived(JSON.stringify([...selectedBundles]));
+
+function toggleBundle(id: string, checked: boolean) {
+  const next = new Set(selectedBundles);
+  if (checked) next.add(id);
+  else next.delete(id);
+  selectedBundles = next;
+}
 
 // Locked view shows the user's actual assignment (resolved server-side against
 // live non-quarantine groups), which can exceed the offered set.
@@ -44,9 +63,13 @@ const lockedSelectedNames = $derived(data.assignedGroups.map((g) => g.name));
 <div class="mx-auto w-full max-w-2xl px-4 py-10">
   <div class="mb-6">
     <p class="eyebrow">SUBSCRIPTION</p>
-    <h1 class="text-2xl font-semibold tracking-tight">My channel groups</h1>
+    <h1 class="text-2xl font-semibold tracking-tight">
+      {data.policy === "core_bundles" ? "My channel bundles" : "My channel groups"}
+    </h1>
     <p class="mt-1 text-sm text-muted-foreground">
-      Choose which channel groups appear in your player. Changes apply right away.
+      {data.policy === "core_bundles"
+        ? "Your core Danish lineup is always included. Add optional bundles below."
+        : "Choose which channel groups appear in your player. Changes apply right away."}
     </p>
   </div>
 
@@ -94,7 +117,7 @@ const lockedSelectedNames = $derived(data.assignedGroups.map((g) => g.name));
         {/if}
       </Card.Content>
     </Card.Root>
-  {:else if data.offered.length === 0}
+  {:else if data.policy === "approved_selection" && data.offered.length === 0}
     <Card.Root>
       <Card.Content class="py-10 text-center text-sm text-muted-foreground">
         No channel groups are available to choose from right now. Please check back later or contact
@@ -104,21 +127,49 @@ const lockedSelectedNames = $derived(data.assignedGroups.map((g) => g.name));
   {:else}
     <form method="POST" action="?/save">
       <input type="hidden" name="group_ids" value={selectedJson} />
+      <input type="hidden" name="bundle_ids" value={selectedBundlesJson} />
 
       <Card.Root>
         <Card.Content class="pt-6">
-          {#if selected.size === 0}
-            <Alert.Root variant="destructive" class="mb-3">
-              <TriangleAlertIcon class="h-4 w-4" />
-              <Alert.Title>No channels selected</Alert.Title>
-              <Alert.Description>
-                Saving with zero groups means your player will show no channels. Pick at least one
-                group, or save anyway to hide everything.
-              </Alert.Description>
-            </Alert.Root>
+          {#if data.policy === "approved_selection"}
+            {#if selected.size === 0}
+              <Alert.Root variant="destructive" class="mb-3">
+                <TriangleAlertIcon class="h-4 w-4" />
+                <Alert.Title>No channels selected</Alert.Title>
+                <Alert.Description>
+                  Saving with zero groups means your player will show no optional channels.
+                </Alert.Description>
+              </Alert.Root>
+            {/if}
+            <GroupPicker groups={data.offered} bind:selected />
+          {:else}
+            <p class="mb-4 text-sm text-muted-foreground">
+              Core channels remain active even when no optional bundle is selected.
+            </p>
+            {#if data.bundles.length === 0}
+              <p class="text-sm text-muted-foreground">No optional bundles are currently available.</p>
+            {:else}
+              <div class="grid gap-3">
+                {#each data.bundles as bundle (bundle.id)}
+                  <label class="flex items-start gap-3 rounded-md border border-border p-3">
+                    <input
+                      type="checkbox"
+                      class="mt-0.5 rounded"
+                      checked={selectedBundles.has(bundle.id)}
+                      onchange={(event) =>
+                        toggleBundle(bundle.id, (event.currentTarget as HTMLInputElement).checked)}
+                    />
+                    <span>
+                      <span class="block text-sm font-medium">{bundle.displayName}</span>
+                      <span class="block text-xs text-muted-foreground">
+                        {bundle.groupIds.length} curated group{bundle.groupIds.length === 1 ? "" : "s"}
+                      </span>
+                    </span>
+                  </label>
+                {/each}
+              </div>
+            {/if}
           {/if}
-
-          <GroupPicker groups={data.offered} bind:selected />
         </Card.Content>
 
         <Card.Footer class="justify-end">

@@ -6,6 +6,7 @@ vi.mock("$lib/db/repositories/channel-group-profiles", () => ({
   EMPTY_PROFILE_GROUP_ID: -1,
   getGroupProfile: vi.fn(),
   upsertGroupProfile: vi.fn(),
+  updateGroupProfileKnownChannels: vi.fn(),
 }));
 
 vi.mock("$lib/dispatcharr/endpoints/profiles", () => ({
@@ -20,7 +21,7 @@ vi.mock("$lib/utils/retry", async (importOriginal) => {
   return { ...actual, sleep: vi.fn(async () => {}) };
 });
 
-const { getGroupProfile, upsertGroupProfile } = await import(
+const { getGroupProfile, updateGroupProfileKnownChannels, upsertGroupProfile } = await import(
   "$lib/db/repositories/channel-group-profiles"
 );
 const { getProfile, createProfile, bulkUpdateProfileMembership, listProfiles } = await import(
@@ -48,6 +49,7 @@ function profile(id: number, name: string, channels: number[]) {
 beforeEach(() => {
   vi.mocked(getGroupProfile).mockReset().mockReturnValue(null);
   vi.mocked(upsertGroupProfile).mockReset();
+  vi.mocked(updateGroupProfileKnownChannels).mockReset();
   vi.mocked(getProfile).mockReset();
   vi.mocked(createProfile).mockReset();
   vi.mocked(bulkUpdateProfileMembership).mockReset().mockResolvedValue(ok(null));
@@ -99,6 +101,7 @@ describe("reconcileGroupProfile", () => {
       group_id: 1,
       profile_id: 100,
       profile_name: "otpravkarr:g1:Sports",
+      known_channel_ids: "[]",
       created_at: "",
       updated_at: "",
     });
@@ -150,6 +153,7 @@ describe("reconcileGroupProfile", () => {
       group_id: 1,
       profile_id: 100,
       profile_name: "stale",
+      known_channel_ids: "[]",
       created_at: "",
       updated_at: "",
     });
@@ -170,6 +174,7 @@ describe("reconcileGroupProfile", () => {
       group_id: 1,
       profile_id: 100,
       profile_name: "otpravkarr:g1:Sports",
+      known_channel_ids: "[]",
       created_at: "",
       updated_at: "",
     });
@@ -220,6 +225,7 @@ describe("reconcileGroupProfile", () => {
       group_id: 1,
       profile_id: 100,
       profile_name: "otpravkarr:g1:Sports, News",
+      known_channel_ids: "[]",
       created_at: "",
       updated_at: "",
     });
@@ -255,6 +261,7 @@ describe("reconcileGroupProfile", () => {
       group_id: 1,
       profile_id: 100,
       profile_name: "otpravkarr:g1:Sports, News",
+      known_channel_ids: "[]",
       created_at: "",
       updated_at: "",
     });
@@ -291,6 +298,83 @@ describe("reconcileGroupProfile", () => {
     expect(getProfile).not.toHaveBeenCalledWith(client, 55);
     expect(upsertGroupProfile).toHaveBeenCalledWith(1, 201, "otpravkarr:g1:Sports News");
   });
+  it("preserves ECM-hidden event channels while enabling newly discovered channels", async () => {
+    vi.mocked(getGroupProfile).mockReturnValue({
+      group_id: 9,
+      profile_id: 900,
+      profile_name: "otpravkarr:g9:UK/English — PPV/Events",
+      known_channel_ids: "[1,2]",
+      created_at: "",
+      updated_at: "",
+    });
+    vi.mocked(getProfile).mockResolvedValue(
+      ok(profile(900, "otpravkarr:g9:UK/English — PPV/Events", [1])),
+    );
+
+    const result = await reconcileGroupProfile(
+      client,
+      9,
+      "UK/English — PPV/Events",
+      new Set([1, 2, 3]),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(bulkUpdateProfileMembership).toHaveBeenCalledWith(client, 900, [
+      { channel_id: 3, enabled: true },
+    ]);
+    expect(updateGroupProfileKnownChannels).toHaveBeenCalledWith(9, [1, 2, 3]);
+  });
+
+  it("seeds all event channels when no prior snapshot exists", async () => {
+    vi.mocked(getGroupProfile).mockReturnValue({
+      group_id: 9,
+      profile_id: 900,
+      profile_name: "otpravkarr:g9:UK/English — PPV/Events",
+      known_channel_ids: "[]",
+      created_at: "",
+      updated_at: "",
+    });
+    vi.mocked(getProfile).mockResolvedValue(
+      ok(profile(900, "otpravkarr:g9:UK/English — PPV/Events", [1])),
+    );
+
+    const result = await reconcileGroupProfile(
+      client,
+      9,
+      "UK/English — PPV/Events",
+      new Set([1, 2]),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(bulkUpdateProfileMembership).toHaveBeenCalledWith(client, 900, [
+      { channel_id: 2, enabled: true },
+    ]);
+    expect(updateGroupProfileKnownChannels).toHaveBeenCalledWith(9, [1, 2]);
+  });
+
+  it("keeps exact membership reconciliation for non-event groups", async () => {
+    vi.mocked(getGroupProfile).mockReturnValue({
+      group_id: 1,
+      profile_id: 100,
+      profile_name: "otpravkarr:g1:Sports",
+      known_channel_ids: "[1,2]",
+      created_at: "",
+      updated_at: "",
+    });
+    vi.mocked(getProfile).mockResolvedValue(ok(profile(100, "otpravkarr:g1:Sports", [1])));
+
+    const result = await reconcileGroupProfile(client, 1, "Sports", new Set([1, 2, 3]));
+
+    expect(result.ok).toBe(true);
+    expect(bulkUpdateProfileMembership).toHaveBeenCalledWith(
+      client,
+      100,
+      expect.arrayContaining([
+        { channel_id: 2, enabled: true },
+        { channel_id: 3, enabled: true },
+      ]),
+    );
+  });
 });
 
 describe("ensureEmptyProfile", () => {
@@ -319,6 +403,7 @@ describe("ensureEmptyProfile", () => {
       group_id: -1,
       profile_id: 900,
       profile_name: EMPTY_PROFILE_NAME,
+      known_channel_ids: "[]",
       created_at: "",
       updated_at: "",
     });

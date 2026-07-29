@@ -15,6 +15,7 @@ export const EMPTY_PROFILE_GROUP_ID = -1;
 let stmtGet: ReturnType<typeof db.prepare> | null = null;
 let stmtAll: ReturnType<typeof db.prepare> | null = null;
 let stmtUpsert: ReturnType<typeof db.prepare> | null = null;
+let stmtUpdateKnown: ReturnType<typeof db.prepare> | null = null;
 let stmtDelete: ReturnType<typeof db.prepare> | null = null;
 
 function getStmt() {
@@ -37,6 +38,15 @@ function upsertStmt() {
        updated_at = datetime('now')`,
   );
   return stmtUpsert;
+}
+
+function updateKnownStmt() {
+  stmtUpdateKnown ??= db.prepare(
+    `UPDATE channel_group_profiles
+     SET known_channel_ids = ?, updated_at = datetime('now')
+     WHERE group_id = ?`,
+  );
+  return stmtUpdateKnown;
 }
 
 function deleteStmt() {
@@ -72,6 +82,12 @@ export function upsertGroupProfile(groupId: number, profileId: number, profileNa
   upsertStmt().run(groupId, profileId, profileName);
 }
 
+/** Store the sorted observed channel set after a successful profile reconcile. */
+export function updateGroupProfileKnownChannels(groupId: number, channelIds: number[]): void {
+  const normalized = [...new Set(channelIds)].sort((a, b) => a - b);
+  updateKnownStmt().run(JSON.stringify(normalized), groupId);
+}
+
 /** Remove the mapping for a channel group (e.g. when the group disappears). */
 export function deleteGroupProfile(groupId: number): boolean {
   return deleteStmt().run(groupId).changes > 0;
@@ -85,4 +101,5 @@ export function _resetStatementsForTesting(): void {
   stmtAll = null;
   stmtUpsert = null;
   stmtDelete = null;
+  stmtUpdateKnown = null;
 }

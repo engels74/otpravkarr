@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "kind": "api-package-test-report",
+  "capturedAt": "2026-07-29T02:20:00Z",
+  "commands": [
+    { "command": "bun run check", "status": "passed", "files": 439 },
+    {
+      "command": "bunx svelte-check --threshold warning",
+      "status": "passed",
+      "errors": 0,
+      "warnings": 0
+    },
+    { "command": "bunx tsc --noEmit", "status": "passed" },
+    { "command": "bun run test", "status": "passed", "testFiles": 101, "tests": 1304 },
+    { "command": "bun run test:e2e", "status": "passed", "passed": 48, "environmentSkipped": 1 },
+    {
+      "command": "E2E_SEED_SETUP_PRE_ADMIN=1 bunx playwright test --project=setup-wizard-fresh",
+      "status": "passed",
+      "collected": 1,
+      "passed": 1
+    }
+  ],
+  "focused": {
+    "command": "bunx vitest run src/lib/bridge/__tests__/subscriptions.test.ts src/lib/bridge/__tests__/group-profiles.test.ts src/lib/server/__tests__/subscription-config.test.ts",
+    "status": "passed",
+    "testFiles": 3,
+    "tests": 67
+  },
+  "deployment": {
+    "imageDigest": "sha256:665677392eed912e26fe7f1624bdba0390b51d9acad9140f517f57650612f162",
+    "health": "healthy",
+    "publicHealthStatus": 200
+  },
+  "result": "passed"
+}

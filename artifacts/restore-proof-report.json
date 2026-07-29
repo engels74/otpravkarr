@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "kind": "database-restore-test-report",
+  "capturedAt": "2026-07-29T01:30:00Z",
+  "postgresql": {
+    "mode": "isolated restore",
+    "integrity": "passed",
+    "expectedCounts": { "streams": 55339, "sourceGroups": 907, "channels": 0, "users": 1 },
+    "restoredCounts": { "streams": 55339, "sourceGroups": 907, "channels": 0, "users": 1 }
+  },
+  "sqlite": {
+    "mode": "isolated image and production-shaped restore",
+    "integrity": "ok",
+    "migrations": 3,
+    "lineupBundlesTable": true,
+    "wrongExplicitPathFailedClosed": true,
+    "unexpectedDatabaseFilesCreated": 0,
+    "interruptedMigrationFailedClosed": true,
+    "interruptedMigrationCount": 2,
+    "partialColumnPresent": false
+  },
+  "pairedRollback": {
+    "priorImageDigestRecorded": true,
+    "preMigrationDatabaseRecorded": true,
+    "composeAndCaddyBackupsRecorded": true,
+    "protectedBackupPathDisclosed": false,
+    "measuredRestoreSeconds": 3,
+    "rpo": "latest verified phase backup",
+    "rtoImageConfigMinutes": 30,
+    "rtoDatabaseMinutes": 60
+  },
+  "result": "passed"
+}

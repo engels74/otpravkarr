@@ -8,6 +8,7 @@ type Row = {
   group_id: number;
   profile_id: number;
   profile_name: string;
+  known_channel_ids: string;
   created_at: string;
   updated_at: string;
 };
@@ -35,10 +36,22 @@ function makeStatement(sql: string) {
           group_id: groupId,
           profile_id: profileId,
           profile_name: profileName,
+          known_channel_ids: existing?.known_channel_ids ?? "[]",
           created_at: existing?.created_at ?? now,
           updated_at: now,
         });
         return { changes: 1, lastInsertRowid: groupId };
+      }
+      if (s.startsWith("UPDATE channel_group_profiles")) {
+        const [knownChannelIds, groupId] = params as [string, number];
+        const existing = store.get(groupId);
+        if (!existing) return { changes: 0, lastInsertRowid: 0 };
+        store.set(groupId, {
+          ...existing,
+          known_channel_ids: knownChannelIds,
+          updated_at: "2024-01-01 00:00:00",
+        });
+        return { changes: 1, lastInsertRowid: 0 };
       }
       if (s.startsWith("DELETE FROM channel_group_profiles WHERE group_id = ?")) {
         const deleted = store.delete(params[0] as number);
@@ -98,6 +111,12 @@ describe("channel-group-profiles repository", () => {
     expect(repo.EMPTY_PROFILE_GROUP_ID).toBe(-1);
   });
 
+  it("stores a normalized snapshot of known channel ids", () => {
+    repo.upsertGroupProfile(5, 100, "x");
+    repo.updateGroupProfileKnownChannels(5, [3, 1, 3, 2]);
+
+    expect(repo.getGroupProfile(5)?.known_channel_ids).toBe("[1,2,3]");
+  });
   it("deletes a mapping", () => {
     repo.upsertGroupProfile(5, 100, "x");
     expect(repo.deleteGroupProfile(5)).toBe(true);

@@ -5,6 +5,18 @@
  * Boolean fields are stored as INTEGER (0/1) in SQLite.
  */
 
+export type LineupPolicy = "fixed" | "core_bundles" | "approved_selection";
+
+export interface LineupBundle {
+  id: string;
+  slug: string;
+  display_name: string;
+  enabled: number; // 0 or 1
+  group_ids: string; // Ordered JSON array string
+  created_at: string;
+  updated_at: string;
+}
+
 export type ProvisioningMode = "automatic" | "self_managed" | "staff";
 
 export interface UserMapping {
@@ -17,6 +29,7 @@ export interface UserMapping {
   dispatcharr_user_id: number | null;
   dispatcharr_username: string | null;
   dispatcharr_xc_password_enc: string | null;
+  // Materialized effective access. Policy intent is stored separately below.
   dispatcharr_group_ids: string; // JSON array string, default '[]'
   dispatcharr_profile_id: number | null;
   provisioning_mode: ProvisioningMode;
@@ -26,6 +39,10 @@ export interface UserMapping {
   group_selection_locked: number; // 0 or 1
   // Marks the Plex-server owner's self-subscription mapping. See migration 002.
   is_owner: number; // 0 or 1
+  // Optional during the rollout so legacy rows and fixtures remain compatible.
+  lineup_policy_override?: LineupPolicy | null;
+  selected_bundle_ids?: string; // JSON array string, default '[]'
+  selected_approved_group_ids?: string; // JSON array string, default '[]'
   created_at: string;
   updated_at: string;
   last_synced_at: string | null;
@@ -70,6 +87,9 @@ export interface ChannelGroupProfile {
   // Dispatcharr channel profile id that scopes this group (Model A).
   profile_id: number;
   profile_name: string;
+  // Sorted channel ids observed during the last successful profile reconcile.
+  // Event profiles use this to distinguish ECM-hidden channels from new ones.
+  known_channel_ids: string;
   created_at: string;
   updated_at: string;
 }

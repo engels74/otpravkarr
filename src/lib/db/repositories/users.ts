@@ -54,9 +54,9 @@ function insertStmt() {
       plex_account_id, plex_uuid, plex_username, plex_email, plex_thumb,
       dispatcharr_user_id, dispatcharr_username, dispatcharr_xc_password_enc,
       dispatcharr_group_ids, dispatcharr_profile_id, provisioning_mode, is_active,
-      group_selection_locked, is_owner,
-      last_synced_at, last_accessed_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      group_selection_locked, is_owner, last_synced_at, last_accessed_at,
+      lineup_policy_override, selected_bundle_ids, selected_approved_group_ids
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   return stmtInsert;
 }
@@ -169,6 +169,9 @@ export function createUserMapping(
     mapping.is_owner ?? 0,
     mapping.last_synced_at,
     mapping.last_accessed_at,
+    mapping.lineup_policy_override ?? null,
+    mapping.selected_bundle_ids ?? "[]",
+    mapping.selected_approved_group_ids ?? mapping.dispatcharr_group_ids,
   );
 
   return getByIdStmt().get(result.lastInsertRowid) as UserMapping;
@@ -197,6 +200,9 @@ export function updateUserMapping(
     "is_active",
     "group_selection_locked",
     "is_owner",
+    "lineup_policy_override",
+    "selected_bundle_ids",
+    "selected_approved_group_ids",
     "last_synced_at",
     "last_accessed_at",
   ] as const;

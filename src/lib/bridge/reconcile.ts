@@ -13,6 +13,7 @@ export interface FullReconcileResult {
   report: Awaited<ReturnType<typeof reconcileSync>>;
   quarantine: Awaited<ReturnType<typeof reconcileQuarantineGroups>> | { error: string };
   subscriptions: Awaited<ReturnType<typeof reconcileSubscriptions>> | { error: string };
+  /** Read-only ECM scope analysis; it never changes plugin configuration. */
   ecmScope: Awaited<ReturnType<typeof reconcileEcmScope>> | { error: string };
 }
 
@@ -28,8 +29,8 @@ export interface FullReconcileResult {
  *   does NOT write it (de-dupes ISSUE-006/007).
  * - Each step after the friend sync runs in its own try/catch so one failure
  *   never aborts the rest. Quarantine runs before subscriptions so renamed junk
- *   groups stay hidden this cycle; ECM runs last so freshly created group
- *   profiles are included in its scope write.
+ *   groups stay hidden this cycle; ECM runs last to report the scope of freshly
+ *   created group profiles without changing ECM.
  * - This helper MUST NOT acquire the scheduler lock. Callers already own the
  *   `plex-dispatcharr-sync` exclusivity (the manual route wraps it in
  *   `scheduler.runExclusive`; the scheduled path is serialized by the runner).

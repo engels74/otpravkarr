@@ -39,7 +39,12 @@ beforeEach(() => {
   mocks.reconcileSubscriptions.mockReset().mockResolvedValue(subscriptionsResult);
   mocks.reconcileEcmScope.mockReset().mockResolvedValue({
     ok: true,
-    data: { updated: false, added: [], reason: "already_in_scope" },
+    data: {
+      plugin: { present: true, enabled: true, settings: {} },
+      missingProfileNames: [],
+      reason: "scope_covered",
+      skippedUnsafeProfiles: [],
+    },
   });
 });
 
@@ -60,17 +65,31 @@ describe("runFullReconcile (ISSUE-005)", () => {
     });
     mocks.reconcileEcmScope.mockImplementationOnce(async () => {
       order.push("ecm");
-      return { ok: true, data: { updated: true, added: ["Sports"] } };
+      return {
+        ok: true,
+        data: {
+          plugin: { present: true, enabled: true, settings: { channel_profile_name: "Sports" } },
+          missingProfileNames: ["Sports"],
+          skippedUnsafeProfiles: [],
+        },
+      };
     });
 
     const result = await runFullReconcile(client, "plex-token");
 
     // Quarantine before subscriptions (renamed junk stays hidden); ECM last
-    // (freshly created group profiles included).
+    // reports freshly created profile discrepancies without changing ECM.
     expect(order).toEqual(["sync", "quarantine", "subscriptions", "ecm"]);
     expect(mocks.reconcileSync).toHaveBeenCalledWith(client, "plex-token");
     expect(result.report).toEqual(report);
-    expect(result.ecmScope).toEqual({ ok: true, data: { updated: true, added: ["Sports"] } });
+    expect(result.ecmScope).toEqual({
+      ok: true,
+      data: {
+        plugin: { present: true, enabled: true, settings: { channel_profile_name: "Sports" } },
+        missingProfileNames: ["Sports"],
+        skippedUnsafeProfiles: [],
+      },
+    });
   });
 
   it("isolates a failing post-sync step so the rest still run", async () => {
@@ -103,11 +122,17 @@ describe("runFullReconcile (ISSUE-005)", () => {
     expect(mocks.reconcileEcmScope).not.toHaveBeenCalled();
   });
 
-  it("never acquires the scheduler lock itself (callers own exclusivity)", () => {
+  it("uses a shared read-only ECM analysis for manual and scheduled reconcile", () => {
     const testDir = dirname(fileURLToPath(import.meta.url));
-    const source = readFileSync(join(testDir, "..", "reconcile.ts"), "utf8");
-    // No lock acquisition (no runExclusive call) and no dependency on the runner.
-    expect(source).not.toMatch(/runExclusive\s*\(/);
-    expect(source).not.toContain("scheduler/runner");
+    const reconcileSource = readFileSync(join(testDir, "..", "reconcile.ts"), "utf8");
+    const ecmScopeSource = readFileSync(join(testDir, "..", "ecm-scope.ts"), "utf8");
+
+    // Both manual and scheduled sync call this shared helper. It delegates only
+    // to the analyzer and the analyzer has no plugin mutation endpoint.
+    expect(reconcileSource).not.toMatch(/runExclusive\s*\(/);
+    expect(reconcileSource).not.toContain("scheduler/runner");
+    expect(ecmScopeSource).not.toMatch(
+      /\b(?:updatePluginSettings|runPlugin|enablePlugin|disablePlugin)\b/,
+    );
   });
 });

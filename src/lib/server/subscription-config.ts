@@ -1,4 +1,5 @@
 import { getConfig } from "$lib/db/repositories/config";
+import type { LineupBundle, LineupPolicy, UserMapping } from "$lib/db/types";
 import type { DispatcharrChannelGroup } from "$lib/dispatcharr/types";
 
 /**
@@ -6,14 +7,196 @@ import type { DispatcharrChannelGroup } from "$lib/dispatcharr/types";
  * "offered groups" computation shared by onboarding, the portal, and admin.
  *
  * Config keys (stored via repositories/config):
- *  - `default_selectable_groups`: JSON array of group IDs offered to users by
- *    default. Empty array / unset = offer ALL (non-quarantine) groups.
+ *  - `default_selectable_groups`: JSON array of admin-approved group IDs.
+ *    Empty, malformed, or unset fails closed to no approved groups.
  *  - `allow_user_self_select`: "true" | "false". Global default for whether
  *    users may self-select their groups (default: true / allowed).
  */
 
 export const DEFAULT_SELECTABLE_GROUPS_KEY = "default_selectable_groups";
 export const ALLOW_USER_SELF_SELECT_KEY = "allow_user_self_select";
+export const LINEUP_POLICY_DEFAULT_KEY = "lineup_policy_default";
+export const LINEUP_FIXED_GROUP_IDS_KEY = "lineup_fixed_group_ids";
+export const LINEUP_CORE_GROUP_IDS_KEY = "lineup_core_group_ids";
+export const LINEUP_BUNDLE_CATALOG_VERSION_KEY = "lineup_bundle_catalog_version";
+
+export interface ResolvedLineupBundle {
+  id: string;
+  slug: string;
+  displayName: string;
+  enabled: boolean;
+  groupIds: number[];
+}
+
+export interface LineupBundleCatalog {
+  version: number;
+  bundles: ResolvedLineupBundle[];
+}
+
+export interface LineupPolicySettings {
+  defaultPolicy: LineupPolicy;
+  fixedGroupIds: number[];
+  coreGroupIds: number[];
+  /** `null` means unset or malformed, which fails closed. */
+  approvedGroupIds: number[] | null;
+  bundleCatalogVersion: number | null;
+}
+
+export interface LineupResolutionInput {
+  user: Pick<
+    UserMapping,
+    "lineup_policy_override" | "selected_bundle_ids" | "selected_approved_group_ids"
+  >;
+  settings: Pick<
+    LineupPolicySettings,
+    "defaultPolicy" | "fixedGroupIds" | "coreGroupIds" | "approvedGroupIds"
+  >;
+  catalog: Pick<LineupBundleCatalog, "bundles">;
+  liveGroups: DispatcharrChannelGroup[];
+}
+
+export interface LineupResolution {
+  policy: LineupPolicy;
+  /** Materialized IDs safe to send to Dispatcharr, sorted and deduplicated. */
+  effectiveGroupIds: number[];
+  /** Unchanged parsed intent, including IDs absent from the current live catalog. */
+  selectedBundleIds: string[];
+  /** Unchanged parsed intent, including unapproved or missing IDs. */
+  selectedApprovedGroupIds: number[];
+}
+
+function isLineupPolicy(value: unknown): value is LineupPolicy {
+  return value === "fixed" || value === "core_bundles" || value === "approved_selection";
+}
+
+function parseIntegerIds(raw: string | null | undefined): number[] | null {
+  if (raw == null) return null;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (
+      !Array.isArray(parsed) ||
+      parsed.some(
+        (value) => typeof value !== "number" || !Number.isSafeInteger(value) || value <= 0,
+      )
+    ) {
+      return null;
+    }
+    return [...new Set(parsed)].sort((a, b) => a - b);
+  } catch {
+    return null;
+  }
+}
+
+function parseStringIds(raw: string | null | undefined): string[] | null {
+  if (raw == null) return null;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (
+      !Array.isArray(parsed) ||
+      parsed.some((value) => typeof value !== "string" || value.trim() === "")
+    ) {
+      return null;
+    }
+    return [...new Set(parsed)];
+  } catch {
+    return null;
+  }
+}
+
+function parseCatalogVersion(raw: string | null): number | null {
+  if (raw == null || !/^[1-9]\d*$/.test(raw)) return null;
+  return Number(raw);
+}
+
+/**
+ * Read the versioned bundle catalog from stable bundle records. Malformed
+ * records are excluded rather than treated as an empty/unrestricted bundle.
+ */
+export async function getLineupBundleCatalog(): Promise<LineupBundleCatalog> {
+  const version = parseCatalogVersion(await getConfig(LINEUP_BUNDLE_CATALOG_VERSION_KEY));
+  const { db } = await import("$lib/db/connection");
+  const rows = db
+    .prepare(
+      "SELECT id, slug, display_name, enabled, group_ids, created_at, updated_at FROM lineup_bundles",
+    )
+    .all() as LineupBundle[];
+
+  const bundles: ResolvedLineupBundle[] = [];
+  for (const row of rows) {
+    const groupIds = parseIntegerIds(row.group_ids);
+    if (!row.id || !row.slug || !row.display_name || groupIds === null) continue;
+    bundles.push({
+      id: row.id,
+      slug: row.slug,
+      displayName: row.display_name,
+      enabled: row.enabled === 1,
+      groupIds,
+    });
+  }
+  return { version: version ?? 0, bundles };
+}
+
+/** Read and validate instance policy settings. */
+export async function getLineupPolicySettings(): Promise<LineupPolicySettings> {
+  const [defaultRaw, fixedRaw, coreRaw, approvedRaw, catalogVersionRaw] = await Promise.all([
+    getConfig(LINEUP_POLICY_DEFAULT_KEY),
+    getConfig(LINEUP_FIXED_GROUP_IDS_KEY),
+    getConfig(LINEUP_CORE_GROUP_IDS_KEY),
+    getConfig(DEFAULT_SELECTABLE_GROUPS_KEY),
+    getConfig(LINEUP_BUNDLE_CATALOG_VERSION_KEY),
+  ]);
+  return {
+    defaultPolicy: isLineupPolicy(defaultRaw) ? defaultRaw : "core_bundles",
+    fixedGroupIds: parseIntegerIds(fixedRaw) ?? [],
+    coreGroupIds: parseIntegerIds(coreRaw) ?? [],
+    approvedGroupIds: parseIntegerIds(approvedRaw),
+    bundleCatalogVersion: parseCatalogVersion(catalogVersionRaw),
+  };
+}
+
+/**
+ * Pure least-privilege policy resolver. It never mutates stored intent:
+ * missing, disabled, unapproved, or quarantined selections remain available
+ * for a later catalog/live-group restoration.
+ */
+export function resolveLineupPolicy(input: LineupResolutionInput): LineupResolution {
+  const policy = isLineupPolicy(input.user.lineup_policy_override)
+    ? input.user.lineup_policy_override
+    : isLineupPolicy(input.settings.defaultPolicy)
+      ? input.settings.defaultPolicy
+      : "core_bundles";
+  const selectedBundleIds = parseStringIds(input.user.selected_bundle_ids) ?? [];
+  const selectedApprovedGroupIds = parseIntegerIds(input.user.selected_approved_group_ids) ?? [];
+
+  let requested: number[];
+  if (policy === "fixed") {
+    requested = input.settings.fixedGroupIds;
+  } else if (policy === "core_bundles") {
+    const selectedBundles = new Set(selectedBundleIds);
+    requested = [
+      ...input.settings.coreGroupIds,
+      ...input.catalog.bundles
+        .filter((bundle) => bundle.enabled && selectedBundles.has(bundle.id))
+        .flatMap((bundle) => bundle.groupIds),
+    ];
+  } else {
+    requested = selectedApprovedGroupIds;
+  }
+
+  const approved = input.settings.approvedGroupIds;
+  const liveById = new Map(input.liveGroups.map((group) => [group.id, group]));
+  const effectiveGroupIds =
+    approved === null
+      ? []
+      : [...new Set(requested)]
+          .filter((id) => {
+            const group = liveById.get(id);
+            return group !== undefined && approved.includes(id) && !isQuarantineGroup(group.name);
+          })
+          .sort((a, b) => a - b);
+
+  return { policy, effectiveGroupIds, selectedBundleIds, selectedApprovedGroupIds };
+}
 
 /**
  * Quarantine groups created by plugins (IPTV Checker moves dead/slow/black
@@ -190,25 +373,14 @@ export function applyPersistedQuarantineGroupState(parsed: unknown): boolean {
 }
 
 export interface SubscriptionDefaults {
-  /**
-   * Group IDs offered by default, or `null` to mean "offer all non-quarantine
-   * groups". An explicitly configured empty list is normalized to `null`.
-   */
-  selectableGroupIds: number[] | null;
+  /** Explicitly approved group IDs offered by default. Empty means offer none. */
+  selectableGroupIds: number[];
   /** Whether users may self-select their groups (global default). */
   allowSelfSelect: boolean;
 }
 
-function parseGroupIdList(raw: string | null): number[] | null {
-  if (!raw) return null;
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return null;
-    const ids = parsed.filter((v): v is number => typeof v === "number" && Number.isInteger(v));
-    return ids.length > 0 ? [...new Set(ids)] : null;
-  } catch {
-    return null;
-  }
+function parseGroupIdList(raw: string | null): number[] {
+  return parseIntegerIds(raw) ?? [];
 }
 
 /** Read the subscription default settings (cached config). */
@@ -226,27 +398,18 @@ export async function getSubscriptionDefaults(): Promise<SubscriptionDefaults> {
 
 /**
  * Compute the groups a user is actually offered, given live Dispatcharr groups
- * and the configured defaults. Always excludes quarantine groups. When
- * `selectableGroupIds` is set, restricts to that set (intersected with live
- * groups); otherwise offers every non-quarantine group.
+ * and the explicit approved set. Always excludes quarantine groups and fails
+ * closed when the approved set is absent, malformed, or empty.
  */
 export function computeOfferedGroups(
   liveGroups: DispatcharrChannelGroup[],
   defaults: SubscriptionDefaults,
 ): DispatcharrChannelGroup[] {
-  const allowed = defaults.selectableGroupIds ? new Set(defaults.selectableGroupIds) : null;
-  return liveGroups.filter((g) => {
-    if (isQuarantineGroup(g.name)) return false;
-    if (allowed && !allowed.has(g.id)) return false;
-    return true;
-  });
+  const allowed = new Set(defaults.selectableGroupIds);
+  return liveGroups.filter((g) => !isQuarantineGroup(g.name) && allowed.has(g.id));
 }
 
-/**
- * The default selection a brand-new user starts with: opt-out, i.e. every
- * offered group is pre-selected (so a user is never stranded with zero
- * channels). Returns the offered groups' IDs.
- */
+/** Return every explicitly offered group ID for a brand-new user's default intent. */
 export function defaultSelectedGroupIds(offered: DispatcharrChannelGroup[]): number[] {
   return offered.map((g) => g.id);
 }

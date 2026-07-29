@@ -41,7 +41,7 @@ test.describe("Setup wizard (fresh state)", () => {
   test("Step 2 Create Account button submits the form", async ({ page }) => {
     await page.goto("/setup");
 
-    await expect(page.getByRole("heading", { name: /Create admin account/i })).toBeVisible();
+    await expect(page.getByText("Create admin account", { exact: true })).toBeVisible();
 
     await page.getByLabel(/^Username$/).fill("dogfood-admin");
     await page.getByLabel(/^Password$/).fill("DogfoodTestPass2026XYZ");
@@ -49,7 +49,7 @@ test.describe("Setup wizard (fresh state)", () => {
 
     await page.getByRole("button", { name: /Create Account/ }).click();
 
-    await expect(page.getByRole("heading", { name: /Connect your Plex server/i })).toBeVisible({
+    await expect(page.getByText("Connect your Plex server", { exact: true })).toBeVisible({
       timeout: 5_000,
     });
   });

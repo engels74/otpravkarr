@@ -358,10 +358,11 @@ describe("portal page server", () => {
         mode: "automatic",
         xcUrl: expect.any(String),
         playerApiUrl: expect.any(String),
-        qrCodeDataUri: expect.any(String),
+        xmltvUrl: expect.any(String),
         platformUrls: expect.any(Array),
         dispatcharrUsername: "testuser",
       });
+      expect(result).not.toHaveProperty("qrCodeDataUri");
       expect(mocks.decrypt).toHaveBeenCalledWith("encrypted-pw", "credential-encryption");
       expect(mocks.updateLastAccessed).toHaveBeenCalledWith(1);
     });

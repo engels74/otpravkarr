@@ -96,6 +96,11 @@ const defaultData = {
     allowSelfSelect: true,
     selectableGroupIds: [],
     channelGroups: [],
+    defaultPolicy: "core_bundles" as const,
+    fixedGroupIds: [],
+    coreGroupIds: [],
+    bundleCatalogVersion: 1,
+    bundles: [],
   },
 };
 
@@ -263,37 +268,23 @@ describe("admin settings page", () => {
     expect(apiKeyInput.value).toBe("");
   });
 
-  it("keeps the self-select checkbox toggled after a successful save (ISSUE-001)", async () => {
+  it("keeps the selected default lineup policy after a successful save", async () => {
     state.queuedResults.push({
       type: "success",
-      data: { message: "Settings saved successfully." },
+      data: { message: "Lineup policy saved." },
     });
 
-    // Start from the unchecked default so a stray form.reset() would visibly
-    // revert the toggle (defaultChecked === false), making this discriminating.
-    const { container } = render(SettingsPage, {
-      props: {
-        data: {
-          ...defaultData,
-          subscription: { ...defaultData.subscription, allowSelfSelect: false },
-        },
-      },
-    });
-    const subscriptionForm = container.querySelector<HTMLFormElement>(
-      'form[action="?/updateDefaultProvisioning"]',
+    const { container } = render(SettingsPage, { props: { data: defaultData } });
+    const policyForm = container.querySelector<HTMLFormElement>(
+      'form[action="?/updateLineupPolicy"]',
     );
-    if (!subscriptionForm) throw new Error("Subscription form not found");
-    const checkbox = subscriptionForm.querySelector<HTMLInputElement>('input[type="checkbox"]');
-    if (!checkbox) throw new Error("Self-select checkbox not found");
+    const policySelect = container.querySelector<HTMLSelectElement>("#lineup_policy_default");
+    if (!policyForm || !policySelect) throw new Error("Lineup policy controls not found");
 
-    await fireEvent.click(checkbox);
-    expect(checkbox.checked).toBe(true);
+    await fireEvent.change(policySelect, { target: { value: "fixed" } });
+    await fireEvent.submit(policyForm);
 
-    await fireEvent.submit(subscriptionForm);
-
-    // reset:false → the just-toggled checkbox keeps the saved value instead of
-    // being reverted to its unchecked HTML default by form.reset().
-    expect(checkbox.checked).toBe(true);
+    expect(policySelect.value).toBe("fixed");
   });
 
   it("fires the success confirmation before awaiting a hung reload (ISSUE-008)", async () => {
@@ -320,25 +311,22 @@ describe("admin settings page", () => {
     expect(screen.getByText("Sync settings saved.")).toBeTruthy();
   });
 
-  it("saves subscription defaults without an invalidateAll reload round-trip (ISSUE-004)", async () => {
+  it("saves lineup policy without an invalidateAll reload round-trip", async () => {
     state.queuedResults.push({
       type: "success",
-      data: { message: "Subscription defaults saved." },
+      data: { message: "Lineup policy saved." },
     });
 
     const { container } = render(SettingsPage, { props: { data: defaultData } });
-    const subscriptionForm = container.querySelector<HTMLFormElement>(
-      'form[action="?/updateDefaultProvisioning"]',
+    const policyForm = container.querySelector<HTMLFormElement>(
+      'form[action="?/updateLineupPolicy"]',
     );
-    if (!subscriptionForm) throw new Error("Subscription form not found");
+    if (!policyForm) throw new Error("Lineup policy form not found");
 
-    await fireEvent.submit(subscriptionForm);
+    await fireEvent.submit(policyForm);
     await Promise.resolve();
 
-    // The subscription card's picker state is client-side; it confirms without
-    // re-fetching Dispatcharr (reset:false so the toggle sticks, invalidateAll
-    // :false so no slow reload round-trip).
-    expect(state.lastUpdateOptions).toEqual({ reset: false, invalidateAll: false });
-    expect(mocks.toastSuccess).toHaveBeenCalledWith("Subscription defaults saved.");
+    expect(state.lastUpdateOptions).toEqual({ reset: false });
+    expect(mocks.toastSuccess).toHaveBeenCalledWith("Lineup policy saved.");
   });
 });

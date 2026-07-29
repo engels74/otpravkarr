@@ -22,7 +22,7 @@ const mocks = vi.hoisted(() => ({
   getAllGroupProfiles: vi.fn(() => []),
   getGroupProfile: vi.fn(() => null),
   getGroupProfilesByGroupIds: vi.fn(() => new Map()),
-  applyGroupSubscription: vi.fn(async () => ({
+  enforceLineupPolicySubscription: vi.fn(async () => ({
     ok: true,
     data: { profileIds: [10], groupIds: [5, 7] },
   })),
@@ -35,6 +35,20 @@ const mocks = vi.hoisted(() => ({
     async () => ({ status: "provisioned", mapping: {} }) as ProvisioningResult,
   ),
   appendAuditLog: vi.fn(),
+  getLineupPolicySettings: vi.fn(async () => ({
+    defaultPolicy: "core_bundles" as const,
+    fixedGroupIds: [],
+    coreGroupIds: [],
+    approvedGroupIds: [],
+    bundleCatalogVersion: null,
+  })),
+  getLineupBundleCatalog: vi.fn(async () => ({ version: 0, bundles: [] })),
+  resolveLineupPolicy: vi.fn(() => ({
+    policy: "core_bundles" as const,
+    effectiveGroupIds: [],
+    selectedBundleIds: [],
+    selectedApprovedGroupIds: [],
+  })),
   getAccount: vi.fn(async () => ({
     id: 99999,
     uuid: "owner-uuid",
@@ -53,7 +67,7 @@ vi.mock("$lib/dispatcharr/endpoints/channel-groups", () => ({
 }));
 
 vi.mock("$lib/bridge/subscriptions", () => ({
-  applyGroupSubscription: mocks.applyGroupSubscription,
+  enforceLineupPolicySubscription: mocks.enforceLineupPolicySubscription,
 }));
 
 vi.mock("$lib/server/auth", () => ({
@@ -88,6 +102,13 @@ vi.mock("$lib/db/connection", () => ({
 
 vi.mock("$lib/db/repositories/config", () => ({
   getConfig: mocks.getConfig,
+}));
+
+vi.mock("$lib/server/subscription-config", () => ({
+  getLineupPolicySettings: mocks.getLineupPolicySettings,
+  getLineupBundleCatalog: mocks.getLineupBundleCatalog,
+  resolveLineupPolicy: mocks.resolveLineupPolicy,
+  isQuarantineGroup: () => false,
 }));
 
 vi.mock("$lib/db/repositories/audit", () => ({
@@ -169,8 +190,25 @@ function resetMocks() {
   mocks.getGroupProfile.mockReturnValue(null);
   mocks.getGroupProfilesByGroupIds.mockClear();
   mocks.getGroupProfilesByGroupIds.mockReturnValue(new Map());
-  mocks.applyGroupSubscription.mockClear();
-  mocks.applyGroupSubscription.mockResolvedValue({
+  mocks.getLineupPolicySettings.mockClear();
+  mocks.getLineupPolicySettings.mockResolvedValue({
+    defaultPolicy: "core_bundles",
+    fixedGroupIds: [],
+    coreGroupIds: [],
+    approvedGroupIds: [],
+    bundleCatalogVersion: null,
+  });
+  mocks.getLineupBundleCatalog.mockClear();
+  mocks.getLineupBundleCatalog.mockResolvedValue({ version: 0, bundles: [] });
+  mocks.resolveLineupPolicy.mockClear();
+  mocks.resolveLineupPolicy.mockReturnValue({
+    policy: "core_bundles",
+    effectiveGroupIds: [],
+    selectedBundleIds: [],
+    selectedApprovedGroupIds: [],
+  });
+  mocks.enforceLineupPolicySubscription.mockClear();
+  mocks.enforceLineupPolicySubscription.mockResolvedValue({
     ok: true,
     data: { profileIds: [10], groupIds: [5, 7] },
   });
@@ -382,7 +420,7 @@ describe("admin users actions", () => {
     });
   });
 
-  it("enforces the subscription via applyGroupSubscription on changeGroup", async () => {
+  it("enforces retained approved-group, bundle, and nullable override intent on changeGroup", async () => {
     const { actions } = await import("./+page.server");
     const changeGroup = actions.changeGroup;
     if (!changeGroup) throw new Error("changeGroup action is undefined");
@@ -391,35 +429,101 @@ describe("admin users actions", () => {
     mocks.getUserMappingById.mockReturnValueOnce({
       id: 1,
       dispatcharr_user_id: 42,
-      dispatcharr_group_ids: JSON.stringify([2]),
       plex_username: "alice",
     } as unknown as { id: number; dispatcharr_user_id: number | null });
-
-    // changeGroup validates submitted ids against the live, non-quarantine group
-    // list before enforcing, so 5 and 7 must exist as offerable groups.
-    mocks.listChannelGroups.mockResolvedValueOnce({
-      ok: true,
-      data: [
-        { id: 5, name: "Sports" },
-        { id: 7, name: "News" },
-      ],
-    });
 
     const body = new FormData();
     body.set("id", "1");
     body.set("group_ids", JSON.stringify([5, 7]));
+    body.set("lineup_policy_override", "");
+    body.set("selected_bundle_ids", JSON.stringify(["sports", "news"]));
 
     const result = await changeGroup(
       createActionEvent(body) as unknown as Parameters<typeof changeGroup>[0],
     );
 
     expect(result).toMatchObject({ success: true });
-    // The single enforcement path is used (it persists group ids + audits).
-    expect(mocks.applyGroupSubscription).toHaveBeenCalledWith(expect.anything(), 1, [5, 7], {
-      actor: "admin",
-      ipAddress: "127.0.0.1",
-    });
+    expect(mocks.enforceLineupPolicySubscription).toHaveBeenCalledWith(
+      expect.anything(),
+      1,
+      {
+        lineupPolicyOverride: null,
+        selectedBundleIds: ["sports", "news"],
+        selectedApprovedGroupIds: [5, 7],
+      },
+      { actor: "admin", ipAddress: "127.0.0.1" },
+    );
     expect(mocks.requireAdmin).toHaveBeenCalledOnce();
+  });
+
+  it("enforces an explicit zero approved-group selection on changeGroup", async () => {
+    const { actions } = await import("./+page.server");
+    const changeGroup = actions.changeGroup;
+    if (!changeGroup) throw new Error("changeGroup action is undefined");
+
+    mocks.getConfig.mockResolvedValue("https://dispatcharr.example");
+    mocks.getUserMappingById.mockReturnValueOnce({
+      id: 1,
+      dispatcharr_user_id: 42,
+      plex_username: "alice",
+    } as unknown as { id: number; dispatcharr_user_id: number | null });
+    mocks.enforceLineupPolicySubscription.mockResolvedValueOnce({
+      ok: true,
+      data: { profileIds: [10], groupIds: [] },
+    });
+
+    const body = new FormData();
+    body.set("id", "1");
+    body.set("group_ids", "[]");
+
+    const result = await changeGroup(
+      createActionEvent(body) as unknown as Parameters<typeof changeGroup>[0],
+    );
+
+    expect(result).toMatchObject({
+      success: true,
+      groupIds: [],
+      profileIds: [10],
+      profileId: 10,
+    });
+    expect(mocks.enforceLineupPolicySubscription).toHaveBeenCalledWith(
+      expect.anything(),
+      1,
+      { selectedApprovedGroupIds: [] },
+      { actor: "admin", ipAddress: "127.0.0.1" },
+    );
+  });
+
+  it("returns the policy enforcement failure from changeGroup", async () => {
+    const { actions } = await import("./+page.server");
+    const changeGroup = actions.changeGroup;
+    if (!changeGroup) throw new Error("changeGroup action is undefined");
+
+    mocks.getConfig.mockResolvedValue("https://dispatcharr.example");
+    mocks.getUserMappingById.mockReturnValueOnce({
+      id: 1,
+      dispatcharr_user_id: 42,
+      plex_username: "alice",
+    } as unknown as { id: number; dispatcharr_user_id: number | null });
+    mocks.enforceLineupPolicySubscription.mockResolvedValueOnce({
+      ok: false,
+      error: "upstream_error",
+      message: "Dispatcharr unavailable",
+      data: { profileIds: [], groupIds: [] },
+    } as never);
+
+    const body = new FormData();
+    body.set("id", "1");
+    body.set("group_ids", JSON.stringify([5]));
+
+    const result = await changeGroup(
+      createActionEvent(body) as unknown as Parameters<typeof changeGroup>[0],
+    );
+
+    expect(result).toMatchObject({
+      status: 502,
+      data: { error: "Dispatcharr unavailable" },
+    });
   });
 
   it("fails changeGroup for a mapping without a Dispatcharr account", async () => {
@@ -443,7 +547,7 @@ describe("admin users actions", () => {
     );
 
     expect(result).toMatchObject({ status: 400 });
-    expect(mocks.applyGroupSubscription).not.toHaveBeenCalled();
+    expect(mocks.enforceLineupPolicySubscription).not.toHaveBeenCalled();
   });
 
   it("toggles the per-user group lock via setGroupLock", async () => {
@@ -492,8 +596,14 @@ describe("admin users actions", () => {
     expect(mocks.getAccount).toHaveBeenCalled();
     expect(mocks.provisionUser).toHaveBeenCalledWith(
       expect.anything(),
-      expect.objectContaining({ isOwner: true, mode: "automatic" }),
+      expect.objectContaining({ isOwner: true, mode: "automatic", groupIds: [] }),
       expect.objectContaining({ actor: "admin" }),
+    );
+    expect(mocks.enforceLineupPolicySubscription).toHaveBeenCalledWith(
+      expect.anything(),
+      7,
+      {},
+      { actor: "admin", ipAddress: "127.0.0.1" },
     );
     expect(result).toMatchObject({ ownerSubscribed: true, initialPassword: "owner-otp" });
     expect(mocks.appendAuditLog).toHaveBeenCalledWith(
@@ -758,7 +868,7 @@ describe("admin users actions", () => {
       };
     }
 
-    it("re-provisions in automatic mode and returns the one-time password", async () => {
+    it("re-provisions with empty materialized access before enforcing retained policy intent", async () => {
       const { actions } = await import("./+page.server");
       const enableUserAction = actions.enableUser;
       if (!enableUserAction) throw new Error("enableUser action is undefined");
@@ -769,7 +879,7 @@ describe("admin users actions", () => {
       mocks.getConfig.mockResolvedValueOnce("plex-token-123");
       mocks.provisionUser.mockResolvedValueOnce({
         status: "provisioned",
-        mapping: {},
+        mapping: { id: 8 },
         initialPassword: "temp-pass-auto",
       } as ProvisioningResult);
 
@@ -797,9 +907,15 @@ describe("admin users actions", () => {
           authenticationToken: "plex-token-123",
         },
         mode: "automatic",
-        groupIds: [3, 5],
+        groupIds: [],
         exposeInitialPassword: true,
       });
+      expect(mocks.enforceLineupPolicySubscription).toHaveBeenCalledWith(
+        expect.anything(),
+        8,
+        {},
+        { actor: "admin", ipAddress: "127.0.0.1" },
+      );
     });
 
     it("re-provisions in self_managed mode (initialPassword returned)", async () => {
@@ -815,7 +931,7 @@ describe("admin users actions", () => {
       mocks.getConfig.mockResolvedValueOnce("plex-token-456");
       mocks.provisionUser.mockResolvedValueOnce({
         status: "provisioned",
-        mapping: {},
+        mapping: { id: 9 },
         initialPassword: "temp-pass-abc",
       } as ProvisioningResult);
 
@@ -862,37 +978,6 @@ describe("admin users actions", () => {
         data: { error: "Dispatcharr API unreachable" },
       });
       expect(mocks.enableUser).not.toHaveBeenCalled();
-    });
-
-    it("falls back to empty groupIds when dispatcharr_group_ids is not a number array", async () => {
-      const { actions } = await import("./+page.server");
-      const enableUserAction = actions.enableUser;
-      if (!enableUserAction) throw new Error("enableUser action is undefined");
-
-      mocks.getUserMappingById.mockReturnValueOnce(
-        makeOrphanedMapping({ dispatcharr_group_ids: JSON.stringify([3, "five"]) }),
-      );
-      mocks.getConfig.mockResolvedValueOnce("dispatcharr-url");
-      mocks.getConfig.mockResolvedValueOnce("dispatcharr-api-key");
-      mocks.getConfig.mockResolvedValueOnce(null);
-      mocks.provisionUser.mockResolvedValueOnce({
-        status: "provisioned",
-        mapping: {},
-      } as ProvisioningResult);
-
-      const body = new FormData();
-      body.set("id", "1");
-
-      const result = await enableUserAction(
-        createActionEvent(body) as unknown as Parameters<typeof enableUserAction>[0],
-      );
-
-      expect(result).toMatchObject({ success: true });
-      const provisionCall = mocks.provisionUser.mock.calls[0] as unknown as [
-        DispatcharrClient,
-        ProvisioningRequest,
-      ];
-      expect(provisionCall[1]).toMatchObject({ groupIds: [] });
     });
   });
 

@@ -85,7 +85,7 @@ const automaticData = {
   mode: "automatic" as const,
   xcUrl: "https://tv.example.com/xc",
   playerApiUrl: "https://tv.example.com/player_api.php",
-  qrCodeDataUri: "data:image/png;base64,AAAA",
+  xmltvUrl: "https://tv.example.com/xmltv.php",
   platformUrls: [],
   dispatcharrUsername: "testuser",
 };

@@ -57,7 +57,7 @@ interface Props {
         mode: "automatic";
         xcUrl: string;
         playerApiUrl: string;
-        qrCodeDataUri: string;
+        xmltvUrl: string;
         platformUrls: PlatformEntry[];
         dispatcharrUsername: string;
       }
@@ -204,7 +204,7 @@ function enhanceRefresh() {
           <Card.Title class="text-base">One-time Password</Card.Title>
         </Card.Header>
         <Card.Content>
-          <CopyableField label="Password" value={data.initialPassword} />
+          <CopyableField label="Password" value={data.initialPassword} secret />
         </Card.Content>
       </Card.Root>
     {/if}
@@ -281,51 +281,61 @@ function enhanceRefresh() {
         </Tabs.List>
 
         <Tabs.Content value="credentials" class="mt-4 space-y-4">
-          <!-- Quick Setup: QR + URLs side-by-side on md+ -->
+          <!-- Recommended onboarding: XC/URL -->
           <Card.Root class="surface-elevated">
             <Card.Header>
-              <Card.Title class="text-base">Quick Setup</Card.Title>
+              <Card.Title class="text-base">Recommended: XC / URL setup</Card.Title>
               <Card.Description>
-                Scan with your device or copy the URLs below.
+                Use these URLs in an XC-compatible player; use the native Dispatcharr XMLTV Guide URL for EPG. Reveal, copy, or generate a QR code only when you need it.
               </Card.Description>
             </Card.Header>
             <Card.Content class="grid gap-6 md:grid-cols-[auto_1fr] md:items-center">
               <div class="flex justify-center md:justify-start">
-                <QRCodeDisplay dataUri={data.qrCodeDataUri} alt="Playlist URL QR code" />
+                <QRCodeDisplay value={data.xcUrl} alt="Playlist URL QR code" />
               </div>
               <div class="space-y-4">
-                <CopyableField label="M3U Playlist URL" value={data.xcUrl} />
-                <CopyableField label="Player API URL" value={data.playerApiUrl} />
+                <CopyableField label="M3U Playlist URL" value={data.xcUrl} secret />
+                <CopyableField label="Player API URL" value={data.playerApiUrl} secret />
+                <CopyableField
+                  label="XMLTV Guide URL"
+                  value={data.xmltvUrl}
+                  secret
+                />
               </div>
             </Card.Content>
           </Card.Root>
 
           <!-- Actions -->
-          <div class="flex flex-wrap gap-3">
-            <Button href="/m3u" variant="outline" data-sveltekit-reload>
-              <DownloadIcon class="mr-2 h-4 w-4" />
-              Download M3U
-            </Button>
+          <div class="space-y-2">
+            <div class="flex flex-wrap gap-3">
+              <Button href="/m3u" variant="outline" data-sveltekit-reload>
+                <DownloadIcon class="mr-2 h-4 w-4" />
+                Download M3U snapshot
+              </Button>
 
-            <ConfirmDialog
-              bind:open={confirmRefreshOpen}
-              title="Refresh Credentials?"
-              description="This will generate a new password for your streaming account. Your current URLs will stop working and you'll need to update your players with the new credentials."
-            >
-              {#snippet trigger({ props })}
-                <Button variant="outline" {...props}>
-                  <RefreshCwIcon class="mr-2 h-4 w-4" />
-                  Refresh Credentials
-                </Button>
-              {/snippet}
-              {#snippet confirm()}
-                <form method="POST" action="?/refreshCredentials" use:enhance={enhanceRefresh}>
-                  <Button variant="destructive" type="submit" disabled={refreshing}>
-                    {refreshing ? "Refreshing…" : "Confirm Refresh"}
+              <ConfirmDialog
+                bind:open={confirmRefreshOpen}
+                title="Refresh Credentials?"
+                description="This will generate a new password for your streaming account. Your current URLs will stop working and you'll need to update your players with the new credentials."
+              >
+                {#snippet trigger({ props })}
+                  <Button variant="outline" {...props}>
+                    <RefreshCwIcon class="mr-2 h-4 w-4" />
+                    Refresh Credentials
                   </Button>
-                </form>
-              {/snippet}
-            </ConfirmDialog>
+                {/snippet}
+                {#snippet confirm()}
+                  <form method="POST" action="?/refreshCredentials" use:enhance={enhanceRefresh}>
+                    <Button variant="destructive" type="submit" disabled={refreshing}>
+                      {refreshing ? "Refreshing…" : "Confirm Refresh"}
+                    </Button>
+                  </form>
+                {/snippet}
+              </ConfirmDialog>
+            </div>
+            <p class="text-xs text-muted-foreground">
+              Downloaded M3U files are best-effort snapshots and do not update automatically. Use the XC / URL setup above for ongoing updates.
+            </p>
           </div>
         </Tabs.Content>
 
@@ -381,7 +391,7 @@ function enhanceRefresh() {
                   </p>
                 {/if}
 
-                <CopyableField label="M3U Playlist URL" value={platform.result.url} />
+                <CopyableField label="M3U Playlist URL" value={platform.result.url} secret />
               </div>
             {/each}
           </section>
@@ -414,7 +424,7 @@ function enhanceRefresh() {
                   </p>
                 </div>
 
-                <CopyableField label="M3U Playlist URL" value={platform.result.url} />
+                <CopyableField label="M3U Playlist URL" value={platform.result.url} secret />
               </div>
             {/each}
           </section>

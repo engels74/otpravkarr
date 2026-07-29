@@ -36,6 +36,19 @@ describe("CopyableField", () => {
     expect(input).toBeInTheDocument();
     expect(input).toHaveAttribute("readonly");
   });
+  it("masks secret values until explicitly revealed", async () => {
+    render(CopyableField, {
+      props: { label: "XC URL", value: "https://example.test/credential", secret: true },
+    });
+
+    expect(screen.getByDisplayValue("••••••••••••••••")).toBeInTheDocument();
+    expect(screen.queryByDisplayValue("https://example.test/credential")).not.toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole("button", { name: "Reveal XC URL" }));
+
+    expect(screen.getByDisplayValue("https://example.test/credential")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Hide XC URL" })).toBeInTheDocument();
+  });
 
   it("has a copy button", () => {
     render(CopyableField, { props: { label: "Token", value: "tok_123" } });

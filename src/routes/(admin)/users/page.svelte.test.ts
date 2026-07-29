@@ -120,6 +120,25 @@ const defaultData = {
   profiles: [] as { id: number; name: string }[],
   driftByMappingId: {} as Record<number, boolean>,
   filters: { status: "all", mode: "all", search: "" },
+  policySettings: {
+    defaultPolicy: "core_bundles" as const,
+    fixedGroupIds: [],
+    coreGroupIds: [],
+    approvedGroupIds: [1],
+  },
+  lineupBundles: [{ id: "sports", slug: "sports", displayName: "Sports", groupIds: [1] }],
+  policyByMappingId: {
+    [mapping.id]: {
+      policy: "core_bundles" as const,
+      effectiveGroupIds: [],
+      selectedBundleIds: [],
+      selectedApprovedGroupIds: [],
+      materializedGroupIds: [],
+      assignmentDrift: false,
+      orphanBundleIds: [],
+      orphanApprovedGroupIds: [],
+    },
+  },
 };
 
 function mockFetch(response: Response | Promise<Response>) {
@@ -482,6 +501,39 @@ describe("admin users page", () => {
     // without adding a desktop scrollbar (content fits >=640px).
     expect(dialog.className).not.toContain("overflow-x-hidden");
     expect(dialog.className).toContain("overflow-x-auto");
+  });
+  it("submits policy override, bundle, and approved-group intent as JSON arrays", async () => {
+    render(UsersPage, {
+      props: {
+        data: {
+          ...defaultData,
+          groups: [{ id: 1, name: "Group A", channelCount: 5 }],
+          policyByMappingId: {
+            [mapping.id]: {
+              policy: "core_bundles",
+              selectedBundleIds: ["sports"],
+              selectedApprovedGroupIds: [1],
+              effectiveGroupIds: [],
+              materializedGroupIds: [],
+              assignmentDrift: false,
+              orphanBundleIds: [],
+              orphanApprovedGroupIds: [],
+            },
+          },
+        },
+      },
+    });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Open actions for testuser" }));
+    await fireEvent.click(await screen.findByRole("menuitem", { name: /Change Group/ }));
+    const dialog = await screen.findByRole("dialog");
+    const form = dialog.querySelector<HTMLFormElement>('form[action="?/changeGroup"]');
+    if (!form) throw new Error("changeGroup form not found");
+
+    const fields = new FormData(form);
+    expect(fields.get("lineup_policy_override")).toBe("");
+    expect(fields.get("selected_bundle_ids")).toBe('["sports"]');
+    expect(fields.get("group_ids")).toBe("[1]");
   });
 
   it("keeps Change Group Save reachable via a sticky footer + single scroll region (ISSUE-001)", async () => {

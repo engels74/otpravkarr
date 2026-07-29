@@ -2,262 +2,253 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { DispatcharrClient } from "$lib/dispatcharr/client";
 
-const mocks = vi.hoisted(() => ({
-  getAllGroupProfiles: vi.fn(),
-  listPlugins: vi.fn(),
-  updatePluginSettings: vi.fn(),
-  appendAuditLog: vi.fn(),
-}));
+const mocks = vi.hoisted(() => {
+  const mutationAttempt = (endpoint: string) =>
+    vi.fn(() => {
+      throw new Error(`ECM analysis must not call ${endpoint}`);
+    });
+
+  return {
+    getAllGroupProfiles: vi.fn(),
+    listPlugins: vi.fn(),
+    updatePluginSettings: mutationAttempt("plugin settings"),
+    runPlugin: mutationAttempt("plugin run"),
+    enablePlugin: mutationAttempt("plugin enable"),
+    disablePlugin: mutationAttempt("plugin disable"),
+  };
+});
 
 vi.mock("$lib/db/repositories/channel-group-profiles", () => ({
   EMPTY_PROFILE_GROUP_ID: -1,
   getAllGroupProfiles: mocks.getAllGroupProfiles,
 }));
-
 vi.mock("$lib/dispatcharr/endpoints/plugins", () => ({
   listPlugins: mocks.listPlugins,
   updatePluginSettings: mocks.updatePluginSettings,
+  runPlugin: mocks.runPlugin,
+  enablePlugin: mocks.enablePlugin,
+  disablePlugin: mocks.disablePlugin,
 }));
 
-vi.mock("$lib/db/repositories/audit", () => ({
-  appendAuditLog: mocks.appendAuditLog,
-}));
-
-const { reconcileEcmScope, ECM_KEY } = await import("../ecm-scope");
+const { analyzeEcmScope, ECM_KEY } = await import("../ecm-scope");
 
 const client = {} as DispatcharrClient;
 
 function profile(groupId: number, name: string) {
-  return { group_id: groupId, profile_id: groupId * 10, profile_name: name };
+  return {
+    group_id: groupId,
+    profile_id: groupId * 10,
+    profile_name: name,
+    known_channel_ids: "[]",
+  };
 }
 
-function ecmPlugin(settings: Record<string, unknown>) {
-  return { key: ECM_KEY, name: "ECM", enabled: true, settings };
+function ecmPlugin(settings: Record<string, unknown>, enabled = true) {
+  return { key: ECM_KEY, name: "ECM", enabled, settings };
+}
+
+function expectNoPluginMutation() {
+  expect(mocks.updatePluginSettings).not.toHaveBeenCalled();
+  expect(mocks.runPlugin).not.toHaveBeenCalled();
+  expect(mocks.enablePlugin).not.toHaveBeenCalled();
+  expect(mocks.disablePlugin).not.toHaveBeenCalled();
 }
 
 beforeEach(() => {
   mocks.getAllGroupProfiles.mockReset();
   mocks.listPlugins.mockReset();
-  mocks.updatePluginSettings.mockReset().mockResolvedValue({ ok: true, data: {} });
-  mocks.appendAuditLog.mockReset();
+  mocks.updatePluginSettings.mockClear();
+  mocks.runPlugin.mockClear();
+  mocks.enablePlugin.mockClear();
+  mocks.disablePlugin.mockClear();
 });
 
-describe("reconcileEcmScope", () => {
-  it("appends missing owned profiles while preserving existing scope and other settings", async () => {
+describe("analyzeEcmScope", () => {
+  it("reports a missing ECM plugin and preserves the owned-profile discrepancy", async () => {
     mocks.getAllGroupProfiles.mockReturnValue([
-      profile(-1, "otpravkarr:empty"), // sentinel — must be excluded
-      profile(1, "otpravkarr:g1:Sports"),
-      profile(2, "otpravkarr:g2:News"),
+      profile(1, "otpravkarr:g1:UK/English — PPV/Events"),
+    ]);
+    mocks.listPlugins.mockResolvedValue({ ok: true, data: [] });
+
+    const result = await analyzeEcmScope(client);
+
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        plugin: { present: false },
+        missingProfileNames: ["otpravkarr:g1:UK/English — PPV/Events"],
+        reason: "ecm_absent",
+        skippedUnsafeProfiles: [],
+      },
+    });
+    expectNoPluginMutation();
+  });
+
+  it("reports a disabled ECM plugin and its settings without changing it", async () => {
+    mocks.getAllGroupProfiles.mockReturnValue([
+      profile(1, "otpravkarr:g1:UK/English — PPV/Events"),
+    ]);
+    mocks.listPlugins.mockResolvedValue({
+      ok: true,
+      data: [ecmPlugin({ channel_profile_name: "Streamers", preserve: 42 }, false)],
+    });
+
+    const result = await analyzeEcmScope(client);
+
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        plugin: {
+          present: true,
+          enabled: false,
+          settings: { channel_profile_name: "Streamers", preserve: 42 },
+        },
+        missingProfileNames: ["otpravkarr:g1:UK/English — PPV/Events"],
+        reason: "ecm_disabled",
+        skippedUnsafeProfiles: [],
+      },
+    });
+    expectNoPluginMutation();
+  });
+
+  it("reports covered scope while retaining the observed plugin state and settings", async () => {
+    mocks.getAllGroupProfiles.mockReturnValue([
+      profile(-1, "otpravkarr:empty"),
+      profile(1, "otpravkarr:g1:UK/English — PPV/Events"),
     ]);
     mocks.listPlugins.mockResolvedValue({
       ok: true,
       data: [
         ecmPlugin({
-          channel_profile_name: "Streamers, otpravkarr:g1:Sports",
-          some_other_setting: 42,
+          channel_profile_name: "Streamers, otpravkarr:g1:UK/English — PPV/Events",
+          preserve: 42,
         }),
       ],
     });
 
-    const result = await reconcileEcmScope(client);
+    const result = await analyzeEcmScope(client);
 
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.data.updated).toBe(true);
-      expect(result.data.added).toEqual(["otpravkarr:g2:News"]);
-    }
-    // Read-modify-write: other settings preserved, admin's "Streamers" kept,
-    // missing profile appended, sentinel never added.
-    expect(mocks.updatePluginSettings).toHaveBeenCalledWith(client, ECM_KEY, {
-      some_other_setting: 42,
-      channel_profile_name: "Streamers, otpravkarr:g1:Sports, otpravkarr:g2:News",
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        plugin: {
+          present: true,
+          enabled: true,
+          settings: {
+            channel_profile_name: "Streamers, otpravkarr:g1:UK/English — PPV/Events",
+            preserve: 42,
+          },
+        },
+        missingProfileNames: [],
+        reason: "scope_covered",
+        skippedUnsafeProfiles: [],
+      },
     });
-    expect(mocks.appendAuditLog).toHaveBeenCalledWith(
-      expect.objectContaining({ action: "ecm.scope_updated" }),
-    );
+    expectNoPluginMutation();
   });
 
-  it("skips stale comma-bearing profile names instead of appending invalid CSV entries", async () => {
+  it("reports unsafe profile names without trying to repair ECM settings", async () => {
     mocks.getAllGroupProfiles.mockReturnValue([
-      profile(1, "otpravkarr:g1:Sports, News"),
-      profile(2, "otpravkarr:g2:Movies"),
+      profile(1, "otpravkarr:g1:UK, Live — PPV/Events"),
+      profile(2, "otpravkarr:g2:UK/English — Unscheduled Events"),
     ]);
     mocks.listPlugins.mockResolvedValue({
       ok: true,
-      data: [ecmPlugin({ channel_profile_name: "Streamers" })],
+      data: [ecmPlugin({ channel_profile_name: "otpravkarr:g2:UK/English — Unscheduled Events" })],
     });
 
-    const result = await reconcileEcmScope(client);
+    const result = await analyzeEcmScope(client);
 
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.data.added).toEqual(["otpravkarr:g2:Movies"]);
-      expect(result.data.skippedUnsafeProfiles).toEqual([
-        {
-          groupId: 1,
-          profileId: 10,
-          profileName: "otpravkarr:g1:Sports, News",
-          reason: "csv_unsafe",
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        plugin: {
+          present: true,
+          enabled: true,
+          settings: { channel_profile_name: "otpravkarr:g2:UK/English — Unscheduled Events" },
         },
-      ]);
-    }
-    expect(mocks.updatePluginSettings).toHaveBeenCalledWith(client, ECM_KEY, {
-      channel_profile_name: "Streamers, otpravkarr:g2:Movies",
+        missingProfileNames: [],
+        reason: "scope_covered",
+        skippedUnsafeProfiles: [
+          {
+            groupId: 1,
+            profileId: 10,
+            profileName: "otpravkarr:g1:UK, Live — PPV/Events",
+            reason: "csv_unsafe",
+          },
+        ],
+      },
     });
+    expectNoPluginMutation();
   });
 
-  it("is a no-op when every owned profile is already in scope", async () => {
-    mocks.getAllGroupProfiles.mockReturnValue([profile(1, "otpravkarr:g1:Sports")]);
-    mocks.listPlugins.mockResolvedValue({
+  it("reports an empty ECM scope as missing rather than populating it", async () => {
+    mocks.getAllGroupProfiles.mockReturnValue([
+      profile(1, "otpravkarr:g1:UK/English — PPV/Events"),
+    ]);
+    mocks.listPlugins.mockResolvedValue({ ok: true, data: [ecmPlugin({})] });
+
+    const result = await analyzeEcmScope(client);
+
+    expect(result).toEqual({
       ok: true,
-      data: [ecmPlugin({ channel_profile_name: "otpravkarr:g1:Sports" })],
+      data: {
+        plugin: { present: true, enabled: true, settings: {} },
+        missingProfileNames: ["otpravkarr:g1:UK/English — PPV/Events"],
+        skippedUnsafeProfiles: [],
+      },
     });
-
-    const result = await reconcileEcmScope(client);
-
-    expect(result.ok).toBe(true);
-    if (result.ok)
-      expect(result.data).toMatchObject({ updated: false, reason: "already_in_scope" });
-    expect(mocks.updatePluginSettings).not.toHaveBeenCalled();
-    expect(mocks.appendAuditLog).not.toHaveBeenCalled();
+    expectNoPluginMutation();
   });
 
-  it("does nothing (no plugin fetch) when otpravkarr owns no group profiles", async () => {
+  it("lists ECM state even when otpravkarr owns no group profiles", async () => {
     mocks.getAllGroupProfiles.mockReturnValue([profile(-1, "otpravkarr:empty")]);
+    mocks.listPlugins.mockResolvedValue({ ok: true, data: [ecmPlugin({ preserve: 42 })] });
 
-    const result = await reconcileEcmScope(client);
+    const result = await analyzeEcmScope(client);
 
-    expect(result.ok).toBe(true);
-    if (result.ok) expect(result.data.reason).toBe("no_owned_profiles");
-    expect(mocks.listPlugins).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        plugin: { present: true, enabled: true, settings: { preserve: 42 } },
+        missingProfileNames: [],
+        reason: "no_owned_profiles",
+        skippedUnsafeProfiles: [],
+      },
+    });
+    expectNoPluginMutation();
   });
 
-  it("is a no-op when ECM is not installed", async () => {
-    mocks.getAllGroupProfiles.mockReturnValue([profile(1, "otpravkarr:g1:Sports")]);
+  it("ignores non-event profiles because ECM does not own their visibility", async () => {
+    mocks.getAllGroupProfiles.mockReturnValue([
+      profile(1, "otpravkarr:g1:Sports"),
+      profile(2, "otpravkarr:g2:UK/English — PPV/Events"),
+    ]);
     mocks.listPlugins.mockResolvedValue({
       ok: true,
-      data: [{ key: "iptv_checker", name: "IPTV Checker", enabled: true, settings: {} }],
+      data: [ecmPlugin({ channel_profile_name: "otpravkarr:g2:UK/English — PPV/Events" })],
     });
 
-    const result = await reconcileEcmScope(client);
-    expect(result.ok).toBe(true);
-    if (result.ok) expect(result.data.reason).toBe("ecm_absent");
-    expect(mocks.updatePluginSettings).not.toHaveBeenCalled();
-  });
+    const result = await analyzeEcmScope(client);
 
-  it("seeds an empty scope from scratch", async () => {
-    mocks.getAllGroupProfiles.mockReturnValue([profile(1, "otpravkarr:g1:Sports")]);
-    mocks.listPlugins.mockResolvedValue({
+    expect(result).toMatchObject({
       ok: true,
-      data: [ecmPlugin({})],
+      data: {
+        missingProfileNames: [],
+        reason: "scope_covered",
+      },
     });
-
-    const result = await reconcileEcmScope(client);
-    expect(result.ok).toBe(true);
-    expect(mocks.updatePluginSettings).toHaveBeenCalledWith(client, ECM_KEY, {
-      channel_profile_name: "otpravkarr:g1:Sports",
-    });
+    expectNoPluginMutation();
   });
-
-  it("skips the ECM write when unmanaged settings drift between reads", async () => {
-    mocks.getAllGroupProfiles.mockReturnValue([profile(1, "otpravkarr:g1:Sports")]);
-    mocks.listPlugins
-      .mockResolvedValueOnce({
-        ok: true,
-        data: [ecmPlugin({ channel_profile_name: "Streamers", other: 1 })],
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        data: [ecmPlugin({ channel_profile_name: "Streamers", other: 2 })],
-      });
-
-    const result = await reconcileEcmScope(client);
-
-    expect(result.ok).toBe(true);
-    if (result.ok)
-      expect(result.data).toMatchObject({ updated: false, added: [], reason: "settings_drift" });
-    expect(mocks.updatePluginSettings).not.toHaveBeenCalled();
-    expect(mocks.appendAuditLog).not.toHaveBeenCalled();
-  });
-
-  it("allows channel_profile_name-only drift and merges against the latest scope", async () => {
-    mocks.getAllGroupProfiles.mockReturnValue([profile(1, "otpravkarr:g1:Sports")]);
-    mocks.listPlugins
-      .mockResolvedValueOnce({
-        ok: true,
-        data: [ecmPlugin({ channel_profile_name: "Streamers", other: 1 })],
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        data: [ecmPlugin({ channel_profile_name: "Streamers, Operator", other: 1 })],
-      });
-
-    const result = await reconcileEcmScope(client);
-
-    expect(result.ok).toBe(true);
-    if (result.ok) expect(result.data.added).toEqual(["otpravkarr:g1:Sports"]);
-    expect(mocks.updatePluginSettings).toHaveBeenCalledWith(client, ECM_KEY, {
-      other: 1,
-      channel_profile_name: "Streamers, Operator, otpravkarr:g1:Sports",
-    });
-  });
-
-  it("does not write when the immediate pre-write plugin read fails", async () => {
-    mocks.getAllGroupProfiles.mockReturnValue([profile(1, "otpravkarr:g1:Sports")]);
-    mocks.listPlugins
-      .mockResolvedValueOnce({
-        ok: true,
-        data: [ecmPlugin({ channel_profile_name: "Streamers" })],
-      })
-      .mockResolvedValueOnce({ ok: false, error: "auth_failure", message: "401" });
-
-    const result = await reconcileEcmScope(client);
-
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error).toBe("auth_failure");
-    expect(mocks.updatePluginSettings).not.toHaveBeenCalled();
-  });
-
-  it("does not write when ECM disappears before the pre-write read", async () => {
-    mocks.getAllGroupProfiles.mockReturnValue([profile(1, "otpravkarr:g1:Sports")]);
-    mocks.listPlugins
-      .mockResolvedValueOnce({
-        ok: true,
-        data: [ecmPlugin({ channel_profile_name: "Streamers" })],
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        data: [{ key: "iptv_checker", name: "IPTV Checker", enabled: true, settings: {} }],
-      });
-
-    const result = await reconcileEcmScope(client);
-
-    expect(result.ok).toBe(true);
-    if (result.ok) expect(result.data.reason).toBe("ecm_absent");
-    expect(mocks.updatePluginSettings).not.toHaveBeenCalled();
-  });
-
-  it("propagates a plugin list failure", async () => {
-    mocks.getAllGroupProfiles.mockReturnValue([profile(1, "otpravkarr:g1:Sports")]);
+  it("preserves no-throw Dispatcharr failures", async () => {
+    mocks.getAllGroupProfiles.mockReturnValue([
+      profile(1, "otpravkarr:g1:UK/English — PPV/Events"),
+    ]);
     mocks.listPlugins.mockResolvedValue({ ok: false, error: "auth_failure", message: "401" });
 
-    const result = await reconcileEcmScope(client);
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error).toBe("auth_failure");
-  });
+    const result = await analyzeEcmScope(client);
 
-  it("propagates a settings write failure without auditing", async () => {
-    mocks.getAllGroupProfiles.mockReturnValue([profile(1, "otpravkarr:g1:Sports")]);
-    mocks.listPlugins.mockResolvedValue({ ok: true, data: [ecmPlugin({})] });
-    mocks.updatePluginSettings.mockResolvedValue({
-      ok: false,
-      error: "validation_error",
-      message: "rejected",
-    });
-
-    const result = await reconcileEcmScope(client);
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error).toBe("validation_error");
-    expect(mocks.appendAuditLog).not.toHaveBeenCalled();
+    expect(result).toEqual({ ok: false, error: "auth_failure", message: "401" });
+    expectNoPluginMutation();
   });
 });

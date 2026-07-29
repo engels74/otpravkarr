@@ -1,6 +1,7 @@
 import {
   EMPTY_PROFILE_GROUP_ID,
   getGroupProfile,
+  updateGroupProfileKnownChannels,
   upsertGroupProfile,
 } from "$lib/db/repositories/channel-group-profiles";
 import type { DispatcharrClient } from "$lib/dispatcharr/client";
@@ -80,6 +81,42 @@ export function profileNameForGroup(groupId: number, groupName: string): string 
 /** Whether an existing otpravkarr profile name is unsafe for ECM's CSV scope. */
 export function profileNameNeedsCsvRepair(name: string): boolean {
   return name.includes(",");
+}
+
+/** Event groups whose profile visibility is owned by Event Channel Managarr. */
+export function isEcmManagedGroup(groupName: string): boolean {
+  return groupName.endsWith(" — PPV/Events") || groupName.endsWith(" — Unscheduled Events");
+}
+
+function parseKnownChannelIds(value: string | undefined): Set<number> {
+  if (!value) return new Set();
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (!Array.isArray(parsed)) return new Set();
+    return new Set(
+      parsed.filter(
+        (id): id is number => typeof id === "number" && Number.isSafeInteger(id) && id > 0,
+      ),
+    );
+  } catch {
+    return new Set();
+  }
+}
+
+function updateKnownChannelsSafe(
+  groupId: number,
+  channelIds: Set<number>,
+): DispatcharrResult<void> {
+  try {
+    updateGroupProfileKnownChannels(groupId, [...channelIds]);
+    return { ok: true, data: undefined };
+  } catch (err) {
+    return {
+      ok: false,
+      error: "server_error",
+      message: `Failed to persist known channels for group ${groupId}: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
 }
 
 /**
@@ -257,8 +294,18 @@ export async function reconcileGroupProfile(
     currentEnabled = new Set(created.data.channels);
   }
 
-  const diff = await applyMembershipDiff(client, profileId, desiredEnabled, currentEnabled);
+  let effectiveDesired = desiredEnabled;
+  if (isEcmManagedGroup(groupName) && existing) {
+    const previouslyKnown = parseKnownChannelIds(existing.known_channel_ids);
+    const hiddenByEcm = new Set([...previouslyKnown].filter((id) => !currentEnabled.has(id)));
+    effectiveDesired = new Set([...desiredEnabled].filter((id) => !hiddenByEcm.has(id)));
+  }
+
+  const diff = await applyMembershipDiff(client, profileId, effectiveDesired, currentEnabled);
   if (!diff.ok) return { ok: false, error: diff.error, message: diff.message };
+
+  const savedKnown = updateKnownChannelsSafe(groupId, desiredEnabled);
+  if (!savedKnown.ok) return savedKnown;
 
   return { ok: true, data: profileId };
 }

@@ -3,8 +3,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { UserMapping } from "$lib/db/types";
 
 type LoadResult = {
+  policy: "fixed" | "core_bundles" | "approved_selection";
+  bundles: { id: string; displayName: string; groupIds: number[] }[];
+  selectedBundleIds: string[];
   offered: { id: number; name: string; channelCount: number | null }[];
   selected: number[];
+  assignedGroups: { id: number; name: string; channelCount: number | null }[];
   locked: boolean;
   saved: boolean;
 };
@@ -14,10 +18,12 @@ const mocks = vi.hoisted(() => ({
   getConfig: vi.fn(async (_key: string) => null as string | null),
   getUserMappingById: vi.fn(),
   listChannelGroups: vi.fn(async () => ({ ok: true as const, data: [] as unknown[] })),
-  applyGroupSubscription: vi.fn(async () => ({
+  enforceLineupPolicySubscription: vi.fn(async () => ({
     ok: true as const,
     data: { profileIds: [10], groupIds: [1] },
   })),
+  getLineupPolicySettings: vi.fn(),
+  getLineupBundleCatalog: vi.fn(),
 }));
 
 vi.mock("$lib/server/auth", () => ({ requireUser: mocks.requireUser }));
@@ -28,8 +34,16 @@ vi.mock("$lib/dispatcharr/endpoints/channel-groups", () => ({
   listChannelGroups: mocks.listChannelGroups,
 }));
 vi.mock("$lib/bridge/subscriptions", () => ({
-  applyGroupSubscription: mocks.applyGroupSubscription,
+  enforceLineupPolicySubscription: mocks.enforceLineupPolicySubscription,
 }));
+vi.mock("$lib/server/subscription-config", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("$lib/server/subscription-config")>();
+  return {
+    ...actual,
+    getLineupPolicySettings: mocks.getLineupPolicySettings,
+    getLineupBundleCatalog: mocks.getLineupBundleCatalog,
+  };
+});
 
 function makeMapping(overrides: Partial<UserMapping> = {}): UserMapping {
   return {
@@ -42,12 +56,16 @@ function makeMapping(overrides: Partial<UserMapping> = {}): UserMapping {
     dispatcharr_user_id: 42,
     dispatcharr_username: "alice",
     dispatcharr_xc_password_enc: "enc",
-    dispatcharr_group_ids: "[1,2]",
+    // Materialized access is deliberately unrelated to retained lineup intent.
+    dispatcharr_group_ids: "[99]",
     dispatcharr_profile_id: null,
     provisioning_mode: "automatic",
     is_active: 1,
     group_selection_locked: 0,
     is_owner: 0,
+    lineup_policy_override: null,
+    selected_bundle_ids: '["news"]',
+    selected_approved_group_ids: "[2]",
     created_at: "2024-01-01 00:00:00",
     updated_at: "2024-01-01 00:00:00",
     last_synced_at: null,
@@ -63,7 +81,10 @@ function loadEvent(search = "") {
   };
 }
 
-function actionEvent(body: FormData) {
+function actionEvent(groupIds: unknown, bundleIds: unknown = []) {
+  const body = new FormData();
+  body.set("group_ids", JSON.stringify(groupIds));
+  body.set("bundle_ids", JSON.stringify(bundleIds));
   return {
     request: new Request("http://localhost/subscription", { method: "POST", body }),
     url: new URL("http://localhost/subscription"),
@@ -73,15 +94,12 @@ function actionEvent(body: FormData) {
 
 beforeEach(() => {
   mocks.requireUser.mockReset().mockResolvedValue(makeMapping());
-  mocks.getConfig
-    .mockReset()
-    .mockImplementation(async (key: string) =>
-      key === "dispatcharr_url"
-        ? "https://d.example"
-        : key === "dispatcharr_api_key"
-          ? "key"
-          : null,
-    );
+  mocks.getConfig.mockReset().mockImplementation(async (key: string) => {
+    if (key === "dispatcharr_url") return "https://d.example";
+    if (key === "dispatcharr_api_key") return "key";
+    if (key === "default_selectable_groups") return "[1,2]";
+    return null;
+  });
   mocks.getUserMappingById.mockReset().mockReturnValue(makeMapping());
   mocks.listChannelGroups.mockReset().mockResolvedValue({
     ok: true,
@@ -89,235 +107,174 @@ beforeEach(() => {
       { id: 1, name: "Sports", channel_count: 3 },
       { id: 2, name: "News", channel_count: 2 },
       { id: 3, name: "Graveyard", channel_count: 9 },
+      { id: 4, name: "Movies", channel_count: 4 },
     ],
   });
-  mocks.applyGroupSubscription
+  mocks.enforceLineupPolicySubscription
     .mockReset()
     .mockResolvedValue({ ok: true, data: { profileIds: [10], groupIds: [1] } });
+  mocks.getLineupPolicySettings.mockReset().mockResolvedValue({
+    defaultPolicy: "core_bundles",
+    fixedGroupIds: [],
+    coreGroupIds: [1],
+    approvedGroupIds: [1, 2],
+    bundleCatalogVersion: 1,
+  });
+  mocks.getLineupBundleCatalog.mockReset().mockResolvedValue({
+    version: 1,
+    bundles: [{ id: "news", slug: "news", displayName: "News", enabled: true, groupIds: [2] }],
+  });
 });
 
 describe("subscription load", () => {
-  it("offers non-quarantine groups and intersects the saved selection", async () => {
+  it("derives core and bundle intent from the resolver, not materialized IDs", async () => {
     const { load } = await import("./+page.server");
     const result = (await load(
       loadEvent() as unknown as Parameters<typeof load>[0],
     )) as unknown as LoadResult;
 
-    expect(result.offered.map((g) => g.id)).toEqual([1, 2]); // Graveyard excluded
-    expect(result.selected).toEqual([1, 2]);
-    expect(result.locked).toBe(false);
+    expect(result.policy).toBe("core_bundles");
+    expect(result.offered).toEqual([]);
+    expect(result.selected).toEqual([]);
+    expect(result.selectedBundleIds).toEqual(["news"]);
+    expect(result.assignedGroups.map((group) => group.id)).toEqual([1, 2]);
+    expect(result.assignedGroups.map((group) => group.id)).not.toContain(99);
+    expect(mocks.getLineupPolicySettings).toHaveBeenCalled();
+    expect(mocks.getLineupBundleCatalog).toHaveBeenCalled();
   });
 
-  it("marks the picker locked when the user is individually locked", async () => {
-    mocks.requireUser.mockResolvedValue(makeMapping({ group_selection_locked: 1 }));
+  it("uses core_bundles as the resolver default when no explicit policy is configured", async () => {
+    mocks.getLineupPolicySettings.mockResolvedValueOnce({
+      defaultPolicy: "not-a-policy",
+      fixedGroupIds: [2],
+      coreGroupIds: [1],
+      approvedGroupIds: [1, 2],
+      bundleCatalogVersion: 1,
+    });
+    mocks.requireUser.mockResolvedValue(makeMapping({ selected_bundle_ids: "[]" }));
     const { load } = await import("./+page.server");
+
     const result = (await load(
       loadEvent() as unknown as Parameters<typeof load>[0],
     )) as unknown as LoadResult;
-    expect(result.locked).toBe(true);
+
+    expect(result.selected).toEqual([]);
+    expect(result.assignedGroups.map((group) => group.id)).toEqual([1]);
   });
 
-  it("marks the picker locked when self-select is globally disabled", async () => {
+  it("marks the picker locked when self-select is disabled", async () => {
     mocks.getConfig.mockImplementation(async (key: string) => {
       if (key === "allow_user_self_select") return "false";
       if (key === "dispatcharr_url") return "https://d.example";
       if (key === "dispatcharr_api_key") return "key";
+      if (key === "default_selectable_groups") return "[1,2]";
       return null;
     });
     const { load } = await import("./+page.server");
     const result = (await load(
-      loadEvent() as unknown as Parameters<typeof load>[0],
-    )) as unknown as LoadResult;
-    expect(result.locked).toBe(true);
-  });
-
-  it("exposes the saved flag from the query string", async () => {
-    const { load } = await import("./+page.server");
-    const result = (await load(
       loadEvent("?saved=1") as unknown as Parameters<typeof load>[0],
     )) as unknown as LoadResult;
+
+    expect(result.locked).toBe(true);
     expect(result.saved).toBe(true);
   });
 });
 
 describe("subscription save action", () => {
-  it("enforces the selection through applyGroupSubscription and redirects", async () => {
-    const { actions } = await import("./+page.server");
-    const body = new FormData();
-    body.set("group_ids", JSON.stringify([1, 2]));
-
-    let redirected: { status: number; location: string } | null = null;
-    try {
-      await actions.save?.(actionEvent(body) as unknown as Parameters<typeof actions.save>[0]);
-    } catch (e) {
-      redirected = e as { status: number; location: string };
-    }
-
-    expect(mocks.applyGroupSubscription).toHaveBeenCalledWith(expect.anything(), 1, [1, 2], {
-      actor: "alice",
-      ipAddress: "127.0.0.1",
+  it("persists approved-selection intent through the shared policy enforcement bridge", async () => {
+    mocks.getLineupPolicySettings.mockResolvedValueOnce({
+      defaultPolicy: "approved_selection",
+      fixedGroupIds: [],
+      coreGroupIds: [],
+      approvedGroupIds: [1, 2],
+      bundleCatalogVersion: 1,
     });
-    expect(redirected?.status).toBe(303);
-    expect(redirected?.location).toBe("/subscription?saved=1");
-  });
-
-  it("refuses to save when the user is locked", async () => {
-    mocks.requireUser.mockResolvedValue(makeMapping({ group_selection_locked: 1 }));
     const { actions } = await import("./+page.server");
-    const body = new FormData();
-    body.set("group_ids", JSON.stringify([1]));
 
-    const result = await actions.save?.(
-      actionEvent(body) as unknown as Parameters<typeof actions.save>[0],
+    await expect(
+      actions.save?.(actionEvent([2]) as unknown as Parameters<typeof actions.save>[0]),
+    ).rejects.toMatchObject({ status: 303, location: "/subscription?saved=1" });
+
+    expect(mocks.enforceLineupPolicySubscription).toHaveBeenCalledWith(
+      expect.anything(),
+      1,
+      { selectedApprovedGroupIds: [2] },
+      { actor: "alice", ipAddress: "127.0.0.1" },
     );
-
-    expect(result).toMatchObject({ status: 403 });
-    expect(mocks.applyGroupSubscription).not.toHaveBeenCalled();
   });
 
-  // ISSUE-008 verify-first: an *authenticated* locked user POSTing `save` must
-  // get fail(403), even when self-select is globally enabled — i.e. the per-user
-  // lock alone drives the 403. The dogfood's observed 303→"/" was an
-  // under-authenticated POST handled by requireUser, not this branch.
-  it("returns fail(403) for an authenticated locked user even when self-select is enabled", async () => {
-    mocks.getConfig.mockImplementation(async (key: string) => {
-      if (key === "allow_user_self_select") return "true";
-      if (key === "dispatcharr_url") return "https://d.example";
-      if (key === "dispatcharr_api_key") return "key";
-      return null;
+  it("fails closed for zero selections when no approved groups are configured", async () => {
+    mocks.getLineupPolicySettings.mockResolvedValueOnce({
+      defaultPolicy: "approved_selection",
+      fixedGroupIds: [],
+      coreGroupIds: [],
+      approvedGroupIds: null,
+      bundleCatalogVersion: 1,
     });
-    mocks.requireUser.mockResolvedValue(makeMapping({ group_selection_locked: 1 }));
     const { actions } = await import("./+page.server");
-    const body = new FormData();
-    body.set("group_ids", JSON.stringify([1]));
 
-    const result = await actions.save?.(
-      actionEvent(body) as unknown as Parameters<typeof actions.save>[0],
+    await expect(
+      actions.save?.(actionEvent([]) as unknown as Parameters<typeof actions.save>[0]),
+    ).rejects.toMatchObject({ status: 303 });
+
+    expect(mocks.enforceLineupPolicySubscription).toHaveBeenCalledWith(
+      expect.anything(),
+      1,
+      { selectedApprovedGroupIds: [] },
+      expect.anything(),
     );
-
-    expect(result).toMatchObject({ status: 403 });
-    expect(mocks.applyGroupSubscription).not.toHaveBeenCalled();
   });
 
-  it("rejects a malformed selection", async () => {
+  it("persists enabled bundle IDs in core-plus-bundles mode", async () => {
     const { actions } = await import("./+page.server");
-    const body = new FormData();
-    body.set("group_ids", "not json");
+
+    await expect(
+      actions.save?.(actionEvent([], ["news"]) as unknown as Parameters<typeof actions.save>[0]),
+    ).rejects.toMatchObject({ status: 303, location: "/subscription?saved=1" });
+
+    expect(mocks.enforceLineupPolicySubscription).toHaveBeenCalledWith(
+      expect.anything(),
+      1,
+      { selectedBundleIds: ["news"] },
+      { actor: "alice", ipAddress: "127.0.0.1" },
+    );
+  });
+
+  it("rejects unknown bundle IDs before policy enforcement", async () => {
+    const { actions } = await import("./+page.server");
 
     const result = await actions.save?.(
-      actionEvent(body) as unknown as Parameters<typeof actions.save>[0],
+      actionEvent([], ["unknown"]) as unknown as Parameters<typeof actions.save>[0],
     );
 
     expect(result).toMatchObject({ status: 400 });
-    expect(mocks.applyGroupSubscription).not.toHaveBeenCalled();
+    expect(mocks.enforceLineupPolicySubscription).not.toHaveBeenCalled();
   });
 
-  // ISSUE-002: a self-service save must NOT drop admin-pinned groups that live
-  // outside the self-select catalog. The route merges those DB-derived ids back
-  // into the set passed to the bridge, without loosening the trust check on the
-  // client's own picks.
-  it("preserves admin-pinned out-of-catalog groups on save", async () => {
-    // Stored assignment includes group 5, which is not in the offered catalog
-    // ({1,2}) — an admin pinned it via changeGroup.
-    mocks.getUserMappingById.mockReturnValue(makeMapping({ dispatcharr_group_ids: "[1,2,5]" }));
+  it("rejects invalid and out-of-approved selections before policy enforcement", async () => {
     const { actions } = await import("./+page.server");
-    const body = new FormData();
-    body.set("group_ids", JSON.stringify([1]));
 
-    let redirected: { status: number; location: string } | null = null;
-    try {
-      await actions.save?.(actionEvent(body) as unknown as Parameters<typeof actions.save>[0]);
-    } catch (e) {
-      redirected = e as { status: number; location: string };
-    }
-
-    expect(mocks.applyGroupSubscription).toHaveBeenCalledWith(expect.anything(), 1, [1, 5], {
-      actor: "alice",
-      ipAddress: "127.0.0.1",
-    });
-    expect(redirected?.status).toBe(303);
-    expect(redirected?.location).toBe("/subscription?saved=1");
-  });
-
-  it("never resurrects a quarantine group via the preserve merge", async () => {
-    // Stored includes 3=Graveyard (quarantine) and 5 (admin pin). Only 5 is
-    // preserved; the quarantine id is excluded via the same live list.
-    mocks.getUserMappingById.mockReturnValue(makeMapping({ dispatcharr_group_ids: "[1,5,3]" }));
-    const { actions } = await import("./+page.server");
-    const body = new FormData();
-    body.set("group_ids", JSON.stringify([1]));
-
-    try {
-      await actions.save?.(actionEvent(body) as unknown as Parameters<typeof actions.save>[0]);
-    } catch {
-      // redirect thrown on success — irrelevant to this assertion
-    }
-
-    expect(mocks.applyGroupSubscription).toHaveBeenCalledWith(
-      expect.anything(),
-      1,
-      [1, 5],
-      expect.anything(),
+    const invalid = await actions.save?.(
+      actionEvent([0]) as unknown as Parameters<typeof actions.save>[0],
     );
-  });
-
-  it("passes a stale preserved id through to the bridge (bridge drops the dead group)", async () => {
-    // Group 8 is stored but no longer exists in Dispatcharr's live list. The
-    // route does NOT liveness-filter preserved ids — dropping dead groups is the
-    // bridge's job (subscriptions.ts). So `final` still carries 8.
-    mocks.getUserMappingById.mockReturnValue(makeMapping({ dispatcharr_group_ids: "[1,8]" }));
-    const { actions } = await import("./+page.server");
-    const body = new FormData();
-    body.set("group_ids", JSON.stringify([2]));
-
-    try {
-      await actions.save?.(actionEvent(body) as unknown as Parameters<typeof actions.save>[0]);
-    } catch {
-      // redirect thrown on success
-    }
-
-    expect(mocks.applyGroupSubscription).toHaveBeenCalledWith(
-      expect.anything(),
-      1,
-      [2, 8],
-      expect.anything(),
+    const outsideApproved = await actions.save?.(
+      actionEvent([4]) as unknown as Parameters<typeof actions.save>[0],
     );
+
+    expect(invalid).toMatchObject({ status: 400 });
+    expect(outsideApproved).toMatchObject({ status: 400 });
+    expect(mocks.enforceLineupPolicySubscription).not.toHaveBeenCalled();
   });
 
-  it("rejects a client pick outside the offered catalog even with pins present", async () => {
-    mocks.getUserMappingById.mockReturnValue(makeMapping({ dispatcharr_group_ids: "[1,2,5]" }));
+  it("rejects saves for a locked user without enforcing a policy", async () => {
+    mocks.requireUser.mockResolvedValue(makeMapping({ group_selection_locked: 1 }));
     const { actions } = await import("./+page.server");
-    const body = new FormData();
-    // 5 is stored/pinned but NOT offered — the client must not be able to
-    // re-select it directly.
-    body.set("group_ids", JSON.stringify([5]));
 
     const result = await actions.save?.(
-      actionEvent(body) as unknown as Parameters<typeof actions.save>[0],
+      actionEvent([1]) as unknown as Parameters<typeof actions.save>[0],
     );
 
-    expect(result).toMatchObject({ status: 400 });
-    expect(mocks.applyGroupSubscription).not.toHaveBeenCalled();
-  });
-
-  it("clearing all with no pins resolves to an empty selection", async () => {
-    // Stored ids are all inside the offered catalog, so nothing is preserved.
-    mocks.getUserMappingById.mockReturnValue(makeMapping({ dispatcharr_group_ids: "[1,2]" }));
-    const { actions } = await import("./+page.server");
-    const body = new FormData();
-    body.set("group_ids", JSON.stringify([]));
-
-    try {
-      await actions.save?.(actionEvent(body) as unknown as Parameters<typeof actions.save>[0]);
-    } catch {
-      // redirect thrown on success
-    }
-
-    expect(mocks.applyGroupSubscription).toHaveBeenCalledWith(
-      expect.anything(),
-      1,
-      [],
-      expect.anything(),
-    );
+    expect(result).toMatchObject({ status: 403 });
+    expect(mocks.enforceLineupPolicySubscription).not.toHaveBeenCalled();
   });
 });

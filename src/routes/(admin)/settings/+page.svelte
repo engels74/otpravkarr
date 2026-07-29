@@ -1,5 +1,6 @@
 <script lang="ts">
 import type { ActionResult } from "@sveltejs/kit";
+import { untrack } from "svelte";
 import { toast } from "svelte-sonner";
 import { applyAction, enhance } from "$app/forms";
 import GroupPicker from "$lib/components/GroupPicker.svelte";
@@ -34,18 +35,43 @@ interface Props {
       allowSelfSelect: boolean;
       selectableGroupIds: number[];
       channelGroups: { id: number; name: string; channelCount: number | null }[];
+      defaultPolicy: "fixed" | "core_bundles" | "approved_selection";
+      fixedGroupIds: number[];
+      coreGroupIds: number[];
+      bundleCatalogVersion: number;
+      bundles: {
+        id: string;
+        slug: string;
+        displayName: string;
+        enabled: boolean;
+        groupIds: number[];
+      }[];
     };
   };
 }
 
 let { data }: Props = $props();
 
-// Local state for the subscription-defaults picker.
-// svelte-ignore state_referenced_locally
-let selectableGroups = $state(new Set<number>(data.subscription.selectableGroupIds));
-// svelte-ignore state_referenced_locally
-let allowSelfSelect = $state(data.subscription.allowSelfSelect);
-const selectableGroupsJson = $derived(JSON.stringify([...selectableGroups]));
+// Local state for the lineup-policy group pickers.
+const initialSubscription = untrack(() => data.subscription);
+let approvedGroups = $state(new Set<number>(initialSubscription.selectableGroupIds));
+let fixedGroups = $state(new Set<number>(initialSubscription.fixedGroupIds));
+let coreGroups = $state(new Set<number>(initialSubscription.coreGroupIds));
+let defaultPolicy = $state(initialSubscription.defaultPolicy);
+let bundleGroups = $state<Record<string, Set<number>>>(
+  Object.fromEntries(
+    initialSubscription.bundles.map((bundle) => [bundle.id, new Set(bundle.groupIds)]),
+  ),
+);
+let bundleEnabled = $state<Record<string, boolean>>(
+  Object.fromEntries(initialSubscription.bundles.map((bundle) => [bundle.id, bundle.enabled])),
+);
+let newBundleGroups = $state(new Set<number>());
+let newBundleEnabled = $state(true);
+let catalogVersion = $state(String(initialSubscription.bundleCatalogVersion || 1));
+const approvedGroupsJson = $derived(JSON.stringify([...approvedGroups]));
+const fixedGroupsJson = $derived(JSON.stringify([...fixedGroups]));
+const coreGroupsJson = $derived(JSON.stringify([...coreGroups]));
 
 let sectionSubmitting = $state<Record<string, boolean>>({});
 let sectionMessage = $state<Record<string, { type: "success" | "error"; text: string }>>({});
@@ -388,73 +414,177 @@ function makeEnhance(
     </form>
   </Card.Root>
   </section>
-  <!-- ─── Channel subscriptions ─────────────────────────── -->
+  <!-- ─── Lineup policy ───────────────────────────────────── -->
   <section class="space-y-4">
     <p class="eyebrow">Channel subscriptions</p>
 
     <Card.Root>
       <Card.Header>
-        <Card.Title class="text-base">Subscription defaults</Card.Title>
+        <Card.Title class="text-base">Instance lineup policy</Card.Title>
         <Card.Description>
-          Control which channel groups users are offered and whether they can choose for themselves.
+          Set the least-privilege default for new and reconciled subscriber lineups.
+          Core plus bundles is recommended.
         </Card.Description>
       </Card.Header>
       <form
         method="POST"
-        action="?/updateDefaultProvisioning"
-        use:enhance={makeEnhance("subscription", { reset: false, invalidateAll: false })}
+        action="?/updateLineupPolicy"
+        use:enhance={makeEnhance("lineupPolicy", { reset: false })}
       >
-        <input type="hidden" name="allow_user_self_select" value={String(allowSelfSelect)} />
-        <input type="hidden" name="default_selectable_groups" value={selectableGroupsJson} />
+        <input type="hidden" name="lineup_fixed_group_ids" value={fixedGroupsJson} />
+        <input type="hidden" name="lineup_core_group_ids" value={coreGroupsJson} />
+        <input type="hidden" name="default_selectable_groups" value={approvedGroupsJson} />
         <Card.Content class="grid gap-5">
-          <label class="flex items-start gap-3">
-            <input
-              type="checkbox"
-              class="mt-0.5 h-4 w-4 rounded border-border accent-primary"
-              bind:checked={allowSelfSelect}
-            />
-            <span class="grid gap-0.5">
-              <span class="text-sm font-medium text-foreground">Allow users to self-select</span>
-              <span class="text-xs text-muted-foreground">
-                When off, users can't change their channel groups — admins assign them per user.
-              </span>
-            </span>
-          </label>
-
-          <div class="grid min-w-0 gap-1.5">
-            <Label>Default selectable groups</Label>
-            <p class="text-xs text-muted-foreground">
-              The groups offered to users by default. Select none to offer every channel group.
-              Quarantine groups (Graveyard, Slow, Black Screens) are always hidden.
-            </p>
-            {#if data.subscription.channelGroups.length === 0}
-              <p class="rounded-md border border-border px-3 py-6 text-center text-sm text-muted-foreground">
-                No channel groups found. Configure and verify the Dispatcharr connection first.
-              </p>
-            {:else}
-              <GroupPicker groups={data.subscription.channelGroups} bind:selected={selectableGroups} />
-            {/if}
+          <div class="grid gap-1.5">
+            <Label for="lineup_policy_default">Default policy</Label>
+            <select
+              id="lineup_policy_default"
+              name="lineup_policy_default"
+              bind:value={defaultPolicy}
+              class="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
+            >
+              <option value="core_bundles">Core plus bundles (recommended)</option>
+              <option value="fixed">Fixed groups</option>
+              <option value="approved_selection">Admin-approved selection</option>
+            </select>
           </div>
+
+          {#if data.subscription.channelGroups.length === 0}
+            <p class="rounded-md border border-border px-3 py-6 text-center text-sm text-muted-foreground">
+              No live non-quarantine groups found. Configure and verify Dispatcharr before changing lineup policy.
+            </p>
+          {:else}
+            <div class="grid min-w-0 gap-1.5">
+              <Label>Fixed groups</Label>
+              <p class="text-xs text-muted-foreground">Used only by the fixed policy.</p>
+              <GroupPicker groups={data.subscription.channelGroups} bind:selected={fixedGroups} />
+            </div>
+            <div class="grid min-w-0 gap-1.5">
+              <Label>Core groups</Label>
+              <p class="text-xs text-muted-foreground">Always included by the core plus bundles policy.</p>
+              <GroupPicker groups={data.subscription.channelGroups} bind:selected={coreGroups} />
+            </div>
+            <div class="grid min-w-0 gap-1.5">
+              <Label>Admin-approved groups</Label>
+              <p class="text-xs text-muted-foreground">
+                The only groups available to approved-selection users. Select none to approve none.
+              </p>
+              <GroupPicker groups={data.subscription.channelGroups} bind:selected={approvedGroups} />
+            </div>
+          {/if}
         </Card.Content>
         <Card.Footer class="flex items-center gap-3">
           <Button
             type="submit"
-            disabled={sectionSubmitting["subscription"]}
-            aria-label="Save subscription defaults"
+            disabled={sectionSubmitting["lineupPolicy"] || data.subscription.channelGroups.length === 0}
           >
-            {sectionSubmitting["subscription"] ? "Saving..." : "Save"}
+            {sectionSubmitting["lineupPolicy"] ? "Saving..." : "Save policy"}
           </Button>
-          {#if sectionMessage["subscription"]}
-            <span
-              class="text-sm {sectionMessage['subscription'].type === 'success'
-                ? 'text-green-600 dark:text-green-400'
-                : 'text-destructive'}"
-            >
-              {sectionMessage["subscription"].text}
+          {#if sectionMessage["lineupPolicy"]}
+            <span class="text-sm {sectionMessage['lineupPolicy'].type === 'success' ? 'text-green-600 dark:text-green-400' : 'text-destructive'}">
+              {sectionMessage["lineupPolicy"].text}
             </span>
           {/if}
         </Card.Footer>
       </form>
+    </Card.Root>
+
+    <Card.Root>
+      <Card.Header>
+        <Card.Title class="text-base">Lineup bundle catalog</Card.Title>
+        <Card.Description>
+          Bundle identity and slug are permanent. Increment the catalog version when changing bundle contents.
+        </Card.Description>
+      </Card.Header>
+      <Card.Content class="grid gap-5">
+        <div class="grid max-w-48 gap-1.5">
+          <Label for="bundle_catalog_version">Catalog version</Label>
+          <Input id="bundle_catalog_version" bind:value={catalogVersion} inputmode="numeric" />
+        </div>
+
+        {#each data.subscription.bundles as bundle (bundle.id)}
+          {@const selectedBundleGroups = bundleGroups[bundle.id] ?? new Set<number>()}
+          {@const bundleMessage = sectionMessage[`bundle-${bundle.id}`]}
+          <form
+            method="POST"
+            action="?/saveLineupBundle"
+            use:enhance={makeEnhance(`bundle-${bundle.id}`, { reset: false })}
+            class="grid gap-4 rounded-md border border-border p-4"
+          >
+            <input type="hidden" name="bundle_id" value={bundle.id} />
+            <input type="hidden" name="bundle_slug" value={bundle.slug} />
+            <input type="hidden" name="bundle_enabled" value={String(bundleEnabled[bundle.id])} />
+            <input type="hidden" name="bundle_group_ids" value={JSON.stringify([...selectedBundleGroups])} />
+            <input type="hidden" name="bundle_catalog_version" value={catalogVersion} />
+            <p class="text-sm font-medium">{bundle.id} <span class="text-muted-foreground">({bundle.slug})</span></p>
+            <div class="grid gap-1.5">
+              <Label for={`bundle-name-${bundle.id}`}>Display name</Label>
+              <Input id={`bundle-name-${bundle.id}`} name="bundle_display_name" value={bundle.displayName} required />
+            </div>
+            <label class="flex items-center gap-2 text-sm">
+              <input type="checkbox" bind:checked={bundleEnabled[bundle.id]} />
+              Enabled
+            </label>
+            {#if data.subscription.channelGroups.length > 0}
+              <GroupPicker
+                groups={data.subscription.channelGroups}
+                bind:selected={() => selectedBundleGroups, (value) => (bundleGroups[bundle.id] = value)}
+              />
+            {/if}
+            <div class="flex items-center gap-3">
+              <Button type="submit" disabled={sectionSubmitting[`bundle-${bundle.id}`] || data.subscription.channelGroups.length === 0}>
+                {sectionSubmitting[`bundle-${bundle.id}`] ? "Saving..." : "Save bundle"}
+              </Button>
+              {#if bundleMessage}
+                <span class="text-sm {bundleMessage.type === 'success' ? 'text-green-600 dark:text-green-400' : 'text-destructive'}">
+                  {bundleMessage.text}
+                </span>
+              {/if}
+            </div>
+          </form>
+        {/each}
+
+        <form
+          method="POST"
+          action="?/saveLineupBundle"
+          use:enhance={makeEnhance("newBundle", { reset: false })}
+          class="grid gap-4 rounded-md border border-border p-4"
+        >
+          <input type="hidden" name="bundle_enabled" value={String(newBundleEnabled)} />
+          <input type="hidden" name="bundle_group_ids" value={JSON.stringify([...newBundleGroups])} />
+          <input type="hidden" name="bundle_catalog_version" value={catalogVersion} />
+          <p class="text-sm font-medium">Create bundle</p>
+          <div class="grid gap-1.5">
+            <Label for="new-bundle-id">Stable ID</Label>
+            <Input id="new-bundle-id" name="bundle_id" pattern="[A-Za-z0-9._-]+" required />
+          </div>
+          <div class="grid gap-1.5">
+            <Label for="new-bundle-slug">Stable slug</Label>
+            <Input id="new-bundle-slug" name="bundle_slug" pattern="[a-z0-9-]+" required />
+          </div>
+          <div class="grid gap-1.5">
+            <Label for="new-bundle-name">Display name</Label>
+            <Input id="new-bundle-name" name="bundle_display_name" required />
+          </div>
+          <label class="flex items-center gap-2 text-sm">
+            <input type="checkbox" bind:checked={newBundleEnabled} />
+            Enabled
+          </label>
+          {#if data.subscription.channelGroups.length > 0}
+            <GroupPicker groups={data.subscription.channelGroups} bind:selected={newBundleGroups} />
+          {/if}
+          <div class="flex items-center gap-3">
+            <Button type="submit" disabled={sectionSubmitting["newBundle"] || data.subscription.channelGroups.length === 0}>
+              {sectionSubmitting["newBundle"] ? "Creating..." : "Create bundle"}
+            </Button>
+            {#if sectionMessage["newBundle"]}
+              <span class="text-sm {sectionMessage['newBundle'].type === 'success' ? 'text-green-600 dark:text-green-400' : 'text-destructive'}">
+                {sectionMessage["newBundle"].text}
+              </span>
+            {/if}
+          </div>
+        </form>
+      </Card.Content>
     </Card.Root>
   </section>
 

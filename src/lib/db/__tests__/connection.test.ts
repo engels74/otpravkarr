@@ -6,6 +6,7 @@ const mockExec = vi.fn();
 const mockQuery = vi.fn();
 const mockClose = vi.fn();
 const mockMkdirSync = vi.fn();
+const mockExistsSync = vi.fn(() => true);
 
 class MockDatabase {
   pragmas: string[] = [];
@@ -46,6 +47,7 @@ vi.mock("../migrate", () => ({
 }));
 
 vi.mock("node:fs", () => ({
+  existsSync: mockExistsSync,
   mkdirSync: mockMkdirSync,
 }));
 
@@ -53,6 +55,7 @@ const { createDatabase, getDb, initializeDatabase, _resetForTesting } = await im
   "../connection"
 );
 const { runMigrations } = await import("../migrate");
+const { env } = await import("$env/dynamic/private");
 
 describe("createDatabase", () => {
   afterEach(() => {
@@ -115,6 +118,21 @@ describe("getDb", () => {
   it("uses default path when DATABASE_PATH is not set", () => {
     const db = getDb();
     expect((db as unknown as MockDatabase).path).toBe("./data/otpravkarr.sqlite");
+  });
+
+  it("fails closed when an explicit production database path is missing", () => {
+    const previousNodeEnv = process.env.NODE_ENV;
+    env.DATABASE_PATH = "/config/data/missing.sqlite";
+    process.env.NODE_ENV = "production";
+    mockExistsSync.mockReturnValueOnce(false);
+
+    try {
+      expect(() => getDb()).toThrow("Configured DATABASE_PATH does not exist");
+      expect(mockMkdirSync).not.toHaveBeenCalled();
+    } finally {
+      env.DATABASE_PATH = "";
+      process.env.NODE_ENV = previousNodeEnv;
+    }
   });
 });
 

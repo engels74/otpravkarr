@@ -500,6 +500,7 @@ describe("001_initial.sql migration", () => {
       "audit_log",
       "channel_group_profiles",
       "config",
+      "lineup_bundles",
       "sessions",
       "user_mappings",
     ]);
@@ -577,10 +578,14 @@ describe("001_initial.sql migration", () => {
     await runMigrations(db as any, migrationsDir);
 
     const migrations = (tables._migrations as TableDef).rows;
-    expect(migrations).toHaveLength(2);
+    expect(migrations).toHaveLength(4);
     expect(migrations[0]?.version).toBe(1);
     expect(migrations[0]?.name).toBe("initial");
     expect(migrations[1]?.version).toBe(2);
     expect(migrations[1]?.name).toBe("channel_group_subscriptions");
+    expect(migrations[2]?.version).toBe(3);
+    expect(migrations[2]?.name).toBe("lineup_policies");
+    expect(migrations[3]?.version).toBe(4);
+    expect(migrations[3]?.name).toBe("event_membership_state");
   });
 });

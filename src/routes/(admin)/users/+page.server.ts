@@ -2,12 +2,11 @@ import { fail } from "@sveltejs/kit";
 import type { z } from "zod";
 import { disableUser, enableUser, rotateCredentialsForMappingId } from "$lib/bridge/lifecycle";
 import { provisionUser } from "$lib/bridge/provisioner";
-import { applyGroupSubscription } from "$lib/bridge/subscriptions";
+import { enforceLineupPolicySubscription } from "$lib/bridge/subscriptions";
 import { db } from "$lib/db/connection";
 import { appendAuditLog } from "$lib/db/repositories/audit";
 import {
   EMPTY_PROFILE_GROUP_ID,
-  getAllGroupProfiles,
   getGroupProfile,
   getGroupProfilesByGroupIds,
 } from "$lib/db/repositories/channel-group-profiles";
@@ -39,13 +38,12 @@ import {
   tryResolveConfiguredPlexOwnerAccountId,
 } from "$lib/server/plex-owner";
 import {
-  computeOfferedGroups,
-  defaultSelectedGroupIds,
-  getSubscriptionDefaults,
+  getLineupBundleCatalog,
+  getLineupPolicySettings,
   isQuarantineGroup,
+  resolveLineupPolicy,
 } from "$lib/server/subscription-config";
 import { withDeadline } from "$lib/utils/deadline";
-import { isTransientResultError, retryResult } from "$lib/utils/retry";
 import type { Actions, PageServerLoad } from "./$types";
 
 function parseStoredGroupIds(rawGroupIds: string): number[] {
@@ -217,10 +215,19 @@ export const load: PageServerLoad = async (event) => {
         remoteByUserId.set(u.id, new Set(ids));
       }
       const emptyProfileId = getGroupProfile(EMPTY_PROFILE_GROUP_ID)?.profile_id ?? null;
+      const [settings, catalog] = await Promise.all([
+        getLineupPolicySettings(),
+        getLineupBundleCatalog(),
+      ]);
       for (const m of mappings) {
         if (m.dispatcharr_user_id == null) continue;
         const effective = remoteByUserId.get(m.dispatcharr_user_id) ?? new Set<number>();
-        const groupIds = parseStoredGroupIds(m.dispatcharr_group_ids);
+        const groupIds = resolveLineupPolicy({
+          user: m,
+          settings,
+          catalog,
+          liveGroups: groups,
+        }).effectiveGroupIds;
         // Resolve stored group ids to their otpravkarr-owned profiles once.
         // getGroupProfilesByGroupIds silently omits ids with no local
         // channel_group_profiles row, so a stored group whose mapping was
@@ -258,6 +265,38 @@ export const load: PageServerLoad = async (event) => {
     USERS_DISPATCHARR_DEADLINE_MS,
     EMPTY_DISPATCHARR_DATA,
   );
+  const [policySettings, lineupBundleCatalog] = await Promise.all([
+    getLineupPolicySettings(),
+    getLineupBundleCatalog(),
+  ]);
+  const enabledBundleIds = new Set(
+    lineupBundleCatalog.bundles.filter((bundle) => bundle.enabled).map((bundle) => bundle.id),
+  );
+  const policyByMappingId = Object.fromEntries(
+    mappings.map((mapping) => {
+      const resolution = resolveLineupPolicy({
+        user: mapping,
+        settings: policySettings,
+        catalog: lineupBundleCatalog,
+        liveGroups: groups,
+      });
+      const materializedGroupIds = parseStoredGroupIds(mapping.dispatcharr_group_ids);
+      return [
+        mapping.id,
+        {
+          ...resolution,
+          materializedGroupIds,
+          assignmentDrift:
+            materializedGroupIds.length !== resolution.effectiveGroupIds.length ||
+            materializedGroupIds.some((id) => !resolution.effectiveGroupIds.includes(id)),
+          orphanBundleIds: resolution.selectedBundleIds.filter((id) => !enabledBundleIds.has(id)),
+          orphanApprovedGroupIds: resolution.selectedApprovedGroupIds.filter(
+            (id) => !resolution.effectiveGroupIds.includes(id),
+          ),
+        },
+      ];
+    }),
+  );
 
   return {
     mappings,
@@ -265,6 +304,11 @@ export const load: PageServerLoad = async (event) => {
     profiles,
     driftByMappingId,
     filters: { status, mode, search },
+    policySettings,
+    lineupBundles: lineupBundleCatalog.bundles
+      .filter((bundle) => bundle.enabled)
+      .map(({ id, slug, displayName, groupIds }) => ({ id, slug, displayName, groupIds })),
+    policyByMappingId,
   };
 };
 
@@ -356,8 +400,9 @@ export const actions: Actions = {
         return { success: true };
       }
 
-      // Dispatcharr user was deleted during disable — re-provision
-      const groupIds = parseStoredGroupIds(mapping.dispatcharr_group_ids);
+      // Dispatcharr user was deleted during disable — re-provision with an empty
+      // materialized set, then enforce the retained policy intent below.
+      const groupIds: number[] = [];
       const plexToken = await getConfig("plex_admin_token");
       const result = await provisionUser(
         client,
@@ -372,7 +417,6 @@ export const actions: Actions = {
           },
           mode: mapping.provisioning_mode,
           groupIds,
-          profileId: mapping.dispatcharr_profile_id ?? undefined,
           exposeInitialPassword: true,
         },
         { actor: admin.username, ipAddress: event.getClientAddress() },
@@ -380,6 +424,16 @@ export const actions: Actions = {
       if (result.status === "failed") {
         return fail(500, { error: result.error });
       }
+      const enforced = await enforceLineupPolicySubscription(
+        client,
+        result.mapping.id,
+        {},
+        {
+          actor: admin.username,
+          ipAddress: event.getClientAddress(),
+        },
+      );
+      if (!enforced.ok) return fail(502, { error: enforced.message });
       try {
         appendAuditLog({
           actor: admin.username,
@@ -449,6 +503,35 @@ export const actions: Actions = {
       return fail(400, { error: "Invalid group IDs" });
     }
     const groupIds: number[] = parsedGroupIds;
+    const overrideRaw = fd.get("lineup_policy_override");
+    let lineupPolicyOverride: "fixed" | "core_bundles" | "approved_selection" | null | undefined;
+    if (overrideRaw != null) {
+      const value = String(overrideRaw);
+      if (value === "") lineupPolicyOverride = null;
+      else if (value === "fixed" || value === "core_bundles" || value === "approved_selection") {
+        lineupPolicyOverride = value;
+      } else {
+        return fail(400, { error: "Invalid lineup policy" });
+      }
+    }
+    const bundleIdsRaw = fd.get("selected_bundle_ids");
+    let selectedBundleIds: string[] | undefined;
+    if (bundleIdsRaw != null) {
+      try {
+        const parsedBundleIds: unknown = JSON.parse(String(bundleIdsRaw));
+        if (
+          !Array.isArray(parsedBundleIds) ||
+          !parsedBundleIds.every(
+            (value): value is string => typeof value === "string" && value !== "",
+          )
+        ) {
+          return fail(400, { error: "Invalid bundle IDs" });
+        }
+        selectedBundleIds = [...new Set(parsedBundleIds)];
+      } catch {
+        return fail(400, { error: "Invalid bundle IDs" });
+      }
+    }
 
     let client: DispatcharrClient;
     try {
@@ -459,14 +542,19 @@ export const actions: Actions = {
       });
     }
 
-    // applyGroupSubscription is the single path that enforces the subscription
-    // on Dispatcharr (Model A), persists the group set, and writes the audit
-    // entry. An empty selection resolves to the empty profile (zero channels),
-    // never an empty channel_profiles array (which would expose everything).
-    const result = await applyGroupSubscription(client, id, groupIds, {
-      actor: admin.username,
-      ipAddress: event.getClientAddress(),
-    });
+    const result = await enforceLineupPolicySubscription(
+      client,
+      id,
+      {
+        ...(lineupPolicyOverride === undefined ? {} : { lineupPolicyOverride }),
+        ...(selectedBundleIds === undefined ? {} : { selectedBundleIds }),
+        selectedApprovedGroupIds: groupIds,
+      },
+      {
+        actor: admin.username,
+        ipAddress: event.getClientAddress(),
+      },
+    );
     if (!result.ok) {
       // A validation_error here means client-supplied group IDs were rejected
       // (e.g. stale/unknown IDs resolved against Dispatcharr) — a 4xx, not an
@@ -556,22 +644,7 @@ export const actions: Actions = {
       });
     }
 
-    const defaults = await getSubscriptionDefaults();
-    let groupIds = defaults.selectableGroupIds;
-    if (groupIds == null) {
-      const groupsResult = await withDeadline(
-        retryResult(() => listChannelGroups(client), isTransientResultError),
-        2_000,
-        { ok: false, error: "network_error", message: "Channel group lookup timed out" } as const,
-      );
-      if (groupsResult.ok) {
-        groupIds = defaultSelectedGroupIds(computeOfferedGroups(groupsResult.data, defaults));
-      } else {
-        groupIds = getAllGroupProfiles()
-          .filter((profile) => profile.group_id !== EMPTY_PROFILE_GROUP_ID)
-          .map((profile) => profile.group_id);
-      }
-    }
+    const groupIds: number[] = [];
 
     const result = await provisionUser(
       client,
@@ -593,6 +666,16 @@ export const actions: Actions = {
         error: "You already have a subscriber account — manage it from the user list.",
       });
     }
+    const enforced = await enforceLineupPolicySubscription(
+      client,
+      result.mapping.id,
+      {},
+      {
+        actor: admin.username,
+        ipAddress: event.getClientAddress(),
+      },
+    );
+    if (!enforced.ok) return fail(502, { error: enforced.message });
 
     try {
       updateUserMapping(result.mapping.id, { is_owner: 1 });

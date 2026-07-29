@@ -1,6 +1,8 @@
 import { fail } from "@sveltejs/kit";
+import { db } from "$lib/db/connection";
 import { appendAuditLog } from "$lib/db/repositories/audit";
 import { getConfig, invalidateConfigCache, setConfig } from "$lib/db/repositories/config";
+import type { LineupPolicy } from "$lib/db/types";
 import { AuditAction } from "$lib/db/types";
 import { createInteractiveClient } from "$lib/dispatcharr/client";
 import { listChannelGroups } from "$lib/dispatcharr/endpoints/channel-groups";
@@ -14,8 +16,14 @@ import { parseAndNormalizeOrigins } from "$lib/server/origins";
 import {
   ALLOW_USER_SELF_SELECT_KEY,
   DEFAULT_SELECTABLE_GROUPS_KEY,
+  getLineupBundleCatalog,
+  getLineupPolicySettings,
   getSubscriptionDefaults,
   isQuarantineGroup,
+  LINEUP_BUNDLE_CATALOG_VERSION_KEY,
+  LINEUP_CORE_GROUP_IDS_KEY,
+  LINEUP_FIXED_GROUP_IDS_KEY,
+  LINEUP_POLICY_DEFAULT_KEY,
 } from "$lib/server/subscription-config";
 import {
   AuditRetentionSchema,
@@ -25,6 +33,58 @@ import {
   sanitizeString,
 } from "$lib/server/validation";
 import type { Actions, PageServerLoad } from "./$types";
+
+const LINEUP_POLICIES: readonly LineupPolicy[] = ["fixed", "core_bundles", "approved_selection"];
+
+type ChannelGroup = { id: number; name: string; channelCount: number | null };
+
+async function getLiveChannelGroups(): Promise<ChannelGroup[] | null> {
+  const [dispatcharrUrl, dispatcharrApiKey] = await Promise.all([
+    getConfig("dispatcharr_url"),
+    getConfig("dispatcharr_api_key"),
+  ]);
+  if (!dispatcharrUrl || !dispatcharrApiKey) return null;
+
+  try {
+    const result = await listChannelGroups(
+      createInteractiveClient(dispatcharrUrl, dispatcharrApiKey),
+    );
+    if (!result.ok) return null;
+    return result.data
+      .filter((group) => !isQuarantineGroup(group.name))
+      .map((group) => ({
+        id: group.id,
+        name: group.name,
+        channelCount: group.channel_count ?? null,
+      }));
+  } catch {
+    return null;
+  }
+}
+
+function parseLiveGroupIds(raw: FormDataEntryValue | null, liveIds: Set<number>): number[] | null {
+  try {
+    const parsed: unknown = JSON.parse(String(raw ?? ""));
+    if (
+      !Array.isArray(parsed) ||
+      !parsed.every(
+        (value): value is number => Number.isInteger(value) && value > 0 && liveIds.has(value),
+      )
+    ) {
+      return null;
+    }
+    return [...new Set(parsed)];
+  } catch {
+    return null;
+  }
+}
+
+function parseCatalogVersion(raw: FormDataEntryValue | null): number | null {
+  const value = sanitizeString(String(raw ?? ""));
+  if (!/^[1-9]\d*$/.test(value)) return null;
+  const version = Number(value);
+  return Number.isSafeInteger(version) ? version : null;
+}
 
 export const load: PageServerLoad = async (event) => {
   await requireAdmin(event);
@@ -38,6 +98,10 @@ export const load: PageServerLoad = async (event) => {
     syncIntervalMinutes,
     allowedOrigins,
     auditRetentionDays,
+    subscriptionDefaults,
+    lineupPolicy,
+    lineupBundles,
+    channelGroups,
   ] = await Promise.all([
     getConfig("plex_server_url"),
     getConfig("plex_admin_token"),
@@ -48,6 +112,10 @@ export const load: PageServerLoad = async (event) => {
     getConfig("sync_interval_minutes"),
     getConfig("allowed_origins"),
     getConfig("audit_retention_days"),
+    getSubscriptionDefaults(),
+    getLineupPolicySettings(),
+    getLineupBundleCatalog(),
+    getLiveChannelGroups(),
   ]);
 
   // Parse allowed origins from JSON array to newline-separated string for textarea
@@ -60,27 +128,6 @@ export const load: PageServerLoad = async (event) => {
       }
     } catch {
       originsText = allowedOrigins;
-    }
-  }
-
-  // Channel-group subscription defaults + the selectable channel groups admins
-  // can offer. Quarantine groups (Graveyard/Slow/Black Screens) are excluded.
-  const subscriptionDefaults = await getSubscriptionDefaults();
-  let channelGroups: { id: number; name: string; channelCount: number | null }[] = [];
-  if (dispatcharrUrl && dispatcharrApiKey) {
-    try {
-      // Interactive client: a single fast-fail call so a slow/unreachable
-      // Dispatcharr degrades to an empty group list (rendered as the empty
-      // state) before the adapter severs the socket (ISSUE-002/003).
-      const client = createInteractiveClient(dispatcharrUrl, dispatcharrApiKey);
-      const groupsResult = await listChannelGroups(client);
-      if (groupsResult.ok) {
-        channelGroups = groupsResult.data
-          .filter((g) => !isQuarantineGroup(g.name))
-          .map((g) => ({ id: g.id, name: g.name, channelCount: g.channel_count ?? null }));
-      }
-    } catch {
-      // Dispatcharr may be unreachable — leave the group list empty.
     }
   }
 
@@ -107,7 +154,12 @@ export const load: PageServerLoad = async (event) => {
     subscription: {
       allowSelfSelect: subscriptionDefaults.allowSelfSelect,
       selectableGroupIds: subscriptionDefaults.selectableGroupIds ?? [],
-      channelGroups,
+      channelGroups: channelGroups ?? [],
+      defaultPolicy: lineupPolicy.defaultPolicy,
+      fixedGroupIds: lineupPolicy.fixedGroupIds,
+      coreGroupIds: lineupPolicy.coreGroupIds,
+      bundleCatalogVersion: lineupBundles.version,
+      bundles: lineupBundles.bundles,
     },
   };
 };
@@ -314,6 +366,122 @@ export const actions: Actions = {
     return { success: true, message: "Sync settings saved." };
   },
 
+  updateLineupPolicy: async (event) => {
+    await requireAdmin(event);
+    const { request, locals, getClientAddress } = event;
+    const fd = await request.formData();
+    const defaultPolicy = String(fd.get("lineup_policy_default") ?? "");
+    if (!LINEUP_POLICIES.includes(defaultPolicy as LineupPolicy)) {
+      return fail(400, { error: "Invalid lineup policy" });
+    }
+
+    const liveGroups = await getLiveChannelGroups();
+    if (liveGroups === null) {
+      return fail(400, { error: "Could not validate groups against Dispatcharr" });
+    }
+    const liveIds = new Set(liveGroups.map((group) => group.id));
+    const fixedGroupIds = parseLiveGroupIds(fd.get("lineup_fixed_group_ids"), liveIds);
+    const coreGroupIds = parseLiveGroupIds(fd.get("lineup_core_group_ids"), liveIds);
+    const approvedGroupIds = parseLiveGroupIds(fd.get("default_selectable_groups"), liveIds);
+    if (fixedGroupIds === null || coreGroupIds === null || approvedGroupIds === null) {
+      return fail(400, { error: "Lineup groups must be live, non-quarantine group IDs" });
+    }
+
+    await Promise.all([
+      setConfig(LINEUP_POLICY_DEFAULT_KEY, defaultPolicy),
+      setConfig(LINEUP_FIXED_GROUP_IDS_KEY, JSON.stringify(fixedGroupIds)),
+      setConfig(LINEUP_CORE_GROUP_IDS_KEY, JSON.stringify(coreGroupIds)),
+      setConfig(DEFAULT_SELECTABLE_GROUPS_KEY, JSON.stringify(approvedGroupIds)),
+    ]);
+    invalidateConfigCache();
+    appendAuditLog({
+      actor: locals.admin?.username ?? "unknown",
+      action: AuditAction.CONFIG_CHANGED,
+      detail: {
+        section: "lineup_policy",
+        default_policy: defaultPolicy,
+        fixed_group_count: fixedGroupIds.length,
+        core_group_count: coreGroupIds.length,
+        approved_group_count: approvedGroupIds.length,
+      },
+      ipAddress: getClientAddress(),
+    });
+    return { success: true, message: "Lineup policy saved." };
+  },
+
+  saveLineupBundle: async (event) => {
+    await requireAdmin(event);
+    const { request, locals, getClientAddress } = event;
+    const fd = await request.formData();
+    const id = sanitizeString(String(fd.get("bundle_id") ?? ""));
+    const slug = sanitizeString(String(fd.get("bundle_slug") ?? ""));
+    const displayName = sanitizeString(String(fd.get("bundle_display_name") ?? ""));
+    const version = parseCatalogVersion(fd.get("bundle_catalog_version"));
+    const enabledRaw = String(fd.get("bundle_enabled") ?? "");
+    if (
+      !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(id) ||
+      !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug) ||
+      slug.length > 64 ||
+      !displayName ||
+      displayName.length > 100 ||
+      version === null ||
+      (enabledRaw !== "true" && enabledRaw !== "false")
+    ) {
+      return fail(400, {
+        error: "Invalid bundle identity, display name, catalog version, or enabled state",
+      });
+    }
+
+    const liveGroups = await getLiveChannelGroups();
+    if (liveGroups === null) {
+      return fail(400, { error: "Could not validate groups against Dispatcharr" });
+    }
+    const groupIds = parseLiveGroupIds(
+      fd.get("bundle_group_ids"),
+      new Set(liveGroups.map((g) => g.id)),
+    );
+    if (groupIds === null) {
+      return fail(400, { error: "Bundle groups must be live, non-quarantine group IDs" });
+    }
+
+    const existing = db.prepare("SELECT id, slug FROM lineup_bundles WHERE id = ?").get(id) as
+      | { id: string; slug: string }
+      | undefined;
+    const enabled = enabledRaw === "true" ? 1 : 0;
+    try {
+      if (existing) {
+        if (existing.slug !== slug) {
+          return fail(400, { error: "Bundle id and slug are immutable" });
+        }
+        db.prepare(
+          "UPDATE lineup_bundles SET display_name = ?, enabled = ?, group_ids = ?, updated_at = datetime('now') WHERE id = ?",
+        ).run(displayName, enabled, JSON.stringify(groupIds), id);
+      } else {
+        db.prepare(
+          "INSERT INTO lineup_bundles (id, slug, display_name, enabled, group_ids) VALUES (?, ?, ?, ?, ?)",
+        ).run(id, slug, displayName, enabled, JSON.stringify(groupIds));
+      }
+    } catch {
+      return fail(400, { error: "Bundle id or slug already exists" });
+    }
+
+    await setConfig(LINEUP_BUNDLE_CATALOG_VERSION_KEY, String(version));
+    invalidateConfigCache();
+    appendAuditLog({
+      actor: locals.admin?.username ?? "unknown",
+      action: AuditAction.CONFIG_CHANGED,
+      detail: {
+        section: "lineup_bundle_catalog",
+        bundle_id: id,
+        operation: existing ? "updated" : "created",
+        enabled: enabled === 1,
+        group_count: groupIds.length,
+        version,
+      },
+      ipAddress: getClientAddress(),
+    });
+    return { success: true, message: existing ? "Lineup bundle saved." : "Lineup bundle created." };
+  },
   updateDefaultProvisioning: async (event) => {
     await requireAdmin(event);
     const { request, locals, getClientAddress } = event;

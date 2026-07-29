@@ -18,13 +18,13 @@ test.describe("Admin users page", () => {
   });
 
   test("shows user count", async ({ page }) => {
-    await expect(page.getByText(/\d+ users/)).toBeVisible();
+    await expect(page.getByText("0 users", { exact: true })).toBeVisible();
   });
 
   test("filter controls are present", async ({ page }) => {
     await expect(page.getByText("All statuses")).toBeVisible();
     await expect(page.getByText("All modes")).toBeVisible();
-    await expect(page.getByPlaceholder("Search username...")).toBeVisible();
+    await expect(page.getByRole("textbox", { name: "Search users by username…" })).toBeVisible();
   });
 
   test("users table has correct column headers", async ({ page }) => {
@@ -40,7 +40,7 @@ test.describe("Admin users page", () => {
   });
 
   test("search input accepts text", async ({ page }) => {
-    const searchInput = page.getByPlaceholder("Search username...");
+    const searchInput = page.getByRole("textbox", { name: "Search users by username…" });
     await searchInput.fill("testuser");
     await expect(searchInput).toHaveValue("testuser");
   });

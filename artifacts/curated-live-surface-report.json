@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "kind": "black-box-api-receipt",
+  "surface": "public-xc-xmltv-ingress",
+  "authorized": {
+    "m3uStatus": 200,
+    "m3uChannels": 24,
+    "xmltvStatus": 200,
+    "xmltvChannels": 24,
+    "liveApiStatus": 200,
+    "liveStreams": 24,
+    "categoryStatus": 200,
+    "categories": 5,
+    "vodCategories": 0,
+    "logoStatus": 200,
+    "logoBytes": 1870
+  },
+  "negative": {
+    "noCredentialStatus": 401,
+    "badCredentialStatus": 404,
+    "standardOutputStatus": 403,
+    "hdhrStatus": 403,
+    "moviePathStatus": 403,
+    "publicLivePath": "disabled_due_credential_log_blocker",
+    "unauthorizedCategoryStatus": 200,
+    "unauthorizedCategoryStreams": 0
+  },
+  "assertions": {
+    "profileScopedCountsAgree": true,
+    "vodEmpty": true,
+    "unauthorizedCategoryEmpty": true,
+    "logoCredentialFree": true,
+    "revokedAllDenied": true
+  },
+  "revocation": {
+    "player": 404,
+    "m3u": 404,
+    "xmltv": 404,
+    "localInactive": true,
+    "remoteUserDeleted": true
+  }
+}

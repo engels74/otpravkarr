@@ -1,5 +1,5 @@
 import { Database } from "bun:sqlite";
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { env } from "$env/dynamic/private";
 import { runMigrations } from "./migrate";
@@ -15,7 +15,13 @@ let instance: Database | null = null;
 export function getDb(): Database {
   if (instance) return instance;
 
-  const dbPath = env.DATABASE_PATH?.trim() || DEFAULT_DATABASE_PATH;
+  const configuredPath = env.DATABASE_PATH?.trim();
+  const dbPath = configuredPath || DEFAULT_DATABASE_PATH;
+  if (configuredPath && process.env.NODE_ENV === "production" && !existsSync(dbPath)) {
+    throw new Error(
+      `Configured DATABASE_PATH does not exist; refusing to create a replacement database at ${dbPath}`,
+    );
+  }
   instance = createDatabase(dbPath);
   return instance;
 }

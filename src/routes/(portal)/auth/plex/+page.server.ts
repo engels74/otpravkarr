@@ -1,5 +1,6 @@
 import { error, fail, redirect } from "@sveltejs/kit";
 import { provisionUser } from "$lib/bridge/provisioner";
+import { enforceLineupPolicySubscription } from "$lib/bridge/subscriptions";
 import { getConfig } from "$lib/db/repositories/config";
 import { createSession, deleteSession } from "$lib/db/repositories/sessions";
 import { getUserMappingByPlexId, updateLastAccessed } from "$lib/db/repositories/users";
@@ -35,7 +36,10 @@ import {
 import {
   computeOfferedGroups,
   defaultSelectedGroupIds,
+  getLineupBundleCatalog,
+  getLineupPolicySettings,
   getSubscriptionDefaults,
+  resolveLineupPolicy,
 } from "$lib/server/subscription-config";
 import { isTransientResultError, retryResult } from "$lib/utils/retry";
 import type { Actions, PageServerLoad } from "./$types";
@@ -128,17 +132,40 @@ async function provisionForPortal(
   groupIds: number[],
   clientAddress: string,
 ): Promise<SuccessfulProvisionResult | null> {
+  const [groupsResult, settings, catalog] = await Promise.all([
+    retryResult(() => listChannelGroups(client), isTransientResultError),
+    getLineupPolicySettings(),
+    getLineupBundleCatalog(),
+  ]);
+  if (!groupsResult.ok) return null;
+  const resolution = resolveLineupPolicy({
+    user: {
+      lineup_policy_override: null,
+      selected_bundle_ids: "[]",
+      selected_approved_group_ids: JSON.stringify(groupIds),
+    },
+    settings,
+    catalog,
+    liveGroups: groupsResult.data,
+  });
   const result = await provisionUser(
     client,
-    { plexIdentity: identity, mode, groupIds },
+    { plexIdentity: identity, mode, groupIds: resolution.effectiveGroupIds },
     { actor: identity.username, ipAddress: clientAddress },
   );
-
   if (result.status === "failed") {
     console.error("[auth/plex] Provisioning failed for Plex user:", result.error);
     return null;
   }
-
+  if (result.status !== "already_exists") {
+    const enforced = await enforceLineupPolicySubscription(
+      client,
+      result.mapping.id,
+      resolution.policy === "approved_selection" ? { selectedApprovedGroupIds: groupIds } : {},
+      { actor: identity.username, ipAddress: clientAddress },
+    );
+    if (!enforced.ok) return null;
+  }
   return result;
 }
 
@@ -293,14 +320,21 @@ export const load: PageServerLoad = async ({ cookies, getClientAddress }) => {
   }
 
   const client = await buildDispatcharrClient();
-  const { groups: offeredGroups, allowSelfSelect } = await fetchOfferedGroups(client);
+  const [{ groups: offeredGroups, allowSelfSelect }, policySettings] = await Promise.all([
+    fetchOfferedGroups(client),
+    getLineupPolicySettings(),
+  ]);
   const defaultGroupIds = defaultSelectedGroupIds(offeredGroups);
 
-  // Mandatory pre-credential group picker for brand-new friends who are allowed
-  // to self-select and have something to choose from. Seal the verified identity
-  // and hand off to the picker; provisioning + credentials happen on confirm.
+  // The group picker is meaningful only for approved-selection policy. Core-plus-
+  // bundles users choose stable bundle IDs later on the subscription page.
   const isNewUser = existingMapping == null;
-  if (isNewUser && allowSelfSelect && offeredGroups.length > 0) {
+  if (
+    isNewUser &&
+    policySettings.defaultPolicy === "approved_selection" &&
+    allowSelfSelect &&
+    offeredGroups.length > 0
+  ) {
     cookies.set(ONBOARDING_COOKIE_NAME, await sealOnboardingIdentity(identity), {
       ...ONBOARDING_COOKIE_OPTIONS,
     });
@@ -316,7 +350,7 @@ export const load: PageServerLoad = async ({ cookies, getClientAddress }) => {
   // offer): provision immediately with the admin defaults and reveal credentials.
   cookies.delete(ONBOARDING_COOKIE_NAME, OAUTH_COOKIE_DELETE_OPTIONS);
   const mode = await resolveProvisioningMode();
-  return provisionAndRedirect(cookies, client, identity, mode, defaultGroupIds, getClientAddress());
+  return provisionAndRedirect(cookies, client, identity, mode, [], getClientAddress());
 };
 
 export const actions: Actions = {

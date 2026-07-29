@@ -51,7 +51,7 @@ test.describe("Admin dashboard", () => {
     await expect(page.getByRole("link", { name: "Dashboard" })).toBeVisible();
     await expect(page.getByRole("link", { name: "Users" })).toBeVisible();
     await expect(page.getByRole("link", { name: "Settings" })).toBeVisible();
-    await expect(page.getByRole("link", { name: "Audit Log" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Audit Log", exact: true })).toBeVisible();
   });
 
   test("sidebar shows admin username", async ({ page }) => {
@@ -74,7 +74,7 @@ test.describe("Admin dashboard", () => {
   });
 
   test("navigation to /audit works", async ({ page }) => {
-    await page.getByRole("link", { name: "Audit Log" }).click();
+    await page.getByRole("link", { name: "Audit Log", exact: true }).click();
     await expect(page).toHaveURL(/\/audit/);
   });
 });

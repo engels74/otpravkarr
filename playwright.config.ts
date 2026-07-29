@@ -25,6 +25,10 @@ export default defineConfig({
   },
   projects: [
     {
+      name: "setup-wizard-fresh",
+      testMatch: "setup-wizard-fresh.spec.ts",
+    },
+    {
       name: "setup",
       testMatch: "setup.spec.ts",
     },

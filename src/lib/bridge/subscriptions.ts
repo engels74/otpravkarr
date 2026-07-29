@@ -1,16 +1,17 @@
 import { appendAuditLog } from "$lib/db/repositories/audit";
-import {
-  EMPTY_PROFILE_GROUP_ID,
-  getGroupProfile,
-  getGroupProfilesByGroupIds,
-} from "$lib/db/repositories/channel-group-profiles";
 import { getUserMappingById, updateUserMapping } from "$lib/db/repositories/users";
+import type { LineupPolicy } from "$lib/db/types";
 import { AuditAction } from "$lib/db/types";
 import type { DispatcharrClient } from "$lib/dispatcharr/client";
 import { listChannelGroups } from "$lib/dispatcharr/endpoints/channel-groups";
 import { listAllChannels } from "$lib/dispatcharr/endpoints/channels";
 import { findUserByUsername, getUser, updateUser } from "$lib/dispatcharr/endpoints/users";
 import type { DispatcharrResult } from "$lib/dispatcharr/types";
+import {
+  getLineupBundleCatalog,
+  getLineupPolicySettings,
+  resolveLineupPolicy,
+} from "$lib/server/subscription-config";
 import { withDeadline } from "$lib/utils/deadline";
 import { isTransientResultError, retryResult } from "$lib/utils/retry";
 import { buildGroupChannelMap, ensureEmptyProfile, reconcileGroupProfile } from "./group-profiles";
@@ -36,6 +37,95 @@ export interface GroupSubscriptionOutcome {
   profileIds: number[];
   /** The normalized, validated group IDs that were enforced. */
   groupIds: number[];
+}
+
+export interface LineupPolicyIntentUpdate {
+  lineupPolicyOverride?: LineupPolicy | null;
+  selectedBundleIds?: string[];
+  selectedApprovedGroupIds?: number[];
+}
+
+/**
+ * Persist a subscriber's durable lineup intent, then derive and enforce the
+ * current least-privilege entitlement. Materialized Dispatcharr group IDs are
+ * deliberately never read as selection input here.
+ */
+export async function enforceLineupPolicySubscription(
+  client: DispatcharrClient,
+  mappingId: number,
+  intent: LineupPolicyIntentUpdate = {},
+  actorContext?: ActorContext,
+): Promise<DispatcharrResult<GroupSubscriptionOutcome>> {
+  const updates: Partial<
+    Pick<
+      NonNullable<ReturnType<typeof getUserMappingById>>,
+      "lineup_policy_override" | "selected_bundle_ids" | "selected_approved_group_ids"
+    >
+  > = {};
+  if ("lineupPolicyOverride" in intent)
+    updates.lineup_policy_override = intent.lineupPolicyOverride;
+  if ("selectedBundleIds" in intent)
+    updates.selected_bundle_ids = JSON.stringify(intent.selectedBundleIds);
+  if ("selectedApprovedGroupIds" in intent) {
+    updates.selected_approved_group_ids = JSON.stringify(intent.selectedApprovedGroupIds);
+  }
+
+  try {
+    if (Object.keys(updates).length > 0) updateUserMapping(mappingId, updates);
+  } catch (err) {
+    return {
+      ok: false,
+      error: "server_error",
+      message: `Failed to retain lineup intent: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+
+  let mapping: NonNullable<ReturnType<typeof getUserMappingById>>;
+  let groupsResult: Awaited<ReturnType<typeof listChannelGroups>>;
+  let settings: Awaited<ReturnType<typeof getLineupPolicySettings>>;
+  let catalog: Awaited<ReturnType<typeof getLineupBundleCatalog>>;
+  try {
+    const loadedMapping = getUserMappingById(mappingId);
+    if (!loadedMapping) {
+      return { ok: false, error: "not_found", message: `User mapping ${mappingId} not found` };
+    }
+    mapping = loadedMapping;
+    [groupsResult, settings, catalog] = await Promise.all([
+      retryResult(() => listChannelGroups(client), isTransientResultError),
+      getLineupPolicySettings(),
+      getLineupBundleCatalog(),
+    ]);
+  } catch (err) {
+    return {
+      ok: false,
+      error: "server_error",
+      message: `Failed to resolve lineup policy: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+  if (!groupsResult.ok) {
+    return { ok: false, error: groupsResult.error, message: groupsResult.message };
+  }
+
+  const resolution = resolveLineupPolicy({
+    user: mapping,
+    settings,
+    catalog,
+    liveGroups: groupsResult.data,
+  });
+  try {
+    return await applyGroupSubscription(
+      client,
+      mappingId,
+      resolution.effectiveGroupIds,
+      actorContext,
+    );
+  } catch (err) {
+    return {
+      ok: false,
+      error: "server_error",
+      message: `Failed to enforce lineup policy: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
 }
 
 /**
@@ -117,6 +207,14 @@ export async function applyGroupSubscription(
     };
   }
   const dispatcharrUserId = mapping.dispatcharr_user_id;
+  const requestedGroupIds = [...new Set(groupIds)].sort((a, b) => a - b);
+  if (requestedGroupIds.some((id) => !Number.isSafeInteger(id) || id <= 0)) {
+    return {
+      ok: false,
+      error: "validation_error",
+      message: "Group IDs must be positive safe integers",
+    };
+  }
 
   // Snapshot the pre-write group assignment for the audit trail. `mapping` is
   // read once above and never re-read, so this is the true "before" state even
@@ -142,57 +240,37 @@ export async function applyGroupSubscription(
     };
   }
 
-  // Live channel + group state is the source of truth.
-  const requestedGroupIds = [...new Set(groupIds)].sort((a, b) => a - b);
+  // Live channel + group state is the source of truth. Profiles are always
+  // reconciled before assignment; a local profile mapping is not proof that the
+  // remote profile still exists or still has the intended membership.
   const resolvedProfileIds: number[] = [];
   if (requestedGroupIds.length === 0) {
-    const cachedEmptyProfileId = getGroupProfile(EMPTY_PROFILE_GROUP_ID)?.profile_id ?? null;
-    if (cachedEmptyProfileId != null) {
-      resolvedProfileIds.push(cachedEmptyProfileId);
-    } else {
-      const empty = await ensureEmptyProfile(client);
-      if (!empty.ok) return { ok: false, error: empty.error, message: empty.message };
-      resolvedProfileIds.push(empty.data);
-    }
+    const empty = await ensureEmptyProfile(client);
+    if (!empty.ok) return { ok: false, error: empty.error, message: empty.message };
+    resolvedProfileIds.push(empty.data);
   } else {
-    const cachedProfiles = getGroupProfilesByGroupIds(requestedGroupIds);
-    const cachedProfileIds: number[] = [];
-    for (const groupId of requestedGroupIds) {
-      const cached = cachedProfiles.get(groupId);
-      if (cached) cachedProfileIds.push(cached.profile_id);
+    const channelsResult = await retryResult(() => listAllChannels(client), isTransientResultError);
+    if (!channelsResult.ok) {
+      return { ok: false, error: channelsResult.error, message: channelsResult.message };
     }
-    if (cachedProfileIds.length === requestedGroupIds.length) {
-      resolvedProfileIds.push(...cachedProfileIds);
-    } else {
-      const channelsResult = await retryResult(
-        () => listAllChannels(client),
-        isTransientResultError,
-      );
-      if (!channelsResult.ok) {
-        return { ok: false, error: channelsResult.error, message: channelsResult.message };
-      }
-      const groupChannelMap = buildGroupChannelMap(channelsResult.data);
+    const groupChannelMap = buildGroupChannelMap(channelsResult.data);
 
-      const groupsResult = await retryResult(
-        () => listChannelGroups(client),
-        isTransientResultError,
-      );
-      if (!groupsResult.ok) {
-        return { ok: false, error: groupsResult.error, message: groupsResult.message };
-      }
-      const groupNameById = new Map(groupsResult.data.map((g) => [g.id, g.name] as const));
+    const groupsResult = await retryResult(() => listChannelGroups(client), isTransientResultError);
+    if (!groupsResult.ok) {
+      return { ok: false, error: groupsResult.error, message: groupsResult.message };
+    }
+    const groupNameById = new Map(groupsResult.data.map((g) => [g.id, g.name] as const));
 
-      if (!requestedGroupIds.every((id) => groupNameById.has(id))) {
-        return { ok: false, error: "validation_error", message: "Invalid group IDs" };
-      }
+    if (!requestedGroupIds.every((id) => groupNameById.has(id))) {
+      return { ok: false, error: "validation_error", message: "Invalid group IDs" };
+    }
 
-      for (const groupId of requestedGroupIds) {
-        const groupName = groupNameById.get(groupId) ?? `group ${groupId}`;
-        const desired = new Set(groupChannelMap.get(groupId) ?? []);
-        const profile = await reconcileGroupProfile(client, groupId, groupName, desired);
-        if (!profile.ok) return { ok: false, error: profile.error, message: profile.message };
-        resolvedProfileIds.push(profile.data);
-      }
+    for (const groupId of requestedGroupIds) {
+      const groupName = groupNameById.get(groupId) ?? `group ${groupId}`;
+      const desired = new Set(groupChannelMap.get(groupId) ?? []);
+      const profile = await reconcileGroupProfile(client, groupId, groupName, desired);
+      if (!profile.ok) return { ok: false, error: profile.error, message: profile.message };
+      resolvedProfileIds.push(profile.data);
     }
   }
 

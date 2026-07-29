@@ -4,6 +4,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({
   configValues: new Map<string, string>(),
+  bundles: new Map<
+    string,
+    { id: string; slug: string; display_name: string; enabled: number; group_ids: string }
+  >(),
 }));
 
 type MockHealthResult =
@@ -42,6 +46,50 @@ const mocks = vi.hoisted(() => {
     createHealthEndpoints: vi.fn(() => ({
       checkHealth,
     })),
+    listChannelGroups: vi.fn(async () => ({
+      ok: true as const,
+      data: [
+        { id: 1, name: "News", channel_count: 10 },
+        { id: 2, name: "Sports", channel_count: 20 },
+        { id: 3, name: "Graveyard", channel_count: 0 },
+      ],
+    })),
+    db: {
+      prepare: vi.fn((sql: string) => ({
+        get: (id: string) => {
+          if (!sql.startsWith("SELECT id, slug")) return undefined;
+          const bundle = state.bundles.get(id);
+          return bundle ? { id: bundle.id, slug: bundle.slug } : undefined;
+        },
+        run: (...values: unknown[]) => {
+          if (sql.startsWith("INSERT INTO lineup_bundles")) {
+            const [id, slug, displayName, enabled, groupIds] = values as [
+              string,
+              string,
+              string,
+              number,
+              string,
+            ];
+            if ([...state.bundles.values()].some((bundle) => bundle.slug === slug)) {
+              throw new Error("unique");
+            }
+            state.bundles.set(id, {
+              id,
+              slug,
+              display_name: displayName,
+              enabled,
+              group_ids: groupIds,
+            });
+          }
+          if (sql.startsWith("UPDATE lineup_bundles")) {
+            const [displayName, enabled, groupIds, id] = values as [string, number, string, string];
+            const bundle = state.bundles.get(id);
+            if (bundle)
+              Object.assign(bundle, { display_name: displayName, enabled, group_ids: groupIds });
+          }
+        },
+      })),
+    },
     DispatcharrClient: vi.fn(function (
       this: { url: string; apiKey: string },
       url: string,
@@ -63,6 +111,13 @@ vi.mock("$lib/db/repositories/config", () => ({
   getConfig: mocks.getConfig,
   setConfig: mocks.setConfig,
   invalidateConfigCache: mocks.invalidateConfigCache,
+}));
+vi.mock("$lib/db/connection", () => ({
+  db: mocks.db,
+}));
+
+vi.mock("$lib/dispatcharr/endpoints/channel-groups", () => ({
+  listChannelGroups: mocks.listChannelGroups,
 }));
 
 vi.mock("$lib/db/repositories/audit", () => ({
@@ -108,6 +163,7 @@ vi.mock("$lib/scheduler/runner", () => ({
 
 function resetStateAndMocks() {
   state.configValues.clear();
+  state.bundles.clear();
   mocks.requireAdmin.mockClear();
   mocks.getConfig.mockClear();
   mocks.setConfig.mockClear();
@@ -118,6 +174,8 @@ function resetStateAndMocks() {
   mocks.validateServerToken.mockClear();
   mocks.checkHealth.mockClear();
   mocks.createHealthEndpoints.mockClear();
+  mocks.listChannelGroups.mockClear();
+  mocks.db.prepare.mockClear();
   mocks.DispatcharrClient.mockClear();
 }
 
@@ -138,6 +196,85 @@ function createActionEvent(body: FormData, origin?: string) {
 describe("admin settings actions", () => {
   beforeEach(() => {
     resetStateAndMocks();
+  });
+  it("fails closed for invalid lineup policies and non-live group IDs", async () => {
+    const { actions } = await import("./+page.server");
+    const updateLineupPolicy = actions.updateLineupPolicy;
+    if (!updateLineupPolicy) throw new Error("updateLineupPolicy action is undefined");
+
+    const body = new FormData();
+    body.set("lineup_policy_default", "all_groups");
+    body.set("lineup_fixed_group_ids", "[]");
+    body.set("lineup_core_group_ids", "[]");
+    body.set("default_selectable_groups", "[]");
+    const invalidPolicy = await updateLineupPolicy(
+      createActionEvent(body) as unknown as Parameters<typeof updateLineupPolicy>[0],
+    );
+    expect(invalidPolicy).toMatchObject({ status: 400, data: { error: "Invalid lineup policy" } });
+
+    state.configValues.set("dispatcharr_url", "http://dispatcharr");
+    state.configValues.set("dispatcharr_api_key", "key");
+    body.set("lineup_policy_default", "fixed");
+    body.set("lineup_fixed_group_ids", "[3]");
+    const invalidGroup = await updateLineupPolicy(
+      createActionEvent(body) as unknown as Parameters<typeof updateLineupPolicy>[0],
+    );
+    expect(invalidGroup).toMatchObject({
+      status: 400,
+      data: { error: "Lineup groups must be live, non-quarantine group IDs" },
+    });
+    expect(mocks.setConfig).not.toHaveBeenCalledWith("lineup_policy_default", "fixed");
+  });
+
+  it("persists validated lineup policy groups without widening the approved set", async () => {
+    const { actions } = await import("./+page.server");
+    const updateLineupPolicy = actions.updateLineupPolicy;
+    if (!updateLineupPolicy) throw new Error("updateLineupPolicy action is undefined");
+    state.configValues.set("dispatcharr_url", "http://dispatcharr");
+    state.configValues.set("dispatcharr_api_key", "key");
+
+    const body = new FormData();
+    body.set("lineup_policy_default", "core_bundles");
+    body.set("lineup_fixed_group_ids", "[2,1]");
+    body.set("lineup_core_group_ids", "[1]");
+    body.set("default_selectable_groups", "[2]");
+    const result = await updateLineupPolicy(
+      createActionEvent(body) as unknown as Parameters<typeof updateLineupPolicy>[0],
+    );
+
+    expect(result).toMatchObject({ success: true });
+    expect(state.configValues.get("lineup_fixed_group_ids")).toBe("[2,1]");
+    expect(state.configValues.get("lineup_core_group_ids")).toBe("[1]");
+    expect(state.configValues.get("default_selectable_groups")).toBe("[2]");
+    expect(mocks.appendAuditLog).toHaveBeenCalledWith(
+      expect.objectContaining({ detail: expect.objectContaining({ section: "lineup_policy" }) }),
+    );
+  });
+
+  it("creates a validated stable lineup bundle", async () => {
+    const { actions } = await import("./+page.server");
+    const saveLineupBundle = actions.saveLineupBundle;
+    if (!saveLineupBundle) throw new Error("saveLineupBundle action is undefined");
+    state.configValues.set("dispatcharr_url", "http://dispatcharr");
+    state.configValues.set("dispatcharr_api_key", "key");
+
+    const body = new FormData();
+    body.set("bundle_id", "sports-v1");
+    body.set("bundle_slug", "sports");
+    body.set("bundle_display_name", "Sports");
+    body.set("bundle_enabled", "true");
+    body.set("bundle_group_ids", "[2,1]");
+    body.set("bundle_catalog_version", "2");
+    const result = await saveLineupBundle(
+      createActionEvent(body) as unknown as Parameters<typeof saveLineupBundle>[0],
+    );
+
+    expect(result).toMatchObject({ success: true });
+    expect(state.bundles.get("sports-v1")).toMatchObject({
+      slug: "sports",
+      group_ids: "[2,1]",
+    });
+    expect(state.configValues.get("lineup_bundle_catalog_version")).toBe("2");
   });
 
   it("rejects invalid origins in updateSecurity", async () => {

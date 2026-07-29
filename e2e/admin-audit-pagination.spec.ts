@@ -34,6 +34,8 @@ test.describe("Admin audit pagination", () => {
   test("After-date filter button reflects URL state on load", async ({ page }) => {
     await page.goto("/audit?after=2026-05-01");
 
-    await expect(page.getByRole("button", { name: /2026-05-01/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Filter after date" })).toContainText(
+      "2026-05-01",
+    );
   });
 });

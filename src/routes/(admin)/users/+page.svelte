@@ -21,13 +21,24 @@ import * as Dialog from "$lib/components/ui/dialog";
 import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
 import { Separator } from "$lib/components/ui/separator";
 import * as Table from "$lib/components/ui/table";
-import type { ProvisioningMode, UserMapping } from "$lib/db/types";
+import type { LineupPolicy, UserMapping } from "$lib/db/types";
 
 import { normalizeSqliteDatetime } from "$lib/utils/datetime";
 import { copyOtpToClipboard } from "./otp-clipboard";
 
 type ModeFilter = "all" | "automatic" | "self-managed" | "self_managed" | "staff";
 type EnhanceUpdate = (options?: { reset?: boolean; invalidateAll?: boolean }) => Promise<void>;
+
+interface PolicyResolution {
+  policy: LineupPolicy;
+  effectiveGroupIds: number[];
+  selectedBundleIds: string[];
+  selectedApprovedGroupIds: number[];
+  materializedGroupIds: number[];
+  assignmentDrift: boolean;
+  orphanBundleIds: string[];
+  orphanApprovedGroupIds: number[];
+}
 
 interface Props {
   data: {
@@ -36,6 +47,14 @@ interface Props {
     profiles: { id: number; name: string }[];
     driftByMappingId: Record<number, boolean>;
     filters: { status: string; mode: string; search: string };
+    policySettings: {
+      defaultPolicy: LineupPolicy;
+      fixedGroupIds: number[];
+      coreGroupIds: number[];
+      approvedGroupIds: number[] | null;
+    };
+    lineupBundles: { id: string; slug: string; displayName: string; groupIds: number[] }[];
+    policyByMappingId: Record<number, PolicyResolution>;
   };
 }
 
@@ -59,6 +78,8 @@ let deleteDialogOpen = $state(false);
 let selectedMapping = $state<UserMapping | null>(null);
 let selectedGroupSet = $state(new Set<number>());
 let lockEnabled = $state(false);
+let selectedPolicyOverride = $state<LineupPolicy | "">("");
+let selectedBundleSet = $state(new Set<string>());
 // Inline confirmation shown inside the still-open Change Group dialog after a
 // successful lock save. The success toast fires too, but the dialog can inert the
 // toaster's aria-live region, so this in-dialog role=status guarantees a visible +
@@ -79,6 +100,11 @@ let selectedMappingGroupCount = $derived.by(() => {
     return 0;
   }
 });
+let approvedGroups = $derived(
+  data.policySettings.approvedGroupIds == null
+    ? []
+    : data.groups.filter((group) => data.policySettings.approvedGroupIds?.includes(group.id)),
+);
 let disablingMapping = $state<UserMapping | null>(null);
 let rotatingMapping = $state<UserMapping | null>(null);
 let deletingMapping = $state<UserMapping | null>(null);
@@ -194,19 +220,26 @@ function canDeleteLocalMapping(m: UserMapping): boolean {
 
 function openGroupDialog(m: UserMapping) {
   selectedMapping = m;
-  let ids: number[] = [];
-  try {
-    const parsed: unknown = JSON.parse(m.dispatcharr_group_ids);
-    if (Array.isArray(parsed)) {
-      ids = parsed.filter((v): v is number => typeof v === "number");
-    }
-  } catch {
-    ids = [];
-  }
-  selectedGroupSet = new Set(ids);
+  const policy = data.policyByMappingId[m.id];
+  selectedGroupSet = new Set(
+    policy?.selectedApprovedGroupIds ?? parseGroupIds(m.dispatcharr_group_ids),
+  );
+  selectedPolicyOverride = m.lineup_policy_override ?? "";
+  selectedBundleSet = new Set(policy?.selectedBundleIds ?? []);
   lockEnabled = m.group_selection_locked === 1;
   lockSaved = false;
   groupDialogOpen = true;
+}
+
+function parseGroupIds(raw: string): number[] {
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed)
+      ? parsed.filter((value): value is number => typeof value === "number")
+      : [];
+  } catch {
+    return [];
+  }
 }
 
 function openProfileDialog(m: UserMapping) {
@@ -586,6 +619,7 @@ async function copyOneTimePassword() {
           <Table.Head class="pl-4">User</Table.Head>
           <Table.Head class="hidden sm:table-cell">Dispatcharr</Table.Head>
           <Table.Head>Mode</Table.Head>
+          <Table.Head class="hidden md:table-cell">Policy</Table.Head>
           <Table.Head>Status</Table.Head>
           <Table.Head class="hidden whitespace-nowrap lg:table-cell">Last Accessed</Table.Head>
           <Table.Head class="w-[50px]"><span class="sr-only">Actions</span></Table.Head>
@@ -594,7 +628,7 @@ async function copyOneTimePassword() {
       <Table.Body>
         {#if mappings.length === 0}
           <Table.Row>
-            <Table.Cell colspan={6} class="py-8 text-center text-sm text-muted-foreground">
+            <Table.Cell colspan={7} class="py-8 text-center text-sm text-muted-foreground">
               No users found.
             </Table.Cell>
           </Table.Row>
@@ -618,6 +652,11 @@ async function copyOneTimePassword() {
               </Table.Cell>
               <Table.Cell>
                 <StatusBadge mode={m.provisioning_mode} />
+              </Table.Cell>
+              <Table.Cell class="hidden md:table-cell">
+                <span class="text-xs font-medium">
+                  {data.policyByMappingId[m.id]?.policy ?? data.policySettings.defaultPolicy}
+                </span>
               </Table.Cell>
               <Table.Cell>
                 <div class="flex items-center gap-1.5">
@@ -752,6 +791,7 @@ async function copyOneTimePassword() {
           </Button>
         </Dialog.Footer>
       {:else}
+        {@const policy = data.policyByMappingId[selectedMapping.id]}
         <!-- Per-user lock toggle -->
         <form
           method="POST"
@@ -787,21 +827,78 @@ async function copyOneTimePassword() {
 
         <form method="POST" action="?/changeGroup" use:enhance={makeEnhanceHandler()} class="min-w-0">
           <input type="hidden" name="id" value={selectedMapping.id} />
+          <input type="hidden" name="lineup_policy_override" value={selectedPolicyOverride} />
+          <input type="hidden" name="selected_bundle_ids" value={JSON.stringify([...selectedBundleSet])} />
           <input type="hidden" name="group_ids" value={JSON.stringify([...selectedGroupSet])} />
-          {#if selectedGroupSet.size === 0}
-            <p
-              class="mb-2 rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-xs text-destructive"
+
+          <div class="mb-3 grid gap-2 rounded-md border border-border p-3 text-xs">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <span class="font-medium">Effective policy: {policy?.policy ?? data.policySettings.defaultPolicy}</span>
+              {#if policy?.assignmentDrift}
+                <span class="text-amber-700 dark:text-amber-400">Assignment differs from policy</span>
+              {/if}
+            </div>
+            <span class="text-muted-foreground">
+              Effective groups: {(policy?.effectiveGroupIds ?? []).join(", ") || "none"}
+            </span>
+            {#if policy && (policy.orphanBundleIds.length > 0 || policy.orphanApprovedGroupIds.length > 0)}
+              <span class="text-amber-700 dark:text-amber-400">
+                Unapplied intent: {[...policy.orphanBundleIds, ...policy.orphanApprovedGroupIds].join(", ")}
+              </span>
+            {/if}
+          </div>
+
+          <label class="grid gap-1.5 text-sm">
+            <span class="font-medium">Policy override</span>
+            <select
+              bind:value={selectedPolicyOverride}
+              class="border-input dark:bg-input/30 h-9 rounded-md border bg-transparent px-2 text-sm"
             >
+              <option value="">Use instance default ({data.policySettings.defaultPolicy})</option>
+              <option value="fixed">Fixed</option>
+              <option value="core_bundles">Core + bundles</option>
+              <option value="approved_selection">Approved selection</option>
+            </select>
+          </label>
+
+          <fieldset class="mt-3 grid gap-1.5">
+            <legend class="text-sm font-medium">Enabled bundles</legend>
+            {#if data.lineupBundles.length === 0}
+              <p class="text-xs text-muted-foreground">No enabled bundles.</p>
+            {:else}
+              {#each data.lineupBundles as bundle (bundle.id)}
+                <label class="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={selectedBundleSet.has(bundle.id)}
+                    onchange={(event) => {
+                      const next = new Set(selectedBundleSet);
+                      if (event.currentTarget.checked) next.add(bundle.id);
+                      else next.delete(bundle.id);
+                      selectedBundleSet = next;
+                    }}
+                  />
+                  <span>{bundle.displayName}</span>
+                </label>
+              {/each}
+            {/if}
+          </fieldset>
+
+          <fieldset class="mt-3 grid gap-1.5">
+            <legend class="text-sm font-medium">Approved groups</legend>
+            {#if data.policySettings.approvedGroupIds == null}
+              <p class="text-xs text-destructive">No approved groups are configured.</p>
+            {:else}
+              <GroupPicker groups={approvedGroups} bind:selected={selectedGroupSet} scrollList={false} />
+            {/if}
+          </fieldset>
+
+          {#if selectedGroupSet.size === 0 && (selectedPolicyOverride === "approved_selection" || (selectedPolicyOverride === "" && policy?.policy === "approved_selection"))}
+            <p class="mt-2 rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-xs text-destructive">
               Zero groups means this user will see no channels.
             </p>
           {/if}
-          <!-- scrollList=false: the picker grows and the dialog is the single
-               scroll region, so the sticky footer below keeps Save reachable at
-               390px without JS scrolling (ISSUE-001). Only this call site. -->
-          <div class="py-2">
-            <GroupPicker groups={data.groups} bind:selected={selectedGroupSet} scrollList={false} />
-          </div>
-          <Dialog.Footer class="sticky bottom-0 z-10 bg-popover">
+          <Dialog.Footer class="sticky bottom-0 z-10 mt-3 bg-popover">
             <Button type="submit" disabled={submitting} size="sm">
               {submitting ? "Saving..." : "Save"}
             </Button>
@@ -896,6 +993,7 @@ async function copyOneTimePassword() {
     </Dialog.Header>
     {#if selectedMapping}
       {@const m = selectedMapping}
+      {@const policy = data.policyByMappingId[m.id]}
       <div class="grid gap-3 text-sm">
         <div class="grid grid-cols-[140px_1fr] gap-x-3 gap-y-2">
           <span class="text-muted-foreground">Mapping ID</span>
@@ -928,6 +1026,31 @@ async function copyOneTimePassword() {
 
           <span class="text-muted-foreground">Profile ID</span>
           <span class="font-mono">{m.dispatcharr_profile_id ?? "\u2014"}</span>
+          <span class="text-muted-foreground">Effective Policy</span>
+          <span>{policy?.policy ?? data.policySettings.defaultPolicy}</span>
+
+          <span class="text-muted-foreground">Policy Override</span>
+          <span>{m.lineup_policy_override ?? "Instance default"}</span>
+
+          <span class="text-muted-foreground">Bundles</span>
+          <span>{policy?.selectedBundleIds.join(", ") || "\u2014"}</span>
+
+          <span class="text-muted-foreground">Approved Groups</span>
+          <span>{policy?.selectedApprovedGroupIds.join(", ") || "\u2014"}</span>
+
+          <span class="text-muted-foreground">Effective Groups</span>
+          <span>{policy?.effectiveGroupIds.join(", ") || "\u2014"}</span>
+
+          {#if policy?.assignmentDrift || (policy?.orphanBundleIds.length ?? 0) > 0 || (policy?.orphanApprovedGroupIds.length ?? 0) > 0}
+            <span class="text-muted-foreground">Policy State</span>
+            <span class="text-amber-700 dark:text-amber-400">
+              {[
+                ...(policy?.assignmentDrift ? ["assignment drift"] : []),
+                ...(policy?.orphanBundleIds ?? []),
+                ...(policy?.orphanApprovedGroupIds ?? []),
+              ].join(", ")}
+            </span>
+          {/if}
         </div>
 
         <Separator />

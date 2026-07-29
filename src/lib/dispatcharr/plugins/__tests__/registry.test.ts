@@ -7,7 +7,7 @@ function plugin(overrides: Partial<DispatcharrPlugin> & { key: string }): Dispat
 }
 
 describe("getAdapterFor", () => {
-  it("resolves the adapter for each of the six known plugins", () => {
+  it("resolves the adapter for each of the seven known plugins", () => {
     for (const key of [
       "event_channel_managarr",
       "iptv_checker",
@@ -15,6 +15,7 @@ describe("getAdapterFor", () => {
       "channel_mapparr",
       "epg_janitor",
       "lineuparr",
+      "epgeditarr",
     ]) {
       expect(getAdapterFor(plugin({ key }))?.key).toBe(key);
     }
@@ -33,6 +34,56 @@ describe("describePlugins", () => {
       adapterKey: "iptv_checker",
     });
     expect(detected[0]?.advisories.length).toBeGreaterThan(0);
+  });
+
+  it("describes installed EPGeditARR state and its advisory-only ownership boundary", () => {
+    const detected = describePlugins(
+      [
+        plugin({
+          key: "epgeditarr",
+          name: "EPGeditARR",
+          version: "0.2.10",
+          loaded: true,
+          trusted: true,
+          update_available: true,
+          latest_version: "0.2.11",
+        }),
+      ],
+      [],
+    );
+
+    expect(detected[0]).toMatchObject({
+      key: "epgeditarr",
+      adapterKey: "epgeditarr",
+      version: "0.2.10",
+    });
+    expect(detected[0]?.description).toContain("installed");
+    expect(detected[0]?.description).toContain("enabled");
+    expect(detected[0]?.description).toContain("loaded");
+    expect(detected[0]?.description).toContain("trusted");
+    expect(detected[0]?.description).toContain("update available (0.2.11)");
+    expect(
+      detected[0]?.advisories.some((advisory) => advisory.message.includes("never changes")),
+    ).toBe(true);
+  });
+
+  it("warns when EPGeditARR is disabled", () => {
+    const detected = describePlugins(
+      [plugin({ key: "epgeditarr", enabled: false, loaded: false })],
+      [],
+    );
+
+    expect(detected[0]?.adapterKey).toBe("epgeditarr");
+    expect(detected[0]?.description).toContain("disabled");
+    expect(detected[0]?.advisories.some((advisory) => advisory.level === "warning")).toBe(true);
+  });
+
+  it("warns when EPGeditARR plugin files are missing", () => {
+    const detected = describePlugins([plugin({ key: "epgeditarr", missing: true })], []);
+
+    expect(detected[0]?.adapterKey).toBe("epgeditarr");
+    expect(detected[0]?.description).toContain("plugin files missing");
+    expect(detected[0]?.advisories.some((advisory) => advisory.level === "warning")).toBe(true);
   });
 
   it("falls back generically for unknown plugins (adapterKey null, no advisories)", () => {

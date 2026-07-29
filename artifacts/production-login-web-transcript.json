@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "kind": "web-automation-transcript",
+  "surface": "production-admin-login",
+  "steps": [
+    {
+      "action": "navigate",
+      "target": "https://oktv.cccp.ps/login",
+      "result": "loaded",
+      "title": "Login \u2014 otpravkarr"
+    },
+    {
+      "action": "observe",
+      "result": "username textbox, password textbox, and Sign In button present"
+    },
+    {
+      "action": "clear",
+      "target": "username/password fields",
+      "result": "empty; no credentials captured"
+    },
+    {
+      "action": "screenshot",
+      "result": "saved non-uniform credential-free viewport"
+    }
+  ],
+  "screenshot": {
+    "path": "artifacts/production-login-ui.png",
+    "sha256": "312fea5634d932778aa61906d9608be6c0e01cda4895237c51af0ab6928be5c8",
+    "bytes": 112606
+  },
+  "assertions": {
+    "productionOrigin": true,
+    "loginBoundaryRendered": true,
+    "credentialsPresent": false,
+    "traceOrVideoCaptured": false
+  }
+}

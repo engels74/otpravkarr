@@ -1,6 +1,7 @@
 import type { DispatcharrPlugin } from "../types";
 import { channelMapparrAdapter } from "./adapters/channel-mapparr";
 import { epgJanitorAdapter } from "./adapters/epg-janitor";
+import { epgeditarrAdapter } from "./adapters/epgeditarr";
 import { eventChannelManagarrAdapter } from "./adapters/event-channel-managarr";
 import { iptvCheckerAdapter } from "./adapters/iptv-checker";
 import { lineuparrAdapter } from "./adapters/lineuparr";
@@ -18,6 +19,7 @@ export const pluginAdapters: PluginAdapter[] = [
   streamMapparrAdapter,
   channelMapparrAdapter,
   epgJanitorAdapter,
+  epgeditarrAdapter,
   lineuparrAdapter,
 ];
 

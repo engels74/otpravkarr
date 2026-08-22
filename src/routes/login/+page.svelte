@@ -1,5 +1,5 @@
 <script lang="ts">
-import Loader2Icon from "lucide-svelte/icons/loader-2";
+import LoaderCircleIcon from "@lucide/svelte/icons/loader-circle";
 import { enhance } from "$app/forms";
 import * as Alert from "$lib/components/ui/alert";
 import { Button } from "$lib/components/ui/button";
@@ -143,7 +143,7 @@ function enhanceHandler() {
 
             <Button type="submit" disabled={submitting} class="cta-glow w-full">
               {#if submitting}
-                <Loader2Icon class="mr-2 h-4 w-4 animate-spin" />
+                <LoaderCircleIcon class="mr-2 h-4 w-4 animate-spin" />
                 Signing in…
               {:else}
                 Sign In

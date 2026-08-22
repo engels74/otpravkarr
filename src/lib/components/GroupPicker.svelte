@@ -1,5 +1,5 @@
 <script lang="ts">
-import SearchIcon from "lucide-svelte/icons/search";
+import SearchIcon from "@lucide/svelte/icons/search";
 import { Button } from "$lib/components/ui/button";
 import { Input } from "$lib/components/ui/input";
 

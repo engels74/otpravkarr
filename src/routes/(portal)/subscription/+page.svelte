@@ -1,7 +1,7 @@
 <script lang="ts">
-import CheckIcon from "lucide-svelte/icons/check";
-import LockIcon from "lucide-svelte/icons/lock";
-import TriangleAlertIcon from "lucide-svelte/icons/triangle-alert";
+import CheckIcon from "@lucide/svelte/icons/check";
+import LockIcon from "@lucide/svelte/icons/lock";
+import TriangleAlertIcon from "@lucide/svelte/icons/triangle-alert";
 import GroupPicker from "$lib/components/GroupPicker.svelte";
 import * as Alert from "$lib/components/ui/alert";
 import { Button } from "$lib/components/ui/button";

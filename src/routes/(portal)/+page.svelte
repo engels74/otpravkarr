@@ -1,11 +1,11 @@
 <script lang="ts">
+import CircleAlertIcon from "@lucide/svelte/icons/circle-alert";
+import DownloadIcon from "@lucide/svelte/icons/download";
+import ExternalLinkIcon from "@lucide/svelte/icons/external-link";
+import LoaderCircleIcon from "@lucide/svelte/icons/loader-circle";
+import RefreshCwIcon from "@lucide/svelte/icons/refresh-cw";
+import ShieldAlertIcon from "@lucide/svelte/icons/shield-alert";
 import type { ActionResult } from "@sveltejs/kit";
-import AlertCircleIcon from "lucide-svelte/icons/alert-circle";
-import DownloadIcon from "lucide-svelte/icons/download";
-import ExternalLinkIcon from "lucide-svelte/icons/external-link";
-import Loader2Icon from "lucide-svelte/icons/loader-2";
-import RefreshCwIcon from "lucide-svelte/icons/refresh-cw";
-import ShieldAlertIcon from "lucide-svelte/icons/shield-alert";
 import { toast } from "svelte-sonner";
 import { enhance } from "$app/forms";
 import { invalidateAll } from "$app/navigation";
@@ -161,7 +161,7 @@ function enhanceRefresh() {
           <form method="POST" action="?/signInWithPlex" use:enhance={enhanceSignIn}>
             <Button type="submit" disabled={submitting} class="cta-glow w-full">
               {#if submitting}
-                <Loader2Icon class="mr-2 h-4 w-4 animate-spin" />
+                <LoaderCircleIcon class="mr-2 h-4 w-4 animate-spin" />
                 Redirecting to Plex…
               {:else}
                 Sign in with Plex
@@ -210,7 +210,7 @@ function enhanceRefresh() {
     {/if}
 
     <Alert.Root>
-      <AlertCircleIcon class="h-5 w-5" />
+      <CircleAlertIcon class="h-5 w-5" />
       <Alert.Title>Self-managed account</Alert.Title>
       <Alert.Description>
         Your streaming credentials are managed directly in Dispatcharr. Use the link below to access your account.
@@ -246,7 +246,7 @@ function enhanceRefresh() {
     <!-- Not yet provisioned -->
     <div class="max-w-lg mx-auto">
       <Alert.Root variant="destructive">
-        <AlertCircleIcon class="h-5 w-5" />
+        <CircleAlertIcon class="h-5 w-5" />
         <Alert.Title>Provisioning Issue</Alert.Title>
         <Alert.Description>{data.error}</Alert.Description>
       </Alert.Root>

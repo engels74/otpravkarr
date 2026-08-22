@@ -72,7 +72,7 @@ describe("CopyableField", () => {
     const btn = screen.getByRole("button", { name: "Copy Token to clipboard" });
     await fireEvent.click(btn);
 
-    // After copy, the check icon SVG should be present (lucide-svelte renders SVGs)
+    // After copy, the check icon SVG should be present (@lucide/svelte renders SVGs)
     // The CopyIcon is replaced with CheckIcon which has class "text-green-500"
     await vi.waitFor(() => {
       const greenIcon = container.querySelector(

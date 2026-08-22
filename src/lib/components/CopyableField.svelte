@@ -1,8 +1,8 @@
 <script lang="ts">
-import CheckIcon from "lucide-svelte/icons/check";
-import CopyIcon from "lucide-svelte/icons/copy";
-import EyeIcon from "lucide-svelte/icons/eye";
-import EyeOffIcon from "lucide-svelte/icons/eye-off";
+import CheckIcon from "@lucide/svelte/icons/check";
+import CopyIcon from "@lucide/svelte/icons/copy";
+import EyeIcon from "@lucide/svelte/icons/eye";
+import EyeOffIcon from "@lucide/svelte/icons/eye-off";
 import { toast } from "svelte-sonner";
 import { Button } from "$lib/components/ui/button";
 import { Input } from "$lib/components/ui/input";

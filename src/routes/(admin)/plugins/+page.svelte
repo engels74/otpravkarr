@@ -1,6 +1,6 @@
 <script lang="ts">
-import InfoIcon from "lucide-svelte/icons/info";
-import TriangleAlertIcon from "lucide-svelte/icons/triangle-alert";
+import InfoIcon from "@lucide/svelte/icons/info";
+import TriangleAlertIcon from "@lucide/svelte/icons/triangle-alert";
 import { Badge } from "$lib/components/ui/badge";
 import * as Card from "$lib/components/ui/card";
 

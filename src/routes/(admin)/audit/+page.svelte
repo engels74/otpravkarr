@@ -1,10 +1,10 @@
 <script lang="ts">
 import { type DateValue, parseDate } from "@internationalized/date";
-import CalendarIcon from "lucide-svelte/icons/calendar";
-import ChevronDownIcon from "lucide-svelte/icons/chevron-down";
-import ChevronLeftIcon from "lucide-svelte/icons/chevron-left";
-import ChevronRightIcon from "lucide-svelte/icons/chevron-right";
-import XIcon from "lucide-svelte/icons/x";
+import CalendarIcon from "@lucide/svelte/icons/calendar";
+import ChevronDownIcon from "@lucide/svelte/icons/chevron-down";
+import ChevronLeftIcon from "@lucide/svelte/icons/chevron-left";
+import ChevronRightIcon from "@lucide/svelte/icons/chevron-right";
+import XIcon from "@lucide/svelte/icons/x";
 import { onDestroy } from "svelte";
 import { goto } from "$app/navigation";
 import { page } from "$app/state";

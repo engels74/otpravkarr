@@ -1,5 +1,5 @@
 <script lang="ts">
-import LogOutIcon from "lucide-svelte/icons/log-out";
+import LogOutIcon from "@lucide/svelte/icons/log-out";
 import { page } from "$app/state";
 import AppLogo from "$lib/components/AppLogo.svelte";
 import PlexAvatar from "$lib/components/PlexAvatar.svelte";

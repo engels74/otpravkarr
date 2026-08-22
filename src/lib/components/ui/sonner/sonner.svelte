@@ -1,9 +1,9 @@
 <script lang="ts">
-import CircleCheckIcon from "lucide-svelte/icons/circle-check";
-import InfoIcon from "lucide-svelte/icons/info";
-import Loader2Icon from "lucide-svelte/icons/loader-2";
-import OctagonXIcon from "lucide-svelte/icons/octagon-x";
-import TriangleAlertIcon from "lucide-svelte/icons/triangle-alert";
+import CircleCheckIcon from "@lucide/svelte/icons/circle-check";
+import InfoIcon from "@lucide/svelte/icons/info";
+import LoaderCircleIcon from "@lucide/svelte/icons/loader-circle";
+import OctagonXIcon from "@lucide/svelte/icons/octagon-x";
+import TriangleAlertIcon from "@lucide/svelte/icons/triangle-alert";
 import { mode } from "mode-watcher";
 import type { ToasterProps as SonnerProps } from "svelte-sonner";
 import { Toaster as Sonner } from "svelte-sonner";
@@ -17,7 +17,7 @@ let { ...restProps }: SonnerProps = $props();
 	{...restProps}
 >
 	{#snippet loadingIcon()}
-		<Loader2Icon class="size-4 animate-spin" />
+		<LoaderCircleIcon class="size-4 animate-spin" />
 	{/snippet}
 	{#snippet successIcon()}
 		<CircleCheckIcon class="size-4" />

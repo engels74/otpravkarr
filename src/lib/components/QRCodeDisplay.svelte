@@ -1,5 +1,5 @@
 <script lang="ts">
-import QrCodeIcon from "lucide-svelte/icons/qr-code";
+import QrCodeIcon from "@lucide/svelte/icons/qr-code";
 import { Button } from "$lib/components/ui/button";
 import { cn } from "$lib/utils";
 

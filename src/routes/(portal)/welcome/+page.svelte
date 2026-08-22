@@ -1,6 +1,6 @@
 <script lang="ts">
-import LayoutDashboardIcon from "lucide-svelte/icons/layout-dashboard";
-import MonitorSmartphoneIcon from "lucide-svelte/icons/monitor-smartphone";
+import LayoutDashboardIcon from "@lucide/svelte/icons/layout-dashboard";
+import MonitorSmartphoneIcon from "@lucide/svelte/icons/monitor-smartphone";
 import { Button } from "$lib/components/ui/button";
 import * as Card from "$lib/components/ui/card";
 

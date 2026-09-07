@@ -36,6 +36,7 @@ e2e/.auth/
 
 # Playwright test results
 test-results/
+playwright-report/
 
 # Local Dispatcharr instance credentials (never commit)
 dispatcharr.env

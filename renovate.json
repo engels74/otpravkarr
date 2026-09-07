@@ -1,10 +1,15 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["config:recommended", "group:allNonMajor"],
+  "extends": ["github>engels74/automation:default#v1.0.0"],
   "gitIgnoredAuthors": [
     "41898282+github-actions[bot]@users.noreply.github.com",
     "300104067+engels74-bot@users.noreply.github.com"
   ],
-  "rebaseWhen": "conflicted",
-  "prConcurrentLimit": 10
+  "packageRules": [
+    {
+      "description": "Review TypeScript 7 after Svelte compiler API compatibility.",
+      "matchPackageNames": ["typescript"],
+      "allowedVersions": "<7"
+    }
+  ]
 }

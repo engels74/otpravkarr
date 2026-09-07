@@ -17,14 +17,8 @@ import { expect, test } from "@playwright/test";
  */
 
 const SETUP_CLAIM_PROOF = process.env.E2E_SETUP_CLAIM_PROOF ?? "e2e-fresh-setup-proof";
-const isPreAdminMode = process.env.E2E_SEED_SETUP_PRE_ADMIN === "1";
 
 test.describe("Setup wizard (fresh state)", () => {
-  test.skip(
-    !isPreAdminMode,
-    "Requires E2E_SEED_SETUP_PRE_ADMIN=1 to seed the DB without an admin account.",
-  );
-
   test.beforeEach(async ({ context }) => {
     await context.addCookies([
       {

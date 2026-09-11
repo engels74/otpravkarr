@@ -26,7 +26,7 @@ include the lockfile/runtime/runner architecture. Prek's formatting/types hooks 
 covered by their dedicated read-only CI checks, while hygiene and secret detection
 remain separate. Source and lockfile mutation fails validation.
 
-Renovate uses `engels74/automation:default`, including grouped non-major updates,
+Renovate uses `edbfi/automation:default`, including grouped non-major updates,
 pre-commit hook discovery and the official Biome version manager. TypeScript stays
 below 7 pending Svelte compiler API compatibility. Automerge initially stays off
 until the corrected shared policy and required branch checks are validated.
@@ -34,7 +34,7 @@ Biome migrations compute without write privileges, then a separate publisher wri
 allowlisted source/config changes and dispatches full CI for the exact repaired SHA.
 Large repairs beyond the shared limits need manual handling.
 
-Require `ci / required`, up-to-date branches, and enforcement for administrators;
-disable force pushes and deletion. The suite uses local fake credentials and
+Review the full `ci / required` result and exact current PR head before merging.
+Repository branch protections are not required by the current maintenance policy. The suite uses local fake credentials and
 loopback service addresses; real Plex/Dispatcharr behavior, image packaging in the
 separate repository, and deployment hosting remain explicit integration gaps.

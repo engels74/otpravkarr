@@ -9,12 +9,11 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/engels74/otpravkarr/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue.svg" alt="License"></a>
+  <a href="https://github.com/edbfi/otpravkarr/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue.svg" alt="License"></a>
   <img src="https://img.shields.io/badge/bun-%23000000.svg?logo=bun&logoColor=white" alt="Bun">
   <img src="https://img.shields.io/badge/SvelteKit-FF3E00?logo=svelte&logoColor=white" alt="SvelteKit">
   <img src="https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white" alt="TypeScript">
   <img src="https://img.shields.io/badge/SQLite-003B57?logo=sqlite&logoColor=white" alt="SQLite">
-  <a href="https://deepwiki.com/engels74/otpravkarr"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki"></a>
 </p>
 
 ## Prerequisites
@@ -56,13 +55,13 @@ to create a replacement if that path is missing.
 ## Docker Deployment
 
 Container packaging is maintained separately in
-[`engels74/otpravkarr-docker`](https://github.com/engels74/otpravkarr-docker). This application
+[`edbfi/otpravkarr-docker`](https://github.com/edbfi/otpravkarr-docker). This application
 repository intentionally has no Dockerfile or Docker build context.
 
 ```yaml
 services:
   otpravkarr:
-    image: ghcr.io/engels74/otpravkarr-docker:nightly
+    image: ghcr.io/edbfi/otpravkarr-docker:nightly
     ports:
       - "3000:3000"
     volumes:

@@ -128,7 +128,7 @@ generic fallback, so a forgotten registration fails silently rather than loudly.
 - `src/lib/test-stubs/` holds Vitest-only aliases for `$app/forms`, `$app/navigation`, `$app/state`
   (wired in `vitest.config.ts`). Never import them from production code; extend them when a test
   needs a new `$app` API.
-- Container packaging lives in `engels74/otpravkarr-docker`. `.github/workflows/ci.yml` and
+- Container packaging lives in `edbfi/otpravkarr-docker`. `.github/workflows/ci.yml` and
   `prek.toml` share validation commands; see `CI.md`. `data/`, `docs/`, and `artifacts/` remain
   gitignored runtime paths.
 

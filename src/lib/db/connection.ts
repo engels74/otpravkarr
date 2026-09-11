@@ -17,7 +17,8 @@ export function getDb(): Database {
 
   const configuredPath = env.DATABASE_PATH?.trim();
   const dbPath = configuredPath || DEFAULT_DATABASE_PATH;
-  if (configuredPath && process.env.NODE_ENV === "production" && !existsSync(dbPath)) {
+  // Read runtime env: the adapter's bundling pass can fold process.env.NODE_ENV.
+  if (configuredPath && env.NODE_ENV === "production" && !existsSync(dbPath)) {
     throw new Error(
       `Configured DATABASE_PATH does not exist; refusing to create a replacement database at ${dbPath}`,
     );

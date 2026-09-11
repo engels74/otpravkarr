@@ -19,18 +19,29 @@
 
 ## Prerequisites
 
-- [Bun](https://bun.sh) >= 1.2
+- [Bun](https://bun.sh), using the version pinned by `packageManager` in `package.json` (also used by CI and container builds)
 - Docker (optional, for production)
 
 ## Quick Start
 
 ```bash
-bun install
+bun install --frozen-lockfile
+# Generate once, then save and reuse this secret outside version control.
 export OTPRAVKARR_SECRET=$(openssl rand -base64 32)
-bun --bun run dev
+bun run dev
 ```
 
 The dev server binds to `PORT` (default `3000`) and fails fast if that port is busy, so startup stays aligned with `ORIGIN`. With defaults it starts at `http://localhost:3000`. A bootstrap token will appear in the console — use it to complete the setup wizard.
+
+## Production Startup
+
+Use `bun run build`, then `bun run start` with the same pinned Bun version.
+The start script sets `NODE_ENV=production` and runs `build/index.js`. Keep
+production `node_modules/`, `package.json` and the complete `build/` directory;
+`build/server/migrations/` contains the SQL copied by the build command.
+Keep the same `OTPRAVKARR_SECRET` and database across restarts. A configured
+`DATABASE_PATH` must point to an existing database; the production guard refuses
+to create a replacement if that path is missing.
 
 ## Environment Variables
 

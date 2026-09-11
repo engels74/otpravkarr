@@ -121,9 +121,9 @@ describe("getDb", () => {
   });
 
   it("fails closed when an explicit production database path is missing", () => {
-    const previousNodeEnv = process.env.NODE_ENV;
+    const previousNodeEnv = env.NODE_ENV;
     env.DATABASE_PATH = "/config/data/missing.sqlite";
-    process.env.NODE_ENV = "production";
+    env.NODE_ENV = "production";
     mockExistsSync.mockReturnValueOnce(false);
 
     try {
@@ -131,7 +131,7 @@ describe("getDb", () => {
       expect(mockMkdirSync).not.toHaveBeenCalled();
     } finally {
       env.DATABASE_PATH = "";
-      process.env.NODE_ENV = previousNodeEnv;
+      env.NODE_ENV = previousNodeEnv;
     }
   });
 });

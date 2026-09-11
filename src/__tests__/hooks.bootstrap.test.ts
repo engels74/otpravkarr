@@ -1,7 +1,7 @@
 // @vitest-environment node
 
 import type { RequestEvent } from "@sveltejs/kit";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 type MockEvent = RequestEvent;
 
@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   runStartupHealthProbe: vi.fn(async () => {}),
   schedulerRegister: vi.fn(),
   schedulerStart: vi.fn(),
+  schedulerStop: vi.fn(),
 }));
 
 vi.mock("@sveltejs/kit/hooks", () => ({
@@ -112,6 +113,7 @@ vi.mock("$lib/scheduler/runner", () => ({
   scheduler: {
     register: mocks.schedulerRegister,
     start: mocks.schedulerStart,
+    stop: mocks.schedulerStop,
   },
 }));
 
@@ -152,7 +154,11 @@ function createMockEvent(pathname = "/setup"): MockEvent {
   } as unknown as MockEvent;
 }
 
+let shutdownListeners: ReturnType<typeof process.listeners>;
+
 beforeEach(() => {
+  shutdownListeners = process.listeners("sveltekit:shutdown");
+  mocks.schedulerStop.mockClear();
   state.setupComplete = true;
   mocks.createBootstrapToken.mockClear();
   mocks.initializeDatabase.mockClear();
@@ -161,6 +167,14 @@ beforeEach(() => {
   mocks.schedulerRegister.mockClear();
   mocks.schedulerStart.mockClear();
   vi.resetModules();
+});
+
+afterEach(() => {
+  for (const listener of process.listeners("sveltekit:shutdown")) {
+    if (!shutdownListeners.includes(listener)) {
+      process.removeListener("sveltekit:shutdown", listener);
+    }
+  }
 });
 
 describe("hooks bootstrap token recovery", () => {
@@ -217,5 +231,10 @@ describe("hooks bootstrap token recovery", () => {
     expect(healthProbeCallOrder).toBeDefined();
     expect(resolveCallOrder).toBeDefined();
     expect(healthProbeCallOrder as number).toBeLessThan(resolveCallOrder as number);
+
+    process.emit("sveltekit:shutdown");
+    expect(mocks.schedulerStop).toHaveBeenCalledOnce();
+    process.emit("sveltekit:shutdown");
+    expect(mocks.schedulerStop).toHaveBeenCalledOnce();
   });
 });

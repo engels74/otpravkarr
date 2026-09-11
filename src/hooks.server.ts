@@ -75,6 +75,8 @@ async function registerSchedulerJobs(): Promise<void> {
   scheduler.register(createCleanupJob());
   scheduler.register(createAuditRotationJob());
   scheduler.start();
+  // The adapter stops HTTP; release job timers without changing persisted config.
+  process.once("sveltekit:shutdown", () => scheduler.stop());
 }
 
 async function printBootstrapBanner(): Promise<void> {

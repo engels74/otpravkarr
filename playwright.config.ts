@@ -9,6 +9,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const testDbDir = mkdtempSync(resolve(tmpdir(), "otpravkarr-e2e-"));
 const testDbPath = resolve(testDbDir, "test.sqlite");
 const E2E_PORT = 4173;
+const freshSetup = process.env.E2E_SEED_SETUP_PRE_ADMIN === "1";
 
 const ADMIN_STORAGE_STATE = resolve(__dirname, "e2e", ".auth", "admin.json");
 
@@ -18,52 +19,53 @@ process.env.E2E_DATABASE_PATH = testDbPath;
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: false,
+  workers: 1,
+  forbidOnly: Boolean(process.env.CI),
+  reporter: [["list"], ["html", { open: "never" }]],
   retries: 0,
   timeout: 30_000,
   use: {
     baseURL: `http://localhost:${E2E_PORT}`,
   },
-  projects: [
-    {
-      name: "setup-wizard-fresh",
-      testMatch: "setup-wizard-fresh.spec.ts",
-    },
-    {
-      name: "setup",
-      testMatch: "setup.spec.ts",
-    },
-    {
-      name: "auth",
-      testMatch: "auth.setup.ts",
-      dependencies: ["setup"],
-    },
-    {
-      name: "login",
-      testMatch: "admin-login.spec.ts",
-      dependencies: ["auth"],
-    },
-    {
-      name: "app",
-      testMatch: [
-        "admin-dashboard.spec.ts",
-        "admin-users.spec.ts",
-        "admin-audit-pagination.spec.ts",
-        "mobile-sidebar.spec.ts",
+  projects: freshSetup
+    ? [{ name: "setup-wizard-fresh", testMatch: "setup-wizard-fresh.spec.ts" }]
+    : [
+        {
+          name: "setup",
+          testMatch: "setup.spec.ts",
+        },
+        {
+          name: "auth",
+          testMatch: "auth.setup.ts",
+          dependencies: ["setup"],
+        },
+        {
+          name: "login",
+          testMatch: "admin-login.spec.ts",
+          dependencies: ["auth"],
+        },
+        {
+          name: "app",
+          testMatch: [
+            "admin-dashboard.spec.ts",
+            "admin-users.spec.ts",
+            "admin-audit-pagination.spec.ts",
+            "mobile-sidebar.spec.ts",
+          ],
+          dependencies: ["auth"],
+          use: { storageState: ADMIN_STORAGE_STATE },
+        },
+        {
+          name: "portal",
+          testMatch: "portal-*.spec.ts",
+          dependencies: ["setup"],
+        },
       ],
-      dependencies: ["auth"],
-      use: { storageState: ADMIN_STORAGE_STATE },
-    },
-    {
-      name: "portal",
-      testMatch: "portal-*.spec.ts",
-      dependencies: ["setup"],
-    },
-  ],
   webServer: {
     // Seed DB before server starts so the server's DB connection
     // sees the seeded data from the very first read.
     command: [
-      "bun --bun run build",
+      ...(process.env.E2E_SKIP_BUILD === "1" ? [] : ["bun --bun run build"]),
       `bun e2e/seed-db.ts "${testDbPath}"`,
       "bun ./build/index.js",
     ].join(" && "),

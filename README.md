@@ -9,28 +9,38 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/engels74/otpravkarr/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue.svg" alt="License"></a>
+  <a href="https://github.com/edbfi/otpravkarr/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue.svg" alt="License"></a>
   <img src="https://img.shields.io/badge/bun-%23000000.svg?logo=bun&logoColor=white" alt="Bun">
   <img src="https://img.shields.io/badge/SvelteKit-FF3E00?logo=svelte&logoColor=white" alt="SvelteKit">
   <img src="https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white" alt="TypeScript">
   <img src="https://img.shields.io/badge/SQLite-003B57?logo=sqlite&logoColor=white" alt="SQLite">
-  <a href="https://deepwiki.com/engels74/otpravkarr"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki"></a>
 </p>
 
 ## Prerequisites
 
-- [Bun](https://bun.sh) >= 1.2
+- [Bun](https://bun.sh), using the version pinned by `packageManager` in `package.json` (also used by CI and container builds)
 - Docker (optional, for production)
 
 ## Quick Start
 
 ```bash
-bun install
+bun install --frozen-lockfile
+# Generate once, then save and reuse this secret outside version control.
 export OTPRAVKARR_SECRET=$(openssl rand -base64 32)
-bun --bun run dev
+bun run dev
 ```
 
 The dev server binds to `PORT` (default `3000`) and fails fast if that port is busy, so startup stays aligned with `ORIGIN`. With defaults it starts at `http://localhost:3000`. A bootstrap token will appear in the console — use it to complete the setup wizard.
+
+## Production Startup
+
+Use `bun run build`, then `bun run start` with the same pinned Bun version.
+The start script sets `NODE_ENV=production` and runs `build/index.js`. Keep
+production `node_modules/`, `package.json` and the complete `build/` directory;
+`build/server/migrations/` contains the SQL copied by the build command.
+Keep the same `OTPRAVKARR_SECRET` and database across restarts. A configured
+`DATABASE_PATH` must point to an existing database; the production guard refuses
+to create a replacement if that path is missing.
 
 ## Environment Variables
 
@@ -45,13 +55,13 @@ The dev server binds to `PORT` (default `3000`) and fails fast if that port is b
 ## Docker Deployment
 
 Container packaging is maintained separately in
-[`engels74/otpravkarr-docker`](https://github.com/engels74/otpravkarr-docker). This application
+[`edbfi/otpravkarr-docker`](https://github.com/edbfi/otpravkarr-docker). This application
 repository intentionally has no Dockerfile or Docker build context.
 
 ```yaml
 services:
   otpravkarr:
-    image: ghcr.io/engels74/otpravkarr-docker:nightly
+    image: ghcr.io/edbfi/otpravkarr-docker:nightly
     ports:
       - "3000:3000"
     volumes:

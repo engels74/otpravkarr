@@ -17,12 +17,12 @@ credentials/playlist. Bun + SvelteKit 2 + Svelte 5 runes + `bun:sqlite`, deploye
 | `bun run build` | Vite build, then copies `src/lib/db/migrations` → `build/server/migrations`. |
 | `bun run start` | Serve the production build (`NODE_ENV=production bun ./build/index.js`). |
 | `bun run check` | Biome lint + format only — **not** a type check. |
-| `bunx tsc --noEmit` | Type check. Not a package script; defined only in `prek.toml`. |
-| `bunx svelte-check --threshold warning` | Svelte/template check. Also prek-only. |
+| `bun run check:types` | SvelteKit sync, TypeScript and warning-free Svelte/template checks; CI and prek use this command. |
+
 | `bun run test` | Vitest suite (`e2e/**` excluded). |
 | `bunx vitest run src/lib/crypto/__tests__/keys.test.ts` | Single test file. |
 | `bunx vitest run <file> -t "substring"` | Single test case. |
-| `bun run test:e2e` | Playwright: rebuilds, seeds a temp SQLite DB, boots a prod server on 4173. Slow. |
+| `bun run test:e2e` | Build once, verify migration bytes, then run post-setup and fresh setup browser suites on separate temp databases. |
 | `bunx playwright test --project=app` | One Playwright project; its `setup` → `auth` dependencies still run. |
 
 `OTPRAVKARR_SECRET` must be set before the server starts — `validateEnv()` calls
@@ -128,9 +128,9 @@ generic fallback, so a forgotten registration fails silently rather than loudly.
 - `src/lib/test-stubs/` holds Vitest-only aliases for `$app/forms`, `$app/navigation`, `$app/state`
   (wired in `vitest.config.ts`). Never import them from production code; extend them when a test
   needs a new `$app` API.
-- There is no Dockerfile and no `.github/` workflows here — container packaging lives in
-  `engels74/otpravkarr-docker`, and all validation is local via `prek.toml`. `data/`, `docs/`, and
-  `artifacts/` are gitignored runtime paths.
+- Container packaging lives in `edbfi/otpravkarr-docker`. `.github/workflows/ci.yml` and
+  `prek.toml` share validation commands; see `CI.md`. `data/`, `docs/`, and `artifacts/` remain
+  gitignored runtime paths.
 
 ## Reference
 

@@ -27,14 +27,18 @@ covered by their dedicated read-only CI checks, while hygiene and secret detecti
 remain separate. Source and lockfile mutation fails validation.
 
 Renovate uses `edbfi/automation:default`, including grouped non-major updates,
-pre-commit hook discovery and the official Biome version manager. TypeScript stays
-below 7 pending Svelte compiler API compatibility. Automerge initially stays off
-until the corrected shared policy and required branch checks are validated.
+pre-commit hook discovery and the official Biome version manager. The v1.1.0
+default and automerge presets make all update types eligible, including majors
+and shared-policy updates, without dashboard approval. All six current-head jobs
+in `.github/merge-policy.json` must pass; TypeScript and warning-free Svelte checks
+remain required. The checked merge preserves genuine sign-offs and dispatches
+full CI for the exact merged commit.
 Biome migrations compute without write privileges, then a separate publisher writes
 allowlisted source/config changes and dispatches full CI for the exact repaired SHA.
 Large repairs beyond the shared limits need manual handling.
 
-Review the full `ci / required` result and exact current PR head before merging.
-Repository branch protections are not required by the current maintenance policy. The suite uses local fake credentials and
+Other changes retain manual review of the exact head/base, full diff, authors/DCO,
+all CI jobs and relevant artifacts before merging through ghmerge.
+No branch protections or repository rulesets are configured. The suite uses local fake credentials and
 loopback service addresses; real Plex/Dispatcharr behavior, image packaging in the
 separate repository, and deployment hosting remain explicit integration gaps.
